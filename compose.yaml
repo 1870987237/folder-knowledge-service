@@ -1,0 +1,26 @@
+services:
+  knowledge:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${KB_BIND_IP:-127.0.0.1}:${KB_PORT:-8790}:8790"
+    environment:
+      KB_ROOT: /knowledge
+      KB_NAME: ${KB_NAME:-term-knowledge}
+      KB_TOKEN: ${KB_TOKEN:?Set KB_TOKEN in .env}
+      KB_ALLOWED_HOSTS: ${KB_ALLOWED_HOSTS:?Set KB_ALLOWED_HOSTS in .env}
+    volumes:
+      - type: bind
+        source: ${KB_SOURCE_DIR:?Set KB_SOURCE_DIR to the absolute knowledge folder}
+        target: /knowledge
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 2.0
