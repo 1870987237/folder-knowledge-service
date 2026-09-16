@@ -2,7 +2,7 @@
 
 以**文件夹和文档作为唯一知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。无数据库、向量索引、LLM 或后台同步任务；维护者更新文件后，下次访问即可读到变化。
 
-服务支持 Windows 本机验证和 Linux 部署；目标部署方式是 Linux Docker，只读挂载知识目录。**这是远程文件工具接口，不是 FUSE/NFS 挂载。** Agent 调用 `grep`、`read_file` 等 MCP 工具；它的本地 shell `grep` 不会自动获得远程路径。
+服务部署在 Linux Docker 中，只读挂载知识目录。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
 ```mermaid
 flowchart LR
@@ -68,7 +68,7 @@ curl http://127.0.0.1:8790/healthz
 
 推荐由已有 HTTPS 反向代理转发到 `127.0.0.1:8790`，保留 `Host` 和 `Authorization`，将实际域名列入 `KB_ALLOWED_HOSTS`。共享令牌适用于受控客户端；这版未实现 OAuth 登录、多租户或按子目录分配用户权限。需要隔离多套资料时，可运行多个实例，各自指定根目录和令牌。不同端口的服务不会共享权限。
 
-项目提供部署配置，但本机验收不等于已经部署到你的 Linux 服务器；服务器地址与目录确定后仍需运行下面的连通性检查。
+部署后按下面的客户端示例检查连通性，验收项目见 [部署验收](VALIDATION.md)。
 
 ## 外部 Agent 接入
 
@@ -98,7 +98,7 @@ Agent 可以依次调用：
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -c constraints.txt -e '.[test]'
+pip install -c constraints.txt .
 read -rs -p 'KB token: ' KB_TOKEN; echo
 export KB_TOKEN
 python examples/check_connection.py --url https://你的服务域名 --query sigma
@@ -127,7 +127,7 @@ REST 与 MCP 使用相同参数名、相同文件访问实现，返回相同数�
 
 ## 文件与查询规则
 
-- 路径相对于知识根目录，使用 `/`，不接受绝对路径、`..`、隐藏文件、符号链接、Windows reparse point 或硬链接。不会执行任何用户命令或文档代码。
+- 路径相对于知识根目录，使用 `/`，不接受绝对路径、`..`、隐藏文件、符号链接或硬链接。不会执行任何用户命令或文档代码。
 - 支持 UTF-8 的 Markdown、TXT、RST、JSON/JSONL、YAML、CSV、TOML、Python、SQL、LOG，以及无扩展名 `README`。PDF、Word、图片应由上游整理为文本；本服务不负责解析或合成知识。列表和搜索只展示支持的文本类型。
 - 默认单文件上限 2 MiB；每次读取最多 500 行，返回文本预算 48,000 字符。超长单行不能完整读取时明确报错，不悄悄截断正文。
 - `grep` 是逐行搜索，默认字面匹配；`regex_mode=true` 启用有超时限制的正则。它不是完整 GNU grep 命令解释器。结果包含匹配行、上下文、文件哈希；单行搜索片段超过 1,000 字符时带截断标记。
@@ -138,17 +138,4 @@ REST 与 MCP 使用相同参数名、相同文件访问实现，返回相同数�
 
 维护者或经验提炼管线通过独立发布流程更新知识；外部消费 Agent 永远只有只读工具。若未来需要 Agent 提交修订建议，可另做提案出口，不把写权限加入此服务。
 
-## 本机验证与开发
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -c constraints.txt -e ".[test]"
-.\.venv\Scripts\python.exe -m folder_kb --root example-knowledge --port 8790
-# 另一个终端
-.\.venv\Scripts\python.exe examples/check_connection.py --query Term
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-默认仅监听本机；示例目录明确标记为演示资料，没有导入你的业务数据。绑定非本机地址时，启动器强制要求令牌和显式 Host 白名单。环境变量由进程读取；`.env` 在 Docker Compose 中由 Compose 加载，直接运行 Python 不自动加载它。
-
-实现使用 [官方 MCP Python SDK v1 维护线](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x) 的 Streamable HTTP 和 FastAPI。`constraints.txt` 固定本次验证的依赖版本，Windows 专属依赖带平台条件。后续升级 SDK 应重新跑协议与目录边界测试。
+实现使用 [官方 MCP Python SDK v1 维护线](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x) 的 Streamable HTTP 和 FastAPI。依赖版本固定在 `constraints.txt`；升级后应重新验证协议与目录访问边界。
