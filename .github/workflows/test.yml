@@ -13,3 +13,8 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -c constraints.txt -e ".[test]"
       - run: python -m pytest -q
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/container_smoke.py

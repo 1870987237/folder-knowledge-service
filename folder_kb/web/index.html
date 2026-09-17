@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Folder Knowledge · 管理台</title>
+  <link rel="stylesheet" href="/admin/assets/style.css">
+  <script src="/admin/assets/app.js" defer></script>
+</head>
+<body>
+<section id="login" class="login-wrap">
+  <div class="login-card">
+    <div class="brand-icon">F</div><div class="eyebrow">FOLDER KNOWLEDGE</div>
+    <h1>知识有序，访问可见。</h1>
+    <p class="muted">管理只读知识目录，为 Agent 分配访问权限。</p>
+    <form id="login-form"><label for="admin-token">管理员令牌</label><input id="admin-token" type="password" autocomplete="off" required placeholder="输入 KB_ADMIN_TOKEN">
+      <button class="primary wide" type="submit">进入管理台 <span>→</span></button>
+    </form>
+    <p class="hint">令牌仅保留在页面内存中，刷新或退出后需要重新登录。</p>
+    <p id="login-error" class="error" role="alert"></p>
+  </div><div class="login-note">FILES AS KNOWLEDGE · READ-ONLY BY DESIGN</div>
+</section>
+<div id="app" class="app hidden">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-icon small">F</span><div>Folder Knowledge<small>知识访问管理台</small></div></div>
+    <div class="nav-label">工作空间</div>
+    <nav id="navigation">
+      <button data-page="overview" class="nav active"><span>◫</span>概览</button>
+      <button data-page="libraries" class="nav"><span>▤</span>知识库</button>
+      <button data-page="keys" class="nav"><span>⌘</span>Agent 与密钥</button>
+      <button data-page="activity" class="nav"><span>≋</span>访问活动</button>
+    </nav>
+    <div class="sidebar-bottom"><span class="status-dot"></span> 知识内容只读<p>管理配置独立保存<br>文件更新即时可见</p><button id="logout" class="quiet">退出管理台 ↗</button></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>管理台 <span class="slash">/</span> <span id="breadcrumb">概览</span></span><div><span id="updated" class="muted"></span><button id="refresh" class="secondary compact">刷新</button></div></header>
+    <div class="content"><div class="page-heading"><div><div class="eyebrow">KNOWLEDGE WORKSPACE</div><h1 id="page-title">服务概览</h1><p id="page-description" class="muted"></p></div><button id="page-action" class="primary hidden"></button></div>
+      <div id="banner" class="banner hidden" role="alert"></div>
+      <section id="view"></section>
+      <footer>文件是知识来源。访问权限与活动记录由服务管理。<span>MCP + REST API</span></footer>
+    </div>
+  </main>
+</div>
+<dialog id="modal"><div class="modal-head"><h2 id="modal-title"></h2><button id="modal-close" class="icon-button" aria-label="关闭">×</button></div><div id="modal-body"></div></dialog>
+<div id="toast" class="toast hidden" role="status"></div>
+</body>
+</html>

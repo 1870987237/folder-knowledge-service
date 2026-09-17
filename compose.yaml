@@ -7,7 +7,8 @@ services:
     environment:
       KB_ROOT: /knowledge
       KB_NAME: ${KB_NAME:-term-knowledge}
-      KB_TOKEN: ${KB_TOKEN:?Set KB_TOKEN in .env}
+      KB_ADMIN_TOKEN: ${KB_ADMIN_TOKEN:?Set KB_ADMIN_TOKEN in .env}
+      KB_STATE_DIR: /service-data
       KB_ALLOWED_HOSTS: ${KB_ALLOWED_HOSTS:?Set KB_ALLOWED_HOSTS in .env}
     volumes:
       - type: bind
@@ -16,6 +17,7 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - service-data:/service-data
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
@@ -24,3 +26,6 @@ services:
     pids_limit: 128
     mem_limit: 512m
     cpus: 2.0
+
+volumes:
+  service-data:

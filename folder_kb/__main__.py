@@ -17,8 +17,8 @@ def main():
     os.environ['KB_ROOT'] = args.root
     settings = Settings.from_env()
     if args.host not in ('127.0.0.1', 'localhost', '::1'):
-        if not settings.token or not os.getenv('KB_ALLOWED_HOSTS'):
-            parser.error('Remote binding requires KB_TOKEN and explicit KB_ALLOWED_HOSTS')
+        if not (settings.token or settings.admin_token) or not os.getenv('KB_ALLOWED_HOSTS'):
+            parser.error('Remote binding requires KB_ADMIN_TOKEN (or legacy KB_TOKEN) and explicit KB_ALLOWED_HOSTS')
     uvicorn.run(create_app(settings), host=args.host, port=args.port,
                 access_log=False, limit_concurrency=32, timeout_keep_alive=10)
 

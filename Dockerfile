@@ -3,7 +3,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY pyproject.toml constraints.txt ./
 COPY folder_kb ./folder_kb
-RUN pip install -c constraints.txt . && useradd --uid 10001 --create-home kb
+RUN pip install -c constraints.txt . && useradd --uid 10001 --create-home kb \
+    && mkdir /service-data && chown 10001:10001 /service-data
 USER 10001:10001
 ENV KB_ROOT=/knowledge KB_HOST=0.0.0.0 KB_PORT=8790
 EXPOSE 8790

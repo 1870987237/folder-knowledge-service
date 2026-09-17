@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "folder-knowledge-service"
-version = "0.1.0"
+version = "0.2.0"
 description = "Read-only folder knowledge over REST and MCP"
 requires-python = ">=3.11"
 dependencies = ["mcp>=1.28,<2", "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "regex>=2024.11"]
@@ -17,6 +17,9 @@ folder-kb = "folder_kb.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["folder_kb*"]
+
+[tool.setuptools.package-data]
+folder_kb = ["web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
