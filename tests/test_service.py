@@ -56,11 +56,12 @@ def test_read_lines_bom_and_live_update(root, folder):
     raw = b'\xef\xbb\xbf' + '第一行\r\n第二行\r\n'.encode()
     p.write_bytes(raw)
     result = folder.read_file('new.md', 2, 2)
-    assert result['lines'] == [{'line': 2, 'text': '第二行'}]
-    assert result['sha256'] == hashlib.sha256(raw).hexdigest()
+    assert result['lines'] == [{'line': 2, 'column': 1, 'text': '第二行', 'line_complete': True}]
+    assert result['sha256'] is None and result['version'].startswith('stat-v1-')
+    assert folder.read_file('new.md', expected_sha256=hashlib.sha256(raw).hexdigest())['sha256'] == hashlib.sha256(raw).hexdigest()
     p.write_text('changed', encoding='utf-8')
-    with pytest.raises(KnowledgeError, match='hash changed'):
-        folder.read_file('new.md', expected_sha256=result['sha256'])
+    with pytest.raises(KnowledgeError, match='version changed'):
+        folder.read_file('new.md', expected_version=result['version'])
     assert folder.read_file('new.md')['lines'][0]['text'] == 'changed'
 
 
@@ -132,13 +133,12 @@ def test_regex_timeout_is_partial(root, folder):
 
 
 def test_binary_size_and_scan_limits(root):
-    folder = KnowledgeFolder(root, limits=Limits(file_bytes=100))
+    folder = KnowledgeFolder(root, limits=Limits(scan_bytes=100))
     (root / 'big.md').write_bytes(b'x' * 101)
     (root / 'binary.md').write_bytes(b'\x00\xff')
-    with pytest.raises(KnowledgeError):
-        folder.read_file('big.md')
+    assert folder.read_file('big.md')['next_cursor']
     result = folder.grep('missing')
-    assert result['partial'] and result['skipped_count'] == 2
+    assert result['partial'] and result['next_cursor']
     bounded = KnowledgeFolder(root, limits=Limits(entries=1))
     assert bounded.glob('**')['partial']
 
@@ -149,8 +149,10 @@ def test_response_limit_does_not_silently_drop_lines(root):
     result = folder.read_file('small.md')
     assert result['truncated'] and result['next_start_line'] == 2
     (root / 'long.md').write_text('x' * 13, encoding='utf-8')
-    with pytest.raises(KnowledgeError, match='line exceeds'):
-        folder.read_file('long.md')
+    first = folder.read_file('long.md')
+    second = folder.read_file('long.md', cursor=first['next_cursor'])
+    assert first['lines'][0]['text'] + second['lines'][0]['text'] == 'x' * 13
+    assert second['lines'][0]['column'] == 13 and second['eof']
 
 
 def test_rest_auth_guard_read_only_and_no_mutation(root):
@@ -176,6 +178,7 @@ def test_rest_auth_guard_read_only_and_no_mutation(root):
 
 
 def test_mcp_over_real_http_matches_rest(root):
+    (root/'large.jsonl').write_text('z'*(3*1024*1024)+'\n', encoding='utf-8')
     settings = Settings(str(root), token=TOKEN)
     sock = socket.socket()
     sock.bind(('127.0.0.1', 0))
@@ -211,6 +214,10 @@ def test_mcp_over_real_http_matches_rest(root):
                     assert result.structuredContent == expected
                     result = await session.call_tool('read_file', {'path': 'guides/经验.md', 'start_line': 2, 'end_line': 2})
                     assert result.structuredContent['lines'][0]['text'] == 'Guide version=1.8'
+                    first = await session.call_tool('read_file', {'path': 'large.jsonl'})
+                    assert not first.isError and first.structuredContent['file_bytes'] > 2*1024*1024
+                    second = await session.call_tool('read_file', {'path': 'large.jsonl', 'cursor': first.structuredContent['next_cursor']})
+                    assert not second.isError and second.structuredContent['lines'][0]['column'] == 48001
                     denied = await session.call_tool('read_file', {'path': '../secret.md'})
                     assert denied.isError
                     assert (await session.call_tool('write_file', {'path': 'x', 'text': 'x'})).isError

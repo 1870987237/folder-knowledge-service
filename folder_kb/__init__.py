@@ -1,1 +1,1 @@
-"""A folder is the source of truth. No database and no generated index."""
+"""Read-only knowledge files, with SQLite for administration and audit."""

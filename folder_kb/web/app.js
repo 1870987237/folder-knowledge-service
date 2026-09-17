@@ -104,11 +104,11 @@ function keyForm(){
       modal('Key 已生成',`<p class="secret-warning">完整密钥仅在这里展示一次。关闭后无法再次查看，请保存到 Agent 的密钥配置中。</p><code id="new-token" class="secret"></code><p class="hint">Agent：${escapeHTML(result.key.agent_name)}<br>MCP：${escapeHTML(location.origin)}/mcp<br>请求头：Authorization: Bearer &lt;Key&gt;</p><div class="modal-actions"><button id="copy-key" class="primary">复制密钥</button></div>`);$('#new-token').textContent=result.token;$('#copy-key').onclick=async()=>{try{await navigator.clipboard.writeText($('#new-token').textContent);toast('已复制');}catch{toast('浏览器不支持复制，请选中密钥手动保存');}};await refresh();
     }catch(error){if($('#form-error'))$('#form-error').textContent=error.message;else report(error);}finally{button.disabled=false;}};
 }
-async function browse(id,path='.',read=false,startLine=1,offset=0){
-  const data=await api('/browse/'+id+'?'+new URLSearchParams({path,read,offset,start_line:startLine}));
-  modal('浏览 · '+libraryName(id),`<div class="form-row"><span class="mono">${escapeHTML(path)}</span><button id="browse-up" class="secondary compact">上一级</button></div>${read?'<pre id="file-preview" class="preview"></pre>':`<div class="directory-list">${data.entries.map(x=>`<button class="directory-item" data-browse-path="${escapeHTML(x.path)}" data-read="${x.type==='file'}">${x.type==='directory'?'▸':'▤'} ${escapeHTML(x.path)}</button>`).join('')||'<p class="hint">目录为空</p>'}</div>`}<p class="hint">${read?'文件内容只读；SHA-256：'+escapeHTML(data.sha256):'仅展示支持的文本格式。'}${data.partial?' 本次列表不完整。':''}</p>${(read?data.next_start_line:data.next_offset)!=null?'<button id="browse-next" class="secondary">下一页</button>':''}`);
+async function browse(id,path='.',read=false,startLine=1,offset=0,cursor=''){
+  const data=await api('/browse/'+id+'?'+new URLSearchParams({path,read,offset,start_line:startLine,...(cursor?{cursor}:{})}));
+  modal('浏览 · '+libraryName(id),`<div class="form-row"><span class="mono">${escapeHTML(path)}</span><button id="browse-up" class="secondary compact">上一级</button></div>${read?'<pre id="file-preview" class="preview"></pre>':`<div class="directory-list">${data.entries.map(x=>`<button class="directory-item" data-browse-path="${escapeHTML(x.path)}" data-read="${x.type==='file'}">${x.type==='directory'?'▸':'▤'} ${escapeHTML(x.path)}</button>`).join('')||'<p class="hint">目录为空</p>'}</div>`}<p class="hint">${read?'文件内容只读；版本：'+escapeHTML(data.version):'仅展示支持的文本格式。'}${data.partial?' 本次列表不完整。':''}</p>${(read?data.next_cursor:data.next_offset)!=null?'<button id="browse-next" class="secondary">下一页</button>':''}`);
   $('#browse-up').onclick=()=>browse(id,path.split('/').slice(0,-1).join('/')||'.').catch(report);
-  if(read)$('#file-preview').textContent=data.lines.map(x=>`${x.line}  ${x.text}`).join('\n');
+  if(read)$('#file-preview').textContent=data.lines.map(x=>`${x.line}${x.column>1?':'+x.column:''}  ${x.text}${x.line_complete===false?' [本行待续]':''}`).join('\n');
   document.querySelectorAll('[data-browse-path]').forEach(x=>x.onclick=()=>browse(id,x.dataset.browsePath,x.dataset.read==='true').catch(report));
-  if($('#browse-next'))$('#browse-next').onclick=()=>browse(id,path,read,read?data.next_start_line:1,read?0:data.next_offset).catch(report);
+  if($('#browse-next'))$('#browse-next').onclick=()=>browse(id,path,read,1,read?0:data.next_offset,read?data.next_cursor:'').catch(report);
 }

@@ -31,7 +31,7 @@ async def check(url: str, query: str, library_id: str | None = None):
                     hit = result['matches'][0]
                     page = await session.call_tool('read_file', {
                         'path': hit['path'], 'start_line': max(1, hit['line'] - 2),
-                        'end_line': hit['line'] + 2, 'expected_sha256': hit['sha256'], **params})
+                        'end_line': hit['line'] + 2, 'expected_version': hit['version'], **params})
                     if page.isError:
                         raise RuntimeError('MCP read failed (file may have changed)')
                     print('MCP read:', json.dumps(page.structuredContent, ensure_ascii=False, indent=2))
