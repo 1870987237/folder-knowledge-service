@@ -2,6 +2,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 import socket
 import threading
@@ -78,7 +79,7 @@ def test_dynamic_scoping_disable_change_and_revoke(managed):
     add_library(client, 'alpha'); add_library(client, 'beta')
     key = add_key(client, ['alpha'])
     headers = authorization(key['token'])
-    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == [{'id': 'alpha', 'name': 'alpha'}]
+    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == [{'id': 'alpha', 'name': 'alpha', 'availability': {'status': 'available', 'message': '正常'}}]
     assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md'}).json()['lines'][0]['text'].startswith('alpha')
     assert client.get('/api/v1/read', headers=headers, params={'library_id': 'beta', 'path': 'README.md'}).status_code == 403
     assert client.get('/api/v1/read', headers=headers, params={'path': '../beta/README.md'}).status_code == 403
@@ -99,6 +100,110 @@ def test_multiple_libraries_require_explicit_selection(managed):
     key = add_key(client, ['alpha', 'beta'])
     assert client.get('/api/v1/info', headers=authorization(key['token'])).status_code == 400
     assert client.get('/api/v1/info', headers=authorization(key['token']), params={'library_id':'beta'}).json()['library_id'] == 'beta'
+
+
+def test_missing_library_recovery_and_independent_access(managed):
+    app, client, settings = managed
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha', 'beta'])
+    headers = authorization(key['token'])
+    directory = Path(settings.root) / 'alpha'
+    (directory / 'README.md').unlink()
+    # A missing file is still a 404, not a whole-library outage.
+    assert client.get('/api/v1/read', headers=headers,
+                      params={'library_id': 'alpha', 'path': 'README.md'}).status_code == 404
+    directory.rmdir()
+    listed = client.get('/api/v1/libraries', headers=headers).json()['libraries']
+    assert listed[0]['availability']['status'] == 'missing'
+    assert listed[1]['availability']['status'] == 'available'
+    assert client.get('/api/v1/read', headers=headers,
+                      params={'library_id': 'beta', 'path': 'README.md'}).status_code == 200
+    for operation in ('info', 'list', 'read', 'grep'):
+        result = client.get('/api/v1/' + operation, headers=headers,
+                            params={'library_id': 'alpha', 'path': 'README.md', 'query': 'x'})
+        assert result.status_code == 503
+        assert result.json()['error'] == 'library_unavailable'
+        assert result.json()['reason'] == 'missing'
+        assert settings.root not in result.text
+    assert client.get('/admin/api/browse/alpha', headers=authorization(ADMIN)).status_code == 503
+    row = client.get('/admin/api/overview', headers=authorization(ADMIN)).json()['libraries'][0]
+    assert row['enabled'] and row['availability']['status'] == 'missing'
+    event = app.state.registry.recent_events(key_id=key['key']['id'])['events'][0]
+    assert event['library_id'] == 'alpha' and event['reason'] == 'missing'
+    # No health data is persisted, and the existing grant survives recovery.
+    catalog = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))
+    assert 'availability' not in catalog['libraries']['alpha']
+    directory.mkdir()
+    (directory / 'README.md').write_text('restored', encoding='utf-8')
+    assert client.get('/api/v1/read', headers=headers,
+                      params={'library_id': 'alpha', 'path': 'README.md'}).json()['lines'][0]['text'] == 'restored'
+    assert app.state.registry.snapshot()['libraries'][0]['availability']['status'] == 'available'
+
+
+def test_unavailable_library_can_be_disabled_and_remapped(managed):
+    _, client, settings = managed
+    add_library(client, 'alpha')
+    key = add_key(client, ['alpha'])
+    directory = Path(settings.root) / 'alpha'
+    (directory / 'README.md').unlink(); directory.rmdir()
+    value = {'id': 'alpha', 'name': 'Renamed', 'path': 'alpha', 'enabled': False}
+    assert client.put('/admin/api/libraries/alpha', headers=authorization(ADMIN), json=value).status_code == 200
+    assert client.get('/api/v1/libraries', headers=authorization(key['token'])).json()['libraries'] == []
+    value.update(path='replacement', enabled=True)
+    assert client.put('/admin/api/libraries/alpha', headers=authorization(ADMIN), json=value).status_code == 200
+    assert client.get('/api/v1/read', headers=authorization(key['token']),
+                      params={'path': 'README.md'}).status_code == 200
+
+
+@pytest.mark.parametrize('failure,expected', [(PermissionError, 'permission_denied'), (OSError, 'io_error')])
+def test_directory_probe_errors_are_isolated(managed, monkeypatch, failure, expected):
+    app, client, settings = managed
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha'])
+    original = os.scandir
+    def scan(path):
+        if Path(path) == Path(settings.root) / 'alpha':
+            raise failure('private server path must not leak')
+        return original(path)
+    monkeypatch.setattr(os, 'scandir', scan)
+    rows = app.state.registry.snapshot()['libraries']
+    assert rows[0]['availability']['status'] == expected
+    assert rows[1]['availability']['status'] == 'available'
+    response = client.get('/api/v1/info', headers=authorization(key['token']))
+    assert response.status_code == 503 and response.json()['reason'] == expected
+    assert 'private server path' not in response.text
+
+
+def test_replaced_directory_and_disappearance_during_read(managed, monkeypatch):
+    app, client, settings = managed
+    add_library(client, 'alpha')
+    key = add_key(client, ['alpha'])
+    directory = Path(settings.root) / 'alpha'
+    original = KnowledgeFolder.read_file
+    def disappearing(folder, **kwargs):
+        (directory / 'README.md').unlink(); directory.rmdir()
+        return original(folder, **kwargs)
+    monkeypatch.setattr(KnowledgeFolder, 'read_file', disappearing)
+    response = client.get('/api/v1/read', headers=authorization(key['token']), params={'path': 'README.md'})
+    assert response.status_code == 503 and response.json()['reason'] == 'missing'
+    directory.write_text('now a file', encoding='utf-8')
+    assert app.state.registry.snapshot()['libraries'][0]['availability']['status'] == 'not_directory'
+
+
+@pytest.mark.skipif(os.name == 'nt', reason='POSIX permission bits required')
+def test_real_directory_permissions(managed):
+    if os.geteuid() == 0:
+        pytest.skip('Root bypasses mode bits')
+    app, client, settings = managed
+    add_library(client, 'alpha')
+    directory = Path(settings.root) / 'alpha'
+    mode = directory.stat().st_mode
+    try:
+        directory.chmod(0)
+        assert app.state.registry.snapshot()['libraries'][0]['availability']['status'] == 'permission_denied'
+    finally:
+        directory.chmod(mode)
+    assert app.state.registry.snapshot()['libraries'][0]['availability']['status'] == 'available'
 
 
 def test_expiry_and_persistence(managed):
@@ -195,7 +300,7 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
                         assert 'list_libraries' in {t.name for t in tools.tools}
                         listed = await session.call_tool('list_libraries', {})
                         assert not listed.isError
-                        assert listed.structuredContent['libraries'] == [{'id':library,'name':library}]
+                        assert listed.structuredContent['libraries'] == [{'id':library,'name':library,'availability':{'status':'available','message':'正常'}}]
                         result = await session.call_tool('read_file', {'path':'README.md'})
                         assert not result.isError
                         assert result.structuredContent['lines'][0]['text'] == library+' private knowledge'
@@ -209,6 +314,22 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
         assert snapshot['metrics']['calls'] == 6 and snapshot['metrics']['errors'] == 2
         records = [e for e in app.state.registry.recent_events()['events'] if e['kind']=='access']
         assert all(e['agent_name'] == ('alpha-agent' if e['key_id']==alpha['key']['id'] else 'beta-agent') for e in records)
+        directory = Path(settings.root) / 'alpha'
+        (directory / 'README.md').unlink(); directory.rmdir()
+        async def check_outage():
+            async with httpx.AsyncClient(headers=authorization(alpha['token']), trust_env=False) as http:
+                async with streamable_http_client(f'http://127.0.0.1:{port}/mcp', http_client=http) as (read, write, _):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        listed = await session.call_tool('list_libraries', {})
+                        assert listed.structuredContent['libraries'][0]['availability']['status'] == 'missing'
+                        result = await session.call_tool('read_file', {'path': 'README.md'})
+                        assert result.isError and 'library_unavailable' in result.content[0].text
+                        directory.mkdir()
+                        (directory / 'README.md').write_text('recovered', encoding='utf-8')
+                        result = await session.call_tool('read_file', {'path': 'README.md'})
+                        assert not result.isError
+        asyncio.run(check_outage())
         app.state.registry.revoke_key(alpha['key']['id'])
         with httpx.Client(trust_env=False) as http:
             assert http.post(f'http://127.0.0.1:{port}/mcp', headers=authorization(alpha['token']), json={}).status_code == 401

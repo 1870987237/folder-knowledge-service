@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import stat
 import threading
 import time
 import uuid
@@ -19,6 +20,20 @@ from .core import KnowledgeError, KnowledgeFolder
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec='milliseconds')
+
+
+AVAILABILITY = {
+    'available': '正常', 'missing': '目录不存在',
+    'permission_denied': '无读取或遍历权限', 'not_directory': '路径不是目录',
+    'unsafe_path': '路径不符合访问规则', 'io_error': '目录暂不可访问',
+}
+
+
+class LibraryUnavailable(KnowledgeError):
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__('library_unavailable',
+                         f'知识库暂不可用：{AVAILABILITY[reason]}（{reason}）', 503)
 
 
 class Registry:
@@ -90,12 +105,54 @@ class Registry:
 
     def folder_for_path(self, path: str, name: str = 'knowledge') -> KnowledgeFolder:
         candidate = self.pool._path(path)
-        if not candidate.is_dir():
+        if not stat.S_ISDIR(candidate.stat().st_mode):
             raise KnowledgeError('not_directory', 'A library must point to an existing directory')
         folder = KnowledgeFolder(candidate, name)
         if not folder.root.is_relative_to(self.pool.root):
             raise KnowledgeError('forbidden_path', 'Library is outside the mounted knowledge pool', 403)
         return folder
+
+    def checked_folder(self, row):
+        """Check only the library root; never scan its full contents for health."""
+        try:
+            folder = self.folder_for_path(row['path'], row['name'])
+            # Opening and advancing scandir exercises real directory permissions.
+            with os.scandir(folder.root) as entries:
+                next(entries, None)
+            if os.name != 'nt' and not os.access(folder.root, os.X_OK):
+                raise PermissionError()
+            return folder
+        except KnowledgeError as exc:
+            reason = {'not_found': 'missing', 'not_directory': 'not_directory',
+                      'permission_denied': 'permission_denied',
+                      'forbidden_path': 'unsafe_path', 'link_forbidden': 'unsafe_path',
+                      'invalid_path': 'unsafe_path'}.get(exc.code, 'io_error')
+        except PermissionError:
+            reason = 'permission_denied'
+        except FileNotFoundError:
+            reason = 'missing'
+        except NotADirectoryError:
+            reason = 'not_directory'
+        except (OSError, RuntimeError, ValueError):
+            reason = 'io_error'
+        raise LibraryUnavailable(reason) from None
+
+    def availability(self, row):
+        status = 'available'
+        try:
+            self.checked_folder(row)
+        except LibraryUnavailable as exc:
+            status = exc.reason
+        return {'status': status, 'message': AVAILABILITY[status]}
+
+    def access_library(self, row, tool, kwargs):
+        folder = self.checked_folder(row)
+        try:
+            return getattr(folder, tool)(**kwargs)
+        except (KnowledgeError, OSError):
+            # A vanished root is different from an absent file within a healthy root.
+            self.checked_folder(row)
+            raise
 
     def directories(self, path: str = '.', offset: int = 0):
         result = self.pool.list_directory(path, offset, 100)
@@ -108,8 +165,6 @@ class Registry:
         name = name.strip()
         if not 1 <= len(name) <= 80:
             raise KnowledgeError('invalid_name', 'Name must contain 1..80 characters')
-        folder = self.folder_for_path(path, name)
-        relative = folder.root.relative_to(self.pool.root).as_posix()
         with self.lock():
             data = self._catalog()
             exists = library_id in data['libraries']
@@ -117,6 +172,13 @@ class Registry:
                 raise KnowledgeError('duplicate_library', 'Library ID already exists', 409)
             if not create and not exists:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
+            previous = data['libraries'].get(library_id)
+            # Metadata and enable/disable remain editable during an outage.
+            if previous and path == previous['path']:
+                relative = previous['path']
+            else:
+                folder = self.folder_for_path(path, name)
+                relative = folder.root.relative_to(self.pool.root).as_posix()
             row = {'id': library_id, 'name': name, 'path': relative, 'enabled': enabled,
                    'created_at': data['libraries'].get(library_id, {}).get('created_at', now()), 'updated_at': now()}
             data['libraries'][library_id] = row
@@ -199,15 +261,16 @@ class Registry:
             selected = next((x for x in allowed if x['id'] == library_id), None)
             if not selected:
                 raise KnowledgeError('library_forbidden', 'Library is unavailable for this key', 403)
-            folder = self.folder_for_path(selected['path'], selected['name'])
-            return key, selected, folder
+            return key, selected
 
     def visible_libraries(self, token: str):
         with self.lock():
             data = self._catalog()
             key = self._authenticate(token, data)
-            return [{'id': row['id'], 'name': row['name']} for row in data['libraries'].values()
+            rows = [row for row in data['libraries'].values()
                     if row['enabled'] and row['id'] in key['library_ids']]
+        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)}
+                for row in rows]
 
     def _event(self, event):
         # Caller owns lock. No tokens, query text, headers or document content are recorded.
@@ -231,16 +294,18 @@ class Registry:
             if tool == 'list_libraries':
                 result = {'libraries': self.visible_libraries(token)}
             else:
-                _, selected, folder = self.resolve(token, library_id)
+                _, selected = self.resolve(token, library_id)
                 event['library_id'] = selected['id']
                 with self.active_mutex:
                     self.active[request_id] = dict(event)
-                result = getattr(folder, tool)(**kwargs)
+                result = self.access_library(selected, tool, kwargs)
                 result = dict(result, library_id=selected['id'])
             event['status'] = 'partial' if result.get('partial') else 'ok'
             return result
         except KnowledgeError as exc:
             event['status'], event['error'] = 'error', exc.code
+            if isinstance(exc, LibraryUnavailable):
+                event['reason'] = exc.reason
             raise
         except Exception:
             event['status'], event['error'] = 'error', 'internal_error'
@@ -267,6 +332,7 @@ class Registry:
             activity = self._load('activity.json', {'since': now(), 'keys': {}})
             keys = [dict(self.public_key(k), activity=activity['keys'].get(k['id'], {})) for k in data['keys'].values()]
             libraries = list(data['libraries'].values())
+        libraries = [dict(row, availability=self.availability(row)) for row in libraries]
         with self.active_mutex:
             active = list(self.active.values())
         values = list(activity['keys'].values())

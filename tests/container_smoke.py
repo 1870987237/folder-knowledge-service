@@ -63,6 +63,28 @@ def main():
             docker('restart', name)
             wait_ready()
             assert request('/api/v1/read?path=README.md', credential=key['token'])['library_id']=='manual'
+            knowledge = root/'manual'
+            mode = knowledge.stat().st_mode
+            def unavailable(reason):
+                listed = request('/api/v1/libraries', credential=key['token'])['libraries']
+                assert listed[0]['availability']['status'] == reason
+                try:
+                    request('/api/v1/read?path=README.md', credential=key['token'])
+                except urllib.error.HTTPError as exc:
+                    body = json.load(exc)
+                    assert exc.code == 503 and body['reason'] == reason
+                else:
+                    raise AssertionError('Unavailable library must reject reads')
+            try:
+                knowledge.chmod(0)
+                unavailable('permission_denied')
+            finally:
+                knowledge.chmod(mode)
+            (knowledge/'README.md').unlink(); knowledge.rmdir()
+            unavailable('missing')
+            knowledge.mkdir()
+            (knowledge/'README.md').write_text('restored knowledge\n', encoding='utf-8')
+            assert request('/api/v1/read?path=README.md', credential=key['token'])['lines'][0]['text']=='restored knowledge'
             request('/admin/api/keys/'+key['key']['id']+'/revoke', 'POST')
             try:
                 request('/api/v1/info', credential=key['token'])

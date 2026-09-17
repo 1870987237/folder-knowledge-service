@@ -79,8 +79,12 @@ class KnowledgeFolder:
             if not current.resolve(strict=True).is_relative_to(self.root):
                 raise KnowledgeError('forbidden_path', 'Path is outside the knowledge root', 403)
             return current
-        except (OSError, RuntimeError):
+        except PermissionError:
+            raise KnowledgeError('permission_denied', 'Path cannot be accessed', 403) from None
+        except (FileNotFoundError, NotADirectoryError):
             raise KnowledgeError('not_found', 'Path is unavailable', 404) from None
+        except (OSError, RuntimeError):
+            raise KnowledgeError('path_unavailable', 'Path cannot be accessed', 503) from None
 
     def _readable(self, p: Path) -> bool:
         return p.suffix.lower() in self.extensions or p.name == 'README'
