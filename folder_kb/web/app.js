@@ -30,7 +30,6 @@ $('#login-form').addEventListener('submit',async event=>{
   try {await refresh();$('#admin-token').value='';$('#login').classList.add('hidden');$('#app').classList.remove('hidden');timer=setInterval(()=>{if(!document.hidden)refresh().catch(report);},10000);}
   catch(error){token='';$('#login-error').textContent=error.message;}finally{button.disabled=false;}
 });
-$('#refresh').addEventListener('click',()=>refresh().catch(report));
 $('#navigation').addEventListener('click',event=>{const target=event.target.closest('[data-page]');if(target){page=target.dataset.page;render();refresh().catch(report);}});
 $('#modal-close').addEventListener('click',()=>$('#modal').close());
 $('#modal').addEventListener('close',()=>$('#modal-body').replaceChildren());
@@ -38,12 +37,12 @@ function modal(title, html){$('#modal-title').textContent=title;$('#modal-body')
 async function refresh(){
   if(refreshing){refreshQueued=true;return;}refreshing=true;
   try{const currentToken=token;const [next,activity]=await Promise.all([api('/overview'),api('/activity?'+new URLSearchParams(Object.fromEntries(Object.entries({limit:100,...filters,before_id:page==='activity'?eventCursor:''}).filter(([,value])=>value!==''))))]);
-    if(!token || currentToken!==token)return;snapshot=next;events=activity.events;nextEventCursor=activity.next_before_id;$('#updated').textContent='更新于 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});$('#banner').classList.add('hidden');render();
+    if(!token || currentToken!==token)return;snapshot=next;events=activity.events;nextEventCursor=activity.next_before_id;$('#banner').classList.add('hidden');render();
   }finally{refreshing=false;if(refreshQueued){refreshQueued=false;if(token)refresh().catch(report);}}
 }
 function render(){
   if(!snapshot)return;
-  $('#breadcrumb').textContent=pages[page][0];$('#page-title').textContent=pages[page][0];$('#page-description').textContent=pages[page][1];
+  $('#page-title').textContent=pages[page][0];$('#page-description').textContent=pages[page][1];
   document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
   const action=$('#page-action');action.classList.toggle('hidden',!['libraries','keys'].includes(page));action.textContent=page==='libraries'?'+ 添加知识库':'+ 生成 Agent Key';action.onclick=()=>page==='libraries'?libraryForm():keyForm();
   $('#view').innerHTML=page==='overview'?overview():page==='libraries'?libraryTable():page==='keys'?keysTable():activityView();
