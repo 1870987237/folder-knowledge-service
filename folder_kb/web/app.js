@@ -78,17 +78,73 @@ $('#view').addEventListener('click',async event=>{
   }catch(error){report(error);}
 });
 function libraryForm(row=null){
-  modal(row?'编辑知识库':'添加知识库',`<form id="library-form"><div class="field"><label>知识库名称</label><input name="name" maxlength="80" required value="${escapeHTML(row?.name||'')}" placeholder="例如：团队知识库"></div><div class="field"><label>知识库 ID</label><input name="id" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" required ${row?'readonly':''} value="${escapeHTML(row?.id||'')}" placeholder="team-guide"><p class="hint">供 Agent 指定 library_id，创建后不可修改。</p></div><div class="field"><label>挂载根目录下的相对路径</label><div class="form-row"><input name="path" required value="${escapeHTML(row?.path||'')}" placeholder="team-guide"><button type="button" id="choose-dir" class="secondary">选择目录</button></div><div id="directory-browser"></div><p class="hint">只能注册已挂载范围内的目录；“.” 表示整个挂载根目录。</p></div><label class="check"><input name="enabled" type="checkbox" ${!row||row.enabled?'checked':''}>启用知识库</label>${row?'<p class="hint">更换目录会影响已授权给该知识库的全部 Key。</p>':''}<p id="form-error" class="error"></p><div class="modal-actions"><button class="primary" type="submit">保存知识库</button></div></form>`);
-  $('#choose-dir').onclick=()=>directoryBrowser('.').catch(error=>$('#form-error').textContent=error.message);
+  modal(row?'编辑知识库':'添加知识库',`<form id="library-form"><div class="field"><label>知识库名称</label><input name="name" maxlength="80" required value="${escapeHTML(row?.name||'')}" placeholder="例如：团队知识库"></div><div class="field"><label>知识库 ID</label><input name="id" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" required ${row?'readonly':''} value="${escapeHTML(row?.id||'')}" placeholder="team-guide"><p class="hint">供 Agent 指定 library_id，创建后不可修改。</p></div><div class="field"><label for="library-path">知识文件夹</label><div class="form-row"><input id="library-path" name="path" required value="${escapeHTML(row?.path||'')}" placeholder="选择文件夹或填写相对路径"><button type="button" id="choose-dir" class="secondary">选择目录</button></div><p class="hint">只能注册已挂载范围内的目录；“.” 表示整个挂载根目录。</p></div><label class="check"><input name="enabled" type="checkbox" ${!row||row.enabled?'checked':''}>启用知识库</label>${row?'<p class="hint">更换目录会影响已授权给该知识库的全部 Key。</p>':''}<p id="form-error" class="error"></p><div class="modal-actions"><button class="primary" type="submit">保存知识库</button></div></form>`);
+  $('#choose-dir').onclick=()=>directoryBrowser();
   $('#library-form').onsubmit=async event=>{event.preventDefault();const data=new FormData(event.target);const button=event.submitter;button.disabled=true;
     try{await api('/libraries'+(row?'/'+row.id:''),{method:row?'PUT':'POST',body:JSON.stringify({id:data.get('id'),name:data.get('name'),path:data.get('path'),enabled:data.has('enabled')})});$('#modal').close();await refresh();toast('知识库配置已生效');}catch(error){$('#form-error').textContent=error.message;}finally{button.disabled=false;}};
 }
-async function directoryBrowser(path,offset=0){
-  const data=await api('/directories?'+new URLSearchParams({path,offset}));const parent=path.split('/').slice(0,-1).join('/')||'.';
-  $('#directory-browser').innerHTML=`<div class="directory-list"><button type="button" class="directory-item" id="select-directory">✓ 选择当前目录：${escapeHTML(path)}</button>${path!=='.'?`<button type="button" class="directory-item" data-directory="${escapeHTML(parent)}">↰ 上一级</button>`:''}${data.entries.map(x=>`<button type="button" class="directory-item" data-directory="${escapeHTML(x.path)}">▸ ${escapeHTML(x.path)}</button>`).join('')}${data.next_offset!=null?'<button type="button" class="directory-item" id="more-directories">下一页目录</button>':''}</div>${data.partial?'<p class="hint">目录列表不完整，请缩小路径范围。</p>':''}`;
-  $('#select-directory').onclick=()=>{$('#library-form input[name=path]').value=path;$('#directory-browser').replaceChildren();};
-  document.querySelectorAll('[data-directory]').forEach(x=>x.onclick=()=>directoryBrowser(x.dataset.directory).catch(error=>$('#form-error').textContent=error.message));
-  if($('#more-directories'))$('#more-directories').onclick=()=>directoryBrowser(path,data.next_offset).catch(error=>$('#form-error').textContent=error.message);
+function directoryBrowser(){
+  const form=$('#library-form'),pathInput=form.querySelector('[name=path]'),title=$('#modal-title').textContent;
+  const picker=document.createElement('section');picker.className='folder-picker';picker.setAttribute('aria-label','选择知识文件夹');
+  const folderIcon='<svg class="folder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3V7Z" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  picker.innerHTML=`<div class="folder-toolbar"><button type="button" class="secondary compact" data-up aria-label="返回上一级">↑ 上一级</button><nav class="folder-crumbs" aria-label="当前目录"></nav></div><input type="search" class="folder-filter" placeholder="筛选已加载的文件夹" aria-label="筛选文件夹"><div class="folder-location"></div><div class="folder-list" aria-label="文件夹列表"></div><button type="button" class="folder-more secondary compact hidden">加载更多</button><p class="folder-error error hidden" role="alert"></p><div class="folder-footer"><div class="folder-selection" aria-live="polite"><span>已选文件夹</span><strong></strong></div><div class="folder-actions"><button type="button" class="secondary" data-cancel>取消</button><button type="button" class="primary" data-confirm>使用此文件夹</button></div></div>`;
+  form.classList.add('hidden');form.after(picker);$('#modal-title').textContent='选择文件夹';
+  const find=s=>picker.querySelector(s),display=p=>p==='.'?'挂载根目录':'挂载根目录 / '+p;
+  let current='.',selected=null,entries=[],nextOffset=null,busy=false,loaded=false;
+  function finish(apply=false){
+    if(apply && selected)pathInput.value=selected;
+    picker.remove();form.classList.remove('hidden');$('#modal-title').textContent=title;
+    if(apply)pathInput.focus();else $('#choose-dir').focus();
+  }
+  function selection(){
+    find('.folder-selection strong').textContent=selected?display(selected):'尚未选择';
+    find('[data-confirm]').disabled=busy||!selected;
+    picker.querySelectorAll('[data-select]').forEach(button=>{const active=button.dataset.select===selected;button.setAttribute('aria-pressed',String(active));button.closest('.folder-row')?.classList.toggle('selected',active);});
+  }
+  function render(){
+    const parts=current==='.'?[]:current.split('/');
+    find('.folder-crumbs').innerHTML=[{path:'.',name:'挂载根目录'},...parts.map((name,i)=>({path:parts.slice(0,i+1).join('/'),name}))].map((part,i)=>`${i?'<span aria-hidden="true">/</span>':''}<button type="button" data-open="${escapeHTML(part.path)}" ${part.path===current?'aria-current="location"':''}>${escapeHTML(part.name)}</button>`).join('');
+    const query=find('.folder-filter').value.trim().toLocaleLowerCase();
+    const filtered=entries.filter(x=>x.path.split('/').pop().toLocaleLowerCase().includes(query));
+    find('.folder-location').innerHTML=`<button type="button" data-select="${escapeHTML(current)}" class="folder-current">${folderIcon}<span>选择当前文件夹</span></button>`;
+    find('.folder-list').innerHTML=filtered.map(x=>{const name=x.path.split('/').pop();return `<div class="folder-row"><button type="button" class="folder-select" data-select="${escapeHTML(x.path)}" aria-label="选择 ${escapeHTML(name)}">${folderIcon}<span>${escapeHTML(name)}</span><span class="folder-check" aria-hidden="true">✓</span></button><button type="button" class="folder-open" data-open="${escapeHTML(x.path)}" aria-label="打开 ${escapeHTML(name)}">打开 <span aria-hidden="true">›</span></button></div>`;}).join('')||`<div class="folder-empty">${query?'没有匹配的文件夹':nextOffset!=null?'本页没有文件夹，可继续加载':'此目录下没有子文件夹'}</div>`;
+    find('.folder-more').classList.toggle('hidden',nextOffset==null);
+    setBusy(busy);selection();
+  }
+  function setBusy(value){
+    busy=value;picker.setAttribute('aria-busy',String(value));
+    picker.querySelectorAll('button:not([data-cancel])').forEach(x=>x.disabled=value);
+    find('.folder-filter').disabled=value;
+    find('[data-up]').disabled=value||current==='.';
+    find('[data-confirm]').disabled=value||!selected;
+    if(!loaded)find('[data-select]').disabled=true;
+  }
+  async function navigate(path,append=false){
+    if(busy)return;setBusy(true);find('.folder-error').classList.add('hidden');
+    if(!loaded)find('.folder-list').innerHTML='<div class="folder-empty" role="status">正在加载文件夹…</div>';
+    try{
+      const data=await api('/directories?'+new URLSearchParams({path,offset:append?nextOffset:0}));
+      if(!picker.isConnected)return;
+      if(!append){current=data.path||path;entries=[];selected=current;find('.folder-filter').value='';}
+      const seen=new Set(entries.map(x=>x.path));entries.push(...data.entries.filter(x=>!seen.has(x.path)));
+      nextOffset=data.next_offset;loaded=true;render();
+      if(data.partial){find('.folder-error').textContent='目录列表未完整加载，可进入子目录或直接填写路径。';find('.folder-error').classList.remove('hidden');}
+    }catch(error){if(picker.isConnected){find('.folder-error').textContent='无法打开文件夹：'+error.message;find('.folder-error').classList.remove('hidden');if(!loaded)find('.folder-list').innerHTML='<div class="folder-empty">请点击“挂载根目录”重新选择</div>';}}
+    finally{if(picker.isConnected)setBusy(false);}
+  }
+  picker.addEventListener('click',event=>{
+    const button=event.target.closest('button');if(!button)return;
+    if(button.hasAttribute('data-cancel'))return finish();
+    if(busy)return;
+    if(button.hasAttribute('data-confirm'))return finish(true);
+    if(button.hasAttribute('data-up'))return navigate(current.split('/').slice(0,-1).join('/')||'.');
+    if(button.hasAttribute('data-open'))return navigate(button.dataset.open);
+    if(button.hasAttribute('data-select')){selected=button.dataset.select;selection();return;}
+    if(button.classList.contains('folder-more'))navigate(current,true);
+  });
+  picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();finish();}});
+  find('.folder-filter').oninput=render;
+  render();find('[data-cancel]').focus();navigate(pathInput.value.trim()||'.');
 }
 function keyGrantsForm(key){
   modal('编辑 Key 授权',`<form id="key-grants-form"><p>Agent：<strong>${escapeHTML(key.agent_name)}</strong></p><div class="field"><label>可访问知识库</label><div class="checks">${snapshot.libraries.map(x=>`<label class="check"><input type="checkbox" name="libraries" value="${x.id}" ${key.library_ids.includes(x.id)?'checked':''}>${escapeHTML(x.name)}${!x.enabled?'（已停用）':''} ${availabilityBadge(x)}</label>`).join('')}</div></div><p class="hint">保存后对后续请求生效，Key 不变。不勾选任何知识库可暂时清空访问权限。已停用或目录异常的知识库恢复后，授权仍会生效。</p><p id="form-error" class="error"></p><div class="modal-actions"><button type="submit" class="primary">保存授权</button></div></form>`);
