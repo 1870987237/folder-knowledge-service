@@ -102,6 +102,59 @@ def test_multiple_libraries_require_explicit_selection(managed):
     assert client.get('/api/v1/info', headers=authorization(key['token']), params={'library_id':'beta'}).json()['library_id'] == 'beta'
 
 
+def test_edit_key_grants_without_rotating_secret(managed):
+    app, client, settings = managed
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha'])
+    url = '/admin/api/keys/' + key['key']['id'] + '/grants'
+    agent = authorization(key['token'])
+    admin = authorization(ADMIN)
+    before = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))['keys'][key['key']['id']]
+    assert client.get('/api/v1/read', headers=agent, params={'path':'README.md'}).status_code == 200
+    assert client.put(url, json={'library_ids':['beta']}).status_code == 401
+    assert client.put(url, headers=agent, json={'library_ids':['beta']}).status_code == 401
+    assert client.put(url, headers=admin, json={'library_ids':['missing']}).status_code == 400
+    assert client.put(url, headers=admin, json={'library_ids':['beta'], 'expires_at':None}).status_code == 422
+    response = client.put(url, headers=admin, json={'library_ids':['beta','beta']})
+    assert response.status_code == 200 and response.json()['library_ids'] == ['beta']
+    assert 'digest' not in response.json() and 'token' not in response.json()
+    assert client.get('/api/v1/read', headers=agent,
+                      params={'library_id':'alpha','path':'README.md'}).status_code == 403
+    assert client.get('/api/v1/read', headers=agent, params={'path':'README.md'}).json()['library_id'] == 'beta'
+    after = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))['keys'][key['key']['id']]
+    assert {k:v for k,v in before.items() if k!='library_ids'} == {k:v for k,v in after.items() if k!='library_ids'}
+    assert Registry(settings.root, settings.state_dir).authenticate(key['token'])['library_ids'] == ['beta']
+    edits = [e for e in app.state.registry.recent_events()['events'] if e.get('action')=='key_grants_update']
+    assert edits[0]['previous_library_ids'] == ['alpha'] and edits[0]['library_ids'] == ['beta']
+    assert client.put(url, headers=admin, json={'library_ids':[]}).status_code == 200
+    assert client.get('/api/v1/libraries', headers=agent).json()['libraries'] == []
+    assert client.get('/api/v1/read', headers=agent,
+                      params={'library_id':'beta','path':'README.md'}).status_code == 403
+    assert client.put(url, headers=admin, json={'library_ids':['alpha']}).status_code == 200
+    assert client.get('/api/v1/read', headers=agent, params={'path':'README.md'}).status_code == 200
+    client.post('/admin/api/keys/'+key['key']['id']+'/revoke', headers=admin)
+    assert client.put(url, headers=admin, json={'library_ids':['beta']}).status_code == 409
+    assert client.get('/api/v1/libraries', headers=agent).status_code == 401
+    assert client.put('/admin/api/keys/unknown/grants', headers=admin, json={'library_ids':[]}).status_code == 404
+
+
+def test_edit_grants_preserves_expiry_and_unavailable_grants(managed):
+    app, client, settings = managed
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha'])
+    registry = app.state.registry
+    with registry.lock():
+        data = registry._catalog()
+        data['keys'][key['key']['id']]['expires_at'] = (datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
+        registry._write('catalog.json',data)
+    (Path(settings.root)/'beta/README.md').unlink()
+    (Path(settings.root)/'beta').rmdir()
+    response = client.put('/admin/api/keys/'+key['key']['id']+'/grants', headers=authorization(ADMIN),
+                          json={'library_ids':['beta']})
+    assert response.status_code == 200 and response.json()['expires_at'] is not None
+    assert client.get('/api/v1/libraries', headers=authorization(key['token'])).status_code == 401
+
+
 def test_missing_library_recovery_and_independent_access(managed):
     app, client, settings = managed
     add_library(client, 'alpha'); add_library(client, 'beta')
@@ -329,6 +382,16 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
                         (directory / 'README.md').write_text('recovered', encoding='utf-8')
                         result = await session.call_tool('read_file', {'path': 'README.md'})
                         assert not result.isError
+                        async with httpx.AsyncClient(trust_env=False) as admin_http:
+                            url = f'http://127.0.0.1:{port}/admin/api/keys/' + alpha['key']['id'] + '/grants'
+                            response = await admin_http.put(url, headers=authorization(ADMIN), json={'library_ids':['beta']})
+                            assert response.status_code == 200
+                            denied = await session.call_tool('read_file', {'library_id':'alpha','path':'README.md'})
+                            assert denied.isError
+                            listed = await session.call_tool('list_libraries', {})
+                            assert [row['id'] for row in listed.structuredContent['libraries']] == ['beta']
+                            allowed = await session.call_tool('read_file', {'path':'README.md'})
+                            assert not allowed.isError and allowed.structuredContent['library_id'] == 'beta'
         asyncio.run(check_outage())
         app.state.registry.revoke_key(alpha['key']['id'])
         with httpx.Client(trust_env=False) as http:

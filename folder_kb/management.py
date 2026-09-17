@@ -223,6 +223,26 @@ class Registry:
             self._event({'kind': 'admin', 'action': 'key_create', 'key_id': kid, 'status': 'ok'})
             return {'key': self.public_key(key), 'token': token}
 
+    def update_key_grants(self, kid: str, library_ids: list[str]):
+        if len(library_ids) > 64:
+            raise KnowledgeError('invalid_grants', 'Choose at most 64 libraries')
+        with self.lock():
+            data = self._catalog()
+            key = data['keys'].get(kid)
+            if key is None:
+                raise KnowledgeError('unknown_key', 'Key does not exist', 404)
+            if key['revoked_at']:
+                raise KnowledgeError('key_revoked', '已撤销的 Key 不能编辑授权，请创建新的 Key。', 409)
+            if any(i not in data['libraries'] for i in library_ids):
+                raise KnowledgeError('unknown_library', 'One or more libraries do not exist')
+            previous = key['library_ids']
+            key['library_ids'] = sorted(set(library_ids))
+            self._write('catalog.json', data)
+            self._event({'kind': 'admin', 'action': 'key_grants_update', 'key_id': kid,
+                         'previous_library_ids': previous, 'library_ids': key['library_ids'],
+                         'status': 'ok'})
+            return self.public_key(key)
+
     def revoke_key(self, kid: str):
         with self.lock():
             data = self._catalog()

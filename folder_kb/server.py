@@ -257,6 +257,11 @@ class KeyInput(BaseModel):
     expires_at: str | None = Field(default=None, max_length=64)
 
 
+class KeyGrantsInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    library_ids: list[str] = Field(max_length=64)
+
+
 def add_admin_routes(app: FastAPI, registry: Registry):
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')
@@ -291,6 +296,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     @app.post('/admin/api/keys/{key_id}/revoke')
     def revoke_key(key_id: str):
         return registry.revoke_key(key_id)
+
+    @app.put('/admin/api/keys/{key_id}/grants')
+    def update_key_grants(key_id: str, value: KeyGrantsInput):
+        return registry.update_key_grants(key_id, value.library_ids)
 
     @app.get('/admin/api/activity')
     def activity(limit: int = 100, key_id: str | None = None, library_id: str | None = None):
