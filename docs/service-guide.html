@@ -8,19 +8,20 @@
 <style>
 :root{--ink:#193a32;--text:#31483f;--muted:#687970;--green:#167a67;--line:#dce5df;--pale:#f4f7f5;--white:#fff}
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:85px}body{margin:0;color:var(--text);background:var(--white);font-family:"Times New Roman","Microsoft YaHei",sans-serif;font-size:18px;line-height:1.8}a{color:var(--green);text-underline-offset:4px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #88c7b4;outline-offset:3px}header{border-bottom:1px solid var(--line);position:sticky;top:0;background:#fffffffa;z-index:3}.nav{max-width:1184px;padding:13px 32px;margin:auto;display:flex;align-items:center;gap:28px}.brand{font-size:20px;font-weight:700;color:var(--ink);text-decoration:none;white-space:nowrap}.nav nav{display:flex;gap:24px;margin-left:auto;overflow-x:auto;white-space:nowrap}.nav nav a{font-size:16px;text-decoration:none}.nav button{border:0;background:none;color:var(--muted);font-size:15px;white-space:nowrap}main{max-width:1120px;margin:auto;padding:0 24px}h1,h2,h3{color:var(--ink);line-height:1.35}h1{font-size:52px;letter-spacing:-1px;margin:0 0 24px}h2{font-size:32px;margin:0 0 26px}h3{font-size:23px;margin:28px 0 12px}p{margin:0 0 18px}.hero{padding:72px 0 58px;border-bottom:1px solid var(--line)}.lead{font-size:24px;max-width:880px;margin-bottom:22px}.hero-actions{display:flex;align-items:center;gap:28px;margin-top:28px}.primary{display:inline-block;color:#fff;background:var(--green);padding:9px 20px;border:0;border-radius:5px;text-decoration:none;font-size:17px}.muted,.note{color:var(--muted)}.note{font-size:16px}.section{padding:52px 0;border-bottom:1px solid var(--line)}.two{display:grid;grid-template-columns:1fr 1fr;gap:46px}.two h3:first-child{margin-top:0}ul,ol{padding-left:24px;margin-top:10px}li{padding-left:3px;margin:8px 0}strong{color:var(--ink)}.architecture{display:grid;grid-template-columns:1fr 40px 1.5fr 40px 1.2fr;align-items:center;margin:32px 0 22px;gap:10px}.arch-node{border:1px solid var(--line);padding:22px 18px;border-radius:5px}.arch-node strong{display:block;font-size:20px;margin-bottom:6px}.arch-node p{font-size:17px;line-height:1.7;margin:0}.arch-service{border-color:var(--green);background:var(--pale)}.arch-stores{display:grid;gap:15px}.arrow{text-align:center;font-size:26px;color:var(--green)}figure{margin:0}figcaption{font-size:16px;color:var(--muted)}.table-wrap{overflow-x:auto;margin:23px 0}table{border-collapse:collapse;width:100%;font-size:17px}th,td{padding:15px 17px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--pale);font-weight:700;color:var(--ink)}td:first-child{font-weight:700;color:var(--ink)}code,pre{font-family:Consolas,"Liberation Mono","Microsoft YaHei",monospace}p code,li code,td code{font-size:.87em;background:var(--pale);padding:2px 4px;overflow-wrap:anywhere}td:first-child code{white-space:nowrap}pre{margin:0;overflow:auto;line-height:1.75;font-size:15px;padding:22px 22px 26px;color:#203e34;tab-size:2}.code-block{border:1px solid var(--line);border-radius:5px;background:#f8faf9;margin:18px 0 24px;overflow:hidden}.code-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}.copy{padding:3px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--green);font-size:14px}.setup{padding:24px;background:var(--pale);margin:26px 0;border-radius:5px}.form-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:18px;align-items:end}.form-grid label{display:block;font-size:16px;font-weight:700;color:var(--ink)}.form-grid input{display:block;width:100%;margin-top:6px;padding:9px 11px;border:1px solid #b8c9c0;border-radius:4px;background:#fff;font-size:17px;color:var(--ink)}.form-grid button{white-space:nowrap;min-height:48px}.form-error{color:#a73d36;margin:12px 0 0;font-size:16px}.setup p:last-child{margin:12px 0 0}.steps{counter-reset:step}.step{padding:0 0 26px 54px;position:relative}.step h3{margin-top:20px}.step:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0;color:var(--green);font-size:28px;font-weight:700}.endpoint{display:grid;grid-template-columns:170px minmax(0,1fr);gap:0 16px;margin:20px 0}.endpoint dt,.endpoint dd{padding:9px 0;margin:0;border-bottom:1px solid var(--line)}.endpoint dt{font-weight:700}.endpoint dd{overflow-wrap:anywhere}.important{border-left:3px solid var(--green);padding-left:18px;margin:24px 0}.details{border-top:1px solid var(--line);padding-top:4px}.details summary{font-size:20px;font-weight:700;color:var(--ink);cursor:pointer;padding:14px 0}footer{max-width:1120px;margin:auto;padding:30px 24px 50px;font-size:16px;color:var(--muted)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}noscript p{padding:12px;background:var(--pale)}
+.agent-instructions pre{white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:850px){.nav{padding:12px 20px;gap:16px;flex-wrap:wrap}.nav nav{order:3;width:100%;margin:0;gap:23px}.nav button{margin-left:auto}h1{font-size:39px}.hero{padding-top:42px}.two{grid-template-columns:1fr;gap:16px}.form-grid{grid-template-columns:1fr 1fr}.form-grid button{grid-column:1/-1;justify-self:start}.architecture{grid-template-columns:1fr}.arrow{transform:rotate(90deg);height:35px}.arch-stores{grid-template-columns:1fr 1fr}.section{padding:38px 0}html{scroll-padding-top:125px}}
 @media(max-width:520px){body{font-size:17px}main{padding:0 18px}h1{font-size:34px}h2{font-size:27px}.lead{font-size:21px}.hero-actions{align-items:flex-start;flex-direction:column;gap:15px}.form-grid{grid-template-columns:1fr}.arch-stores{grid-template-columns:1fr}.step{padding-left:35px}.endpoint{grid-template-columns:1fr}.endpoint dt{padding-bottom:0;border-bottom:0}.endpoint dd{padding-top:2px}pre{font-size:14px;padding:15px}th,td{padding:12px;min-width:130px}.setup{padding:17px}}
 @media print{header,.copy,.hero-actions,.setup button{display:none}html{scroll-padding:0}body{font-size:11pt;color:#172d25}main,footer{max-width:none;padding:0}.hero{padding:12px 0 20px}h1{font-size:30pt}h2{font-size:21pt}h3{font-size:15pt}.lead{font-size:16pt}.section{padding:24px 0;break-inside:auto}h2,h3{break-after:avoid}table{font-size:10pt}tr,.code-block,.architecture{break-inside:avoid}pre{font-size:9pt;white-space:pre-wrap;overflow-wrap:anywhere}.note,figcaption,footer{font-size:10pt}.setup{background:none;border:1px solid #ddd}.form-grid{grid-template-columns:2fr 1fr}.form-grid input{font-size:11pt}.endpoint{font-size:11pt}a{color:inherit;text-decoration:none}}
 </style>
 </head>
 <body>
-<header><div class="nav"><a class="brand" href="#top">文件夹知识服务</a><nav aria-label="页面导航"><a href="#architecture">架构</a><a href="#tools">工具</a><a href="#connect">连接教程</a><a href="#usage">调用示例</a><a href="#deploy">部署</a><a href="#troubleshoot">排错</a></nav><button id="print" type="button">打印 / 存为 PDF</button></div></header>
+<header><div class="nav"><a class="brand" href="#top">文件夹知识服务</a><nav aria-label="页面导航"><a href="#architecture">架构</a><a href="#tools">工具</a><a href="#connect">Agent 接入</a><a href="#usage">调用示例</a><a href="#deploy">部署</a><a href="#troubleshoot">排错</a></nav><button id="print" type="button">打印 / 存为 PDF</button></div></header>
 <main id="top">
 <section class="hero">
 <h1>让 Agent 直接使用<br>文件夹里的知识</h1>
 <p class="lead">通过 MCP 或 REST，按权限浏览目录、搜索关键词、读取原文。知识继续以文件维护，服务统一管理只读访问。</p>
 <p>适用于团队文档、使用手册、经验和案例。服务不调用大模型，不建立向量索引，由 Agent 自行决定如何查找资料和组织答案。</p>
-<div class="hero-actions"><a class="primary" href="#connect">开始连接</a><a href="https://github.com/oh-my-harness/folder-knowledge-service" target="_blank" rel="noopener noreferrer">查看项目仓库</a></div>
+<div class="hero-actions"><a class="primary" href="#connect">交给 Agent 配置</a><a href="https://github.com/oh-my-harness/folder-knowledge-service" target="_blank" rel="noopener noreferrer">查看项目仓库</a></div>
 </section>
 
 <section class="section" id="architecture">
@@ -50,39 +51,41 @@
 </section>
 
 <section class="section" id="connect">
-<h2>连接教程</h2>
-<p>先由管理员注册知识库并发放 Agent Key，再配置客户端。客户端需支持 <strong>Streamable HTTP</strong> 和自定义认证请求头。</p>
-<form class="setup" id="endpoint-form">
-<div class="form-grid"><label for="base-url">服务根地址<input id="base-url" type="url" value="http://192.168.18.116:8791" required autocomplete="off" spellcheck="false" aria-describedby="config-note"></label><label for="library-id">知识库 ID<input id="library-id" value="team-guide" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" autocomplete="off" spellcheck="false"></label><button type="submit" class="primary">更新示例</button></div>
-<p class="note" id="config-note">已填入当前服务地址。知识库 ID 为示例，请替换为已授权的实际 ID。地址不包含 /mcp。仅更新本页示例，不保存输入、不收集 Key、不发起网络连接。</p><p class="form-error" id="config-error" role="alert" hidden></p>
-</form>
-<noscript><p>脚本未启用。教程仍可阅读，已使用当前服务地址，请将 team-guide 手动替换为已授权的实际知识库 ID。</p></noscript>
-<div class="steps">
-<div class="step"><h3>管理员注册知识库</h3><p>打开 <a data-admin href="http://192.168.18.116:8791/admin" target="_blank" rel="noopener noreferrer">http://192.168.18.116:8791/admin</a>，使用 <code>KB_ADMIN_TOKEN</code> 登录。在“知识库”中添加目录，设置名称、ID 和挂载根目录下的相对路径。</p><p>文件夹选择器支持单击选中、双击进入、路径逐级返回和筛选。固定挂载范围内新增知识库无需重启服务。</p></div>
-<div class="step"><h3>生成并保存 Agent Key</h3><p>进入“Agent 与密钥”，点击“生成 Agent Key”，填写 Agent 名称、勾选可访问知识库，按需设置有效期。</p><p class="important"><strong>完整 Key 只在创建时显示一次。</strong>关闭弹窗前将其保存到客户端密钥存储或环境变量中。服务只保存哈希，无法再次查看原文。遗失后撤销旧 Key 并重新生成。</p><p>已有 Key 可编辑授权，增减可访问知识库，无需更换客户端 Key。管理员令牌用于管理台，不能代替 Agent Key 连接知识接口。</p></div>
-<div class="step"><h3>配置支持 HTTP 的 MCP 客户端</h3>
-<dl class="endpoint"><dt>传输方式</dt><dd>Streamable HTTP</dd><dt>服务地址</dt><dd><code data-mcp>http://192.168.18.116:8791/mcp</code></dd><dt>认证请求头</dt><dd><code>Authorization: Bearer &lt;Agent Key&gt;</code></dd></dl>
-<p>不同客户端的配置格式不同。在支持的 MCP 配置界面填写上述字段；密钥通过客户端的密钥管理或环境变量引用，不写入给模型的提示词。本服务使用 Bearer Key，未实现 OAuth 登录流程。</p>
-<h3>Codex CLI 示例</h3><p>以下命令在使用 Codex 的终端执行。先读取 Key 到当前进程环境，再登记 MCP 服务。</p>
-<div class="code-block"><div class="code-bar"><span>Bash · 读取密钥</span><button class="copy" type="button" data-copy="key-env">复制</button></div><pre id="key-env"><code>read -rsp 'Agent Key: ' KB_AGENT_KEY
-printf '\n'
-export KB_AGENT_KEY</code></pre></div>
-<div class="code-block"><div class="code-bar"><span>Codex CLI · 添加远程 MCP</span><button class="copy" type="button" data-copy="codex-command">复制</button></div><pre id="codex-command"><code>codex mcp add folder-knowledge \
-  --url http://192.168.18.116:8791/mcp \
-  --bearer-token-env-var KB_AGENT_KEY
+<h2>让 Agent 自行配置连接</h2>
+<p>将下面的指令交给要接入的 Agent。由它识别客户端、写入配置并验证工具调用。前提是服务已部署，管理员已发放具有知识库访问权限的 Agent Key。</p>
+<div class="code-block agent-instructions"><div class="code-bar"><span>发给 Agent 的配置指令</span><button class="copy" type="button" data-copy="agent-prompt">复制配置指令</button></div><pre id="agent-prompt"><code>请为你当前使用的客户端配置文件夹知识服务，并完成真实连接验证。请直接执行可完成的配置，不要只返回操作教程。
 
-codex mcp list</code></pre></div>
-<p class="note">参数依据本机 <code>codex mcp add --help</code> 核对。启动 Codex 的进程必须能读取 <code>KB_AGENT_KEY</code>；已经打开的客户端不会自动取得后来设置的进程环境变量。<code>mcp list</code> 只确认配置已登记，实际连接还需调用工具验证。</p></div>
-<div class="step"><h3>验证真实访问</h3><p>让 Agent 调用 <code>list_libraries</code>，确认出现目标知识库，再调用 <code>list_directory</code> 或 <code>grep</code>。如果一个 Key 对应多个可用知识库，后续调用必须指定 <code>library_id</code>。</p><div class="code-block"><div class="code-bar"><span>可发给 Agent 的验证请求</span><button class="copy" type="button" data-copy="agent-prompt">复制</button></div><pre id="agent-prompt"><code>请通过 folder-knowledge MCP 列出我可访问的知识库。
-然后查看 team-guide 的根目录，选择一个文本文件读取前 30 行。
-回答中注明知识库 ID、相对路径和行号。</code></pre></div></div>
-</div>
+连接信息：
+- 服务名称：folder-knowledge
+- 服务根地址：http://192.168.18.116:8791
+- MCP 地址：http://192.168.18.116:8791/mcp
+- 传输协议：Streamable HTTP
+- 认证请求头：Authorization: Bearer &lt;Agent Key&gt;
+- 密钥环境变量：KB_AGENT_KEY；这是 Agent Key，不是管理员令牌。
+
+请完成以下工作：
+1. 检查当前客户端、操作系统和已有 MCP 配置，确认其支持 Streamable HTTP 与 Bearer 认证。根据客户端本地帮助或官方配置说明确定配置位置和格式，不猜测配置字段。已有同名条目时检查并更新，保留其他服务配置。
+2. 优先引用客户端现有密钥存储或 KB_AGENT_KEY，只检查密钥是否可用，不输出原文。若缺失，向我索取安全录入方式或请我在客户端密钥输入界面补充，然后继续。不要把 Key 写入提示词、日志或仓库文件。
+3. 使用客户端支持的方式保存 MCP 配置。若是 Codex CLI，先核对 codex mcp add --help；支持对应参数时使用：
+   codex mcp add folder-knowledge --url http://192.168.18.116:8791/mcp --bearer-token-env-var KB_AGENT_KEY
+   确认运行客户端的进程能够读取该变量。其他客户端使用各自的配置格式，不直接套用 Codex 命令。
+4. 配置后尝试重新加载 MCP 并完成协议初始化、工具发现。若必须由我重启客户端或当前会话无法加载新工具，说明已经完成的部分和唯一需要我做的动作，不把“配置已写入”当作“连接成功”。
+5. 通过 MCP 调用 list_libraries，发现真实可访问的知识库，不使用示例 ID。只有一个库时自动选择；存在多个库且我未指定目标时，列出名称与 ID 让我选择。随后调用 knowledge_info、list_directory，并选择一个实际存在的文本文件，用 read_file 读取前 30 行；后续调用显式传入 library_id。若为空库或目录不可用，如实报告，不编造读取结果。
+6. 汇报配置位置、实际连接状态、可用工具和本次读取的知识库 ID、文件路径与行号，不展示 Key。若失败，依据网络、认证、授权、目录和参数定位原因，报告尚未完成的验证。
+
+如果客户端不支持远程 MCP，说明具体限制；可用同一 Key 通过 REST 验证服务可达性，但必须区分 REST 可用与 MCP 已连接。不要为了接入而重新部署或修改服务端配置。</code></pre></div>
+<form class="setup" id="endpoint-form">
+<div class="form-grid"><label for="base-url">服务根地址<input id="base-url" type="url" value="http://192.168.18.116:8791" required autocomplete="off" spellcheck="false" aria-describedby="config-note"></label><label for="library-id">调用示例知识库 ID<input id="library-id" value="team-guide" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" autocomplete="off" spellcheck="false"></label><button type="submit" class="primary">更新指令与示例</button></div>
+<p class="note" id="config-note">已填入当前服务地址。下方调用示例中的 team-guide 仅作示意；配置指令要求 Agent 自动发现真实知识库。本页不收集 Key，不发起连接。</p><p class="form-error" id="config-error" role="alert" hidden></p>
+</form>
+<noscript><p>脚本未启用，仍可复制配置指令。服务地址变化时需手动替换。</p></noscript>
+<p>配置完成以实际 MCP 工具调用结果为准。需要补发 Key 或调整授权时，由管理员处理：<a data-admin href="http://192.168.18.116:8791/admin" target="_blank" rel="noopener noreferrer">http://192.168.18.116:8791/admin</a>。</p>
 </section>
 
 <section class="section" id="usage">
 <h2>调用示例与续读方式</h2>
 <h3>REST：先列库，再搜索和读取</h3>
-<p>以下 Bash 示例沿用上面的 <code>KB_AGENT_KEY</code>。读取路径和行号应从实际搜索结果取得。</p>
+<p>以下示例供 Agent 调用时参考，假定其进程已获得 <code>KB_AGENT_KEY</code>。知识库 ID、读取路径和行号应从实际结果取得。</p>
 <div class="code-block"><div class="code-bar"><span>REST · 列出知识库与搜索</span><button class="copy" type="button" data-copy="rest-search">复制</button></div><pre id="rest-search"><code>export KB_URL='http://192.168.18.116:8791'
 
 curl -fsS -H "Authorization: Bearer $KB_AGENT_KEY" \
@@ -120,7 +123,7 @@ curl -fsS -G -H "Authorization: Bearer $KB_AGENT_KEY" \
 . .venv/bin/activate
 pip install -c constraints.txt .
 
-# 先按连接教程设置 KB_AGENT_KEY
+# 前提：当前进程已配置 KB_AGENT_KEY
 python examples/check_connection.py \
   --url http://192.168.18.116:8791 \
   --library team-guide \
@@ -171,7 +174,7 @@ docker compose ps</code></pre></div>
 <div id="copy-status" class="sr-only" role="status" aria-live="polite"></div>
 <script>
 'use strict';
-const templates = Object.fromEntries(['codex-command','agent-prompt','rest-search','rest-read','mcp-read','sdk-check'].map(id=>[id,document.getElementById(id).textContent]));
+const templates = Object.fromEntries(['agent-prompt','rest-search','rest-read','mcp-read','sdk-check'].map(id=>[id,document.getElementById(id).textContent]));
 document.getElementById('endpoint-form').addEventListener('submit',event=>{
   event.preventDefault();const error=document.getElementById('config-error');error.hidden=true;
   try{
@@ -184,16 +187,17 @@ document.getElementById('endpoint-form').addEventListener('submit',event=>{
     document.querySelectorAll('[data-mcp]').forEach(x=>x.textContent=base+'/mcp');
     document.querySelectorAll('[data-admin]').forEach(x=>{x.textContent=base+'/admin';x.href=base+'/admin';});
     document.getElementById('base-url').value=base;
-    document.getElementById('copy-status').textContent='连接示例已更新。';
+    document.getElementById('copy-status').textContent='配置指令与调用示例已更新。';
   }catch(err){error.textContent=err.message||'地址格式无效';error.hidden=false;}
 });
 document.addEventListener('click',async event=>{
   const button=event.target.closest('[data-copy]');if(!button)return;
   const pre=document.getElementById(button.dataset.copy);
+  const originalLabel=button.textContent;
   try{await navigator.clipboard.writeText(pre.textContent);button.textContent='已复制';}
   catch{const range=document.createRange();range.selectNodeContents(pre);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);button.textContent='已选中，请手动复制';}
   document.getElementById('copy-status').textContent=button.textContent;
-  setTimeout(()=>button.textContent='复制',2200);
+  setTimeout(()=>button.textContent=originalLabel,2200);
 });
 document.getElementById('print').addEventListener('click',()=>window.print());
 </script>
