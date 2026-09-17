@@ -185,12 +185,4 @@ REST 与 MCP 使用相同参数名、相同文件访问实现，返回相同数�
 
 当前部署采用单实例、单 worker；“正在处理”仅统计当前进程。配置文件可跨进程加锁，但没有实现多副本实时状态汇总。
 
-## 从 0.1 升级
-
-1. 将 `.env` 中的 `KB_TOKEN` 替换为新的 `KB_ADMIN_TOKEN`；旧共享令牌不会自动转换为 Agent Key。
-2. 按需将 `KB_SOURCE_DIR` 调整为多个知识库的父目录，使用新版 Compose 重新构建、启动。
-3. 登录 `/admin` 注册知识库并为每个 Agent 发放 Key，然后更新其请求头；若保持原根目录，可显式注册路径 `.`。
-
-未配置 `KB_ADMIN_TOKEN` 和 `KB_STATE_DIR` 时，程序仍支持 0.1 的单根目录 `KB_TOKEN` 模式，但不提供管理台。两种模式不能同时启用。Compose 默认使用新版管理模式。
-
 实现使用 [官方 MCP Python SDK v1 维护线](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x) 的 Streamable HTTP 和 FastAPI。依赖版本固定在 `constraints.txt`；升级后应重新验证协议与目录访问边界。
