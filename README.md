@@ -1,6 +1,6 @@
 # 文件夹知识库只读服务
 
-以**文件夹和文档作为唯一知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。无数据库、向量索引或 LLM；维护者更新文件后，下次访问即可读到变化。
+以**文件夹和文档作为唯一知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite，知识内容不建向量索引、不调用 LLM；维护者更新文件后，下次访问即可读到变化。
 
 服务部署在 Linux Docker 中，只读挂载知识目录。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
@@ -12,7 +12,7 @@ flowchart LR
     R -->|只读挂载| K[知识文件夹：文档、经验、案例]
     W[维护者或离线知识提炼管线] -->|独立发布流程| K
     U[管理员] -->|Web 管理台 /admin| M[目录映射、Key 授权、访问活动]
-    M --> F[独立管理文件夹：JSON 与 JSONL]
+    M --> F[独立 SQLite：配置、授权、统计、审计]
     S -->|每次访问校验当前授权| M
 ```
 
@@ -36,7 +36,7 @@ flowchart LR
 | 概览 | 已启用知识库、有效 Key、累计调用、失败数、正在执行的请求 |
 | 知识库 | 从挂载范围内选择目录，添加或编辑映射、启停、只读浏览文件 |
 | Agent 与密钥 | 生成 Key、指定可访问的知识库、设置到期时间、编辑授权、撤销、查看最近访问 |
-| 访问活动 | 按 Key 和知识库筛选调用记录，查看工具、路径、结果和耗时 |
+| 访问活动 | 按 Key、知识库、时间与结果筛选记录，支持历史分页 |
 
 目录配置及 Key 变更无需重启，后续请求立即使用最新授权。正在执行的请求允许完成。更换某个知识库的目录，会同时影响已授权给它的 Key；停用知识库不删除原文件。
 
@@ -178,17 +178,37 @@ REST 与 MCP 使用相同参数名、相同文件访问实现，返回相同数�
 
 ```text
 /knowledge/                  # 原始知识目录池，只读
-/service-data/               # 与知识目录互不嵌套，独立可写卷
-  catalog.json              # 知识库映射、Key 哈希、授权、有效期
-  activity.json             # 每个 Key 的累计调用与最近访问
-  registry.lock             # 配置与日志写入锁
-  audit/YYYY-MM-DD.jsonl     # 管理操作与知识工具访问记录
+/service-data/               # KB_STATE_DIR，独立可写数据卷
+  management.sqlite3        # 管理数据库
+  management.sqlite3-wal    # SQLite 运行时可能产生
+  management.sqlite3-shm
 ```
 
-配置通过文件锁和原子替换保存。停服后备份完整 `/service-data` 及独立知识目录，可保留 Key 校验信息；明文 Key 不可从备份恢复，遗失时应撤销重建。管理数据不会通过知识 API 暴露。
+SQLite 使用 Python 标准库，无需单独部署数据库。启用 WAL、外键和 5 秒写锁等待；配置变更与审计、访问统计与日志分别在同一事务中提交。
 
-统计只计入已认证并进入执行的知识操作；认证失败、协议初始化和参数校验失败不计入工具调用统计。日志记录 Key ID、登记名称、知识库、工具、路径、结果与耗时，不保存搜索词、完整正文或令牌。页面最近记录读取最近 7 个日志文件，每文件最多尾部 256 KiB；完整日志按日期保留，需由运维定期归档。
+| 表 | 内容 |
+|---|---|
+| `libraries` | 知识库名称、目录映射、启用状态 |
+| `agent_keys` | Agent 名称、Key 哈希、有效期和撤销时间 |
+| `key_libraries` | Key 与知识库的授权关系 |
+| `activity` | 每个 Key 的累计调用、失败、耗时与最近访问 |
+| `audit_events` | 管理操作、授权变更和工具访问记录 |
+| `metadata` | 统计起始时间及数据导入标记 |
 
-当前部署采用单实例、单 worker；“正在处理”仅统计当前进程。配置文件可跨进程加锁，但没有实现多副本实时状态汇总。
+统计只计入已认证并进入执行的知识操作；认证失败、协议初始化和参数校验失败不计入工具调用统计。日志不保存搜索词、完整正文或令牌。历史记录不再受最近 7 个日志文件限制，默认不自动清理。管理 API `/admin/api/activity` 支持 `key_id`、`library_id`、`status`（`ok/error/partial`）、带时区的 `start_time/end_time` 和 `limit`（最多 200）。将返回的 `next_before_id` 传为 `before_id` 可继续查询更早记录。
+
+已有 JSON/JSONL 管理数据时，先停止旧服务并备份数据卷，再启动新服务：首次启动自动导入配置、Key、累计统计及全部历史日志。导入在一个事务中完成；失败会回滚并阻止启动，原文件保留不变。成功后只读写 SQLite，不再同步旧文件；重启不会重复导入。原 Key 可继续使用。
+
+在线备份使用 SQLite Backup API，会包含已提交的 WAL 数据：
+
+```bash
+docker compose exec knowledge python -m folder_kb.backup --output /service-data/backups/management-backup.sqlite3
+mkdir -p backups
+docker compose cp knowledge:/service-data/backups/management-backup.sqlite3 ./backups/management-backup.sqlite3
+```
+
+备份文件名应每次不同，命令拒绝覆盖已有文件。恢复时停服，将备份放入空的管理数据目录并命名为 `management.sqlite3`，确保容器用户可读写，再启动。不要在运行中只复制主数据库文件，也不要将旧 WAL/SHM 与恢复文件混用。知识文档另行备份；明文 Key 不可从数据库恢复，遗失时应撤销重建。
+
+数据卷应位于服务器本地磁盘，不放在 NFS/SMB 共享文件系统上。当前仍采用单实例、单 worker；正在处理的请求保存在内存，目录可用性实时检查，未实现多副本状态汇总。
 
 实现使用 [官方 MCP Python SDK v1 维护线](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x) 的 Streamable HTTP 和 FastAPI。依赖版本固定在 `constraints.txt`；升级后应重新验证协议与目录访问边界。

@@ -69,7 +69,8 @@ def test_admin_boundary_and_one_time_secret(managed):
     assert client.get('/admin/api/overview', headers=dict(authorization(ADMIN), Origin='http://testserver')).status_code == 200
     data = client.get('/admin/api/overview', headers=authorization(ADMIN)).json()
     assert key['token'] not in json.dumps(data) and 'digest' not in json.dumps(data)
-    disk = '\n'.join(p.read_text(encoding='utf-8') for p in Path(settings.state_dir).rglob('*.json*'))
+    with app.state.registry.store.transaction() as db:
+        disk = '\n'.join(db.iterdump())
     assert key['token'] not in disk and ADMIN not in disk
     assert client.get('/admin/api/overview', headers=authorization(ADMIN)).headers['cache-control'] == 'no-store'
 
@@ -109,7 +110,8 @@ def test_edit_key_grants_without_rotating_secret(managed):
     url = '/admin/api/keys/' + key['key']['id'] + '/grants'
     agent = authorization(key['token'])
     admin = authorization(ADMIN)
-    before = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))['keys'][key['key']['id']]
+    with app.state.registry.store.transaction() as db:
+        before = app.state.registry.store.key(db, key['key']['id'])
     assert client.get('/api/v1/read', headers=agent, params={'path':'README.md'}).status_code == 200
     assert client.put(url, json={'library_ids':['beta']}).status_code == 401
     assert client.put(url, headers=agent, json={'library_ids':['beta']}).status_code == 401
@@ -121,7 +123,8 @@ def test_edit_key_grants_without_rotating_secret(managed):
     assert client.get('/api/v1/read', headers=agent,
                       params={'library_id':'alpha','path':'README.md'}).status_code == 403
     assert client.get('/api/v1/read', headers=agent, params={'path':'README.md'}).json()['library_id'] == 'beta'
-    after = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))['keys'][key['key']['id']]
+    with app.state.registry.store.transaction() as db:
+        after = app.state.registry.store.key(db, key['key']['id'])
     assert {k:v for k,v in before.items() if k!='library_ids'} == {k:v for k,v in after.items() if k!='library_ids'}
     assert Registry(settings.root, settings.state_dir).authenticate(key['token'])['library_ids'] == ['beta']
     edits = [e for e in app.state.registry.recent_events()['events'] if e.get('action')=='key_grants_update']
@@ -143,10 +146,8 @@ def test_edit_grants_preserves_expiry_and_unavailable_grants(managed):
     add_library(client, 'alpha'); add_library(client, 'beta')
     key = add_key(client, ['alpha'])
     registry = app.state.registry
-    with registry.lock():
-        data = registry._catalog()
-        data['keys'][key['key']['id']]['expires_at'] = (datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
-        registry._write('catalog.json',data)
+    with registry.store.transaction(write=True) as db:
+        db.execute('UPDATE agent_keys SET expires_at=? WHERE id=?', ((datetime.now(timezone.utc)-timedelta(days=1)).isoformat(), key['key']['id']))
     (Path(settings.root)/'beta/README.md').unlink()
     (Path(settings.root)/'beta').rmdir()
     response = client.put('/admin/api/keys/'+key['key']['id']+'/grants', headers=authorization(ADMIN),
@@ -184,8 +185,8 @@ def test_missing_library_recovery_and_independent_access(managed):
     event = app.state.registry.recent_events(key_id=key['key']['id'])['events'][0]
     assert event['library_id'] == 'alpha' and event['reason'] == 'missing'
     # No health data is persisted, and the existing grant survives recovery.
-    catalog = json.loads((Path(settings.state_dir) / 'catalog.json').read_text(encoding='utf-8'))
-    assert 'availability' not in catalog['libraries']['alpha']
+    with app.state.registry.store.transaction() as db:
+        assert 'availability' not in dict(db.execute('SELECT * FROM libraries WHERE id=?', ('alpha',)).fetchone())
     directory.mkdir()
     (directory / 'README.md').write_text('restored', encoding='utf-8')
     assert client.get('/api/v1/read', headers=headers,
@@ -268,9 +269,8 @@ def test_expiry_and_persistence(managed):
     key = add_key(client, ['alpha'])
     restarted = Registry(settings.root, settings.state_dir)
     assert restarted.authenticate(key['token'])['id'] == key['key']['id']
-    with restarted.lock():
-        data = restarted._catalog(); data['keys'][key['key']['id']]['expires_at'] = past
-        restarted._write('catalog.json', data)
+    with restarted.store.transaction(write=True) as db:
+        db.execute('UPDATE agent_keys SET expires_at=? WHERE id=?', (past, key['key']['id']))
     assert client.get('/api/v1/list', headers=authorization(key['token'])).status_code == 401
 
 
@@ -291,7 +291,7 @@ def test_admin_path_boundaries_and_read_only_preview(managed):
         Settings(settings.root, admin_token=ADMIN, state_dir=settings.state_dir, token=ADMIN)
 
 
-def test_parallel_keys_and_file_state_not_lost(managed):
+def test_parallel_keys_and_sqlite_state_not_lost(managed):
     app, client, settings = managed
     add_library(client, 'alpha')
     def create(i):
@@ -326,7 +326,7 @@ def test_active_requests_and_log_redaction(managed, monkeypatch):
         assert started.wait(3)
         assert app.state.registry.snapshot()['active_requests'][0]['key_id'] == key['key']['id']
         release.set(); future.result()
-    logs = '\n'.join(p.read_text(encoding='utf-8') for p in Path(settings.state_dir).rglob('*.jsonl'))
+    logs = json.dumps(app.state.registry.recent_events(), ensure_ascii=False)
     assert 'SECRET_QUERY_VALUE' not in logs and 'private knowledge' not in logs and key['token'] not in logs
     assert app.state.registry.recent_events(key_id=key['key']['id'])['events'][0]['transport'] == 'mcp'
 
@@ -336,7 +336,7 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
     add_library(client, 'alpha'); add_library(client, 'beta')
     alpha = add_key(client, ['alpha'], 'alpha-agent'); beta = add_key(client, ['beta'], 'beta-agent')
     sock = socket.socket(); sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
-    # A distinct app and lifespan, sharing the file-backed registry as a restarted deployment would.
+    # A distinct app and lifespan, sharing the SQLite registry as a restarted deployment would.
     server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level='error', access_log=False))
     thread = threading.Thread(target=server.run, kwargs={'sockets':[sock]}, daemon=True); thread.start()
     try:

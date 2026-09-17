@@ -63,6 +63,13 @@ def main():
             docker('restart', name)
             wait_ready()
             assert request('/api/v1/read?path=README.md', credential=key['token'])['library_id']=='manual'
+            docker('exec', name, 'python', '-m', 'folder_kb.backup',
+                   '--output', '/service-data/backups/smoke.sqlite3')
+            docker('exec', name, 'python', '-c',
+                   "import sqlite3\nfrom pathlib import Path\nassert not Path('/service-data/catalog.json').exists()\n"
+                   "with sqlite3.connect('/service-data/backups/smoke.sqlite3') as db:\n"
+                   " assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'\n"
+                   " assert db.execute('SELECT count(*) FROM agent_keys').fetchone()[0] == 1")
             knowledge = root/'manual'
             mode = knowledge.stat().st_mode
             def unavailable(reason):

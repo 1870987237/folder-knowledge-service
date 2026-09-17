@@ -1,7 +1,6 @@
-"""File-backed administration. Knowledge content is never written here."""
+"""SQLite-backed administration. Knowledge content is never written here."""
 from __future__ import annotations
 
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 import hmac
@@ -16,6 +15,7 @@ import time
 import uuid
 
 from .core import KnowledgeError, KnowledgeFolder
+from .storage import SqliteStore
 
 
 def now() -> str:
@@ -43,65 +43,9 @@ class Registry:
         if self.directory.is_relative_to(self.pool.root) or self.pool.root.is_relative_to(self.directory):
             raise ValueError('KB_STATE_DIR and KB_ROOT must be separate, non-nested directories')
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.mutex = threading.RLock()
+        self.store = SqliteStore(self.directory)
         self.active_mutex = threading.Lock()
         self.active: dict[str, dict] = {}
-        with self.lock():
-            if not (self.directory / 'catalog.json').exists():
-                self._write('catalog.json', {'version': 1, 'libraries': {}, 'keys': {}})
-
-    @contextmanager
-    def lock(self):
-        with self.mutex:
-            with (self.directory / 'registry.lock').open('a+b') as stream:
-                stream.seek(0, 2)
-                if stream.tell() == 0:
-                    stream.write(b'0')
-                    stream.flush()
-                stream.seek(0)
-                if os.name == 'nt':
-                    import msvcrt
-                    msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
-                else:
-                    import fcntl
-                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    stream.seek(0)
-                    if os.name == 'nt':
-                        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-                    else:
-                        fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
-
-    def _load(self, name: str, default=None):
-        try:
-            return json.loads((self.directory / name).read_text(encoding='utf-8'))
-        except FileNotFoundError:
-            if default is not None:
-                return default
-            raise KnowledgeError('state_unavailable', 'Service configuration is unavailable', 503) from None
-        except (OSError, ValueError):
-            raise KnowledgeError('state_unavailable', 'Service configuration cannot be read', 503) from None
-
-    def _write(self, name: str, value):
-        target = self.directory / name
-        temporary = self.directory / ('.' + name + '-' + uuid.uuid4().hex + '.tmp')
-        try:
-            fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-                json.dump(value, stream, ensure_ascii=False, indent=2)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, target)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    def _catalog(self):
-        value = self._load('catalog.json')
-        if value.get('version') != 1 or not isinstance(value.get('libraries'), dict) or not isinstance(value.get('keys'), dict):
-            raise KnowledgeError('state_unavailable', 'Unsupported service configuration', 503)
-        return value
 
     def folder_for_path(self, path: str, name: str = 'knowledge') -> KnowledgeFolder:
         candidate = self.pool._path(path)
@@ -165,14 +109,12 @@ class Registry:
         name = name.strip()
         if not 1 <= len(name) <= 80:
             raise KnowledgeError('invalid_name', 'Name must contain 1..80 characters')
-        with self.lock():
-            data = self._catalog()
-            exists = library_id in data['libraries']
-            if create and exists:
+        with self.store.transaction(write=True) as db:
+            previous = self.store.library(db.execute('SELECT * FROM libraries WHERE id=?', (library_id,)).fetchone())
+            if create and previous:
                 raise KnowledgeError('duplicate_library', 'Library ID already exists', 409)
-            if not create and not exists:
+            if not create and not previous:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
-            previous = data['libraries'].get(library_id)
             # Metadata and enable/disable remain editable during an outage.
             if previous and path == previous['path']:
                 relative = previous['path']
@@ -180,16 +122,22 @@ class Registry:
                 folder = self.folder_for_path(path, name)
                 relative = folder.root.relative_to(self.pool.root).as_posix()
             row = {'id': library_id, 'name': name, 'path': relative, 'enabled': enabled,
-                   'created_at': data['libraries'].get(library_id, {}).get('created_at', now()), 'updated_at': now()}
-            data['libraries'][library_id] = row
-            self._write('catalog.json', data)
-            self._event({'kind': 'admin', 'action': 'library_create' if create else 'library_update',
-                         'library_id': library_id, 'status': 'ok'})
+                   'created_at': previous['created_at'] if previous else now(), 'updated_at': now()}
+            db.execute("""INSERT INTO libraries VALUES (:id,:name,:path,:enabled,:created_at,:updated_at)
+                          ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,
+                          enabled=excluded.enabled,updated_at=excluded.updated_at""", row)
+            self.store.event(db, {'kind': 'admin', 'action': 'library_create' if create else 'library_update',
+                                 'library_id': library_id, 'status': 'ok'})
             return row
 
     def libraries(self):
-        with self.lock():
-            return list(self._catalog()['libraries'].values())
+        with self.store.transaction() as db:
+            return [self.store.library(row) for row in db.execute('SELECT * FROM libraries ORDER BY rowid')]
+
+    @staticmethod
+    def validate_grants(db, library_ids):
+        if any(db.execute('SELECT 1 FROM libraries WHERE id=?', (lid,)).fetchone() is None for lid in library_ids):
+            raise KnowledgeError('unknown_library', 'One or more libraries do not exist')
 
     @staticmethod
     def public_key(key):
@@ -209,55 +157,51 @@ class Registry:
                 expires_at = expiry.astimezone(timezone.utc).isoformat()
             except ValueError:
                 raise KnowledgeError('invalid_expiry', 'Expiry must be a future timestamp with a timezone') from None
-        with self.lock():
-            data = self._catalog()
-            if any(i not in data['libraries'] for i in library_ids):
-                raise KnowledgeError('unknown_library', 'One or more libraries do not exist')
+        with self.store.transaction(write=True) as db:
+            self.validate_grants(db, library_ids)
             kid = uuid.uuid4().hex[:16]
             token = 'fkb_' + kid + '_' + secrets.token_urlsafe(32)
             key = {'id': kid, 'agent_name': agent_name, 'library_ids': sorted(set(library_ids)),
                    'digest': hashlib.sha256(token.encode()).hexdigest(), 'created_at': now(),
                    'expires_at': expires_at, 'revoked_at': None}
-            data['keys'][kid] = key
-            self._write('catalog.json', data)
-            self._event({'kind': 'admin', 'action': 'key_create', 'key_id': kid, 'status': 'ok'})
+            db.execute('INSERT INTO agent_keys VALUES (:id,:agent_name,:digest,:created_at,:expires_at,:revoked_at)', key)
+            db.executemany('INSERT INTO key_libraries VALUES (?,?)', [(kid, lid) for lid in key['library_ids']])
+            self.store.event(db, {'kind': 'admin', 'action': 'key_create', 'key_id': kid, 'status': 'ok'})
             return {'key': self.public_key(key), 'token': token}
 
     def update_key_grants(self, kid: str, library_ids: list[str]):
         if len(library_ids) > 64:
             raise KnowledgeError('invalid_grants', 'Choose at most 64 libraries')
-        with self.lock():
-            data = self._catalog()
-            key = data['keys'].get(kid)
+        with self.store.transaction(write=True) as db:
+            key = self.store.key(db, kid)
             if key is None:
                 raise KnowledgeError('unknown_key', 'Key does not exist', 404)
             if key['revoked_at']:
                 raise KnowledgeError('key_revoked', '已撤销的 Key 不能编辑授权，请创建新的 Key。', 409)
-            if any(i not in data['libraries'] for i in library_ids):
-                raise KnowledgeError('unknown_library', 'One or more libraries do not exist')
+            self.validate_grants(db, library_ids)
             previous = key['library_ids']
             key['library_ids'] = sorted(set(library_ids))
-            self._write('catalog.json', data)
-            self._event({'kind': 'admin', 'action': 'key_grants_update', 'key_id': kid,
-                         'previous_library_ids': previous, 'library_ids': key['library_ids'],
-                         'status': 'ok'})
+            db.execute('DELETE FROM key_libraries WHERE key_id=?', (kid,))
+            db.executemany('INSERT INTO key_libraries VALUES (?,?)', [(kid, lid) for lid in key['library_ids']])
+            self.store.event(db, {'kind': 'admin', 'action': 'key_grants_update', 'key_id': kid,
+                                 'previous_library_ids': previous, 'library_ids': key['library_ids'], 'status': 'ok'})
             return self.public_key(key)
 
     def revoke_key(self, kid: str):
-        with self.lock():
-            data = self._catalog()
-            if kid not in data['keys']:
+        with self.store.transaction(write=True) as db:
+            key = self.store.key(db, kid)
+            if key is None:
                 raise KnowledgeError('unknown_key', 'Key does not exist', 404)
-            data['keys'][kid]['revoked_at'] = now()
-            self._write('catalog.json', data)
-            self._event({'kind': 'admin', 'action': 'key_revoke', 'key_id': kid, 'status': 'ok'})
-            return self.public_key(data['keys'][kid])
+            key['revoked_at'] = now()
+            db.execute('UPDATE agent_keys SET revoked_at=? WHERE id=?', (key['revoked_at'], kid))
+            self.store.event(db, {'kind': 'admin', 'action': 'key_revoke', 'key_id': kid, 'status': 'ok'})
+            return self.public_key(key)
 
-    def _authenticate(self, token: str, data):
+    def _authenticate(self, token: str, db):
         if len(token) > 256:
             raise KnowledgeError('unauthorized', 'Invalid, revoked or expired key', 401)
         parts = token.split('_', 2)
-        key = data['keys'].get(parts[1]) if len(parts) == 3 and parts[0] == 'fkb' else None
+        key = self.store.key(db, parts[1]) if len(parts) == 3 and parts[0] == 'fkb' else None
         if (not key or key['revoked_at'] or
                 not hmac.compare_digest(key['digest'], hashlib.sha256(token.encode()).hexdigest()) or
                 (key['expires_at'] and datetime.fromisoformat(key['expires_at']).timestamp() <= time.time())):
@@ -265,15 +209,15 @@ class Registry:
         return self.public_key(key)
 
     def authenticate(self, token: str):
-        with self.lock():
-            return self._authenticate(token, self._catalog())
+        with self.store.transaction() as db:
+            return self._authenticate(token, db)
 
     def resolve(self, token: str, library_id: str | None):
-        with self.lock():
-            data = self._catalog()
-            key = self._authenticate(token, data)
-            allowed = [data['libraries'][i] for i in key['library_ids']
-                       if i in data['libraries'] and data['libraries'][i]['enabled']]
+        with self.store.transaction() as db:
+            key = self._authenticate(token, db)
+            allowed = [self.store.library(row) for row in db.execute(
+                'SELECT l.* FROM libraries l JOIN key_libraries g ON l.id=g.library_id '
+                'WHERE g.key_id=? AND l.enabled=1 ORDER BY l.id', (key['id'],))]
             if library_id is None:
                 if len(allowed) != 1:
                     raise KnowledgeError('library_required', 'Specify library_id; use list_libraries to see available libraries')
@@ -284,22 +228,12 @@ class Registry:
             return key, selected
 
     def visible_libraries(self, token: str):
-        with self.lock():
-            data = self._catalog()
-            key = self._authenticate(token, data)
-            rows = [row for row in data['libraries'].values()
-                    if row['enabled'] and row['id'] in key['library_ids']]
-        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)}
-                for row in rows]
-
-    def _event(self, event):
-        # Caller owns lock. No tokens, query text, headers or document content are recorded.
-        audit = self.directory / 'audit'
-        audit.mkdir(exist_ok=True, mode=0o700)
-        record = dict(event, timestamp=now())
-        target = audit / (record['timestamp'][:10] + '.jsonl')
-        with target.open('a', encoding='utf-8') as stream:
-            stream.write(json.dumps(record, ensure_ascii=False) + '\n')
+        with self.store.transaction() as db:
+            key = self._authenticate(token, db)
+            rows = [self.store.library(row) for row in db.execute(
+                'SELECT l.* FROM libraries l JOIN key_libraries g ON l.id=g.library_id '
+                'WHERE g.key_id=? AND l.enabled=1 ORDER BY l.rowid', (key['id'],))]
+        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)} for row in rows]
 
     def run(self, token: str, library_id: str | None, tool: str, kwargs: dict, transport: str):
         identity = self.authenticate(token)
@@ -333,57 +267,69 @@ class Registry:
         finally:
             event['duration_ms'] = round((time.monotonic() - start) * 1000, 1)
             try:
-                with self.lock():
-                    metrics = self._load('activity.json', {'since': now(), 'keys': {}})
-                    current = metrics['keys'].setdefault(identity['id'], {'calls': 0, 'errors': 0, 'total_ms': 0})
-                    current['calls'] += 1
-                    current['errors'] += event['status'] == 'error'
-                    current['total_ms'] = round(current['total_ms'] + event['duration_ms'], 1)
-                    current['last_seen'] = now()
-                    self._write('activity.json', metrics)
-                    self._event(event)
+                with self.store.transaction(write=True) as db:
+                    db.execute("""INSERT INTO activity(key_id,calls,errors,total_ms,last_seen) VALUES (?,1,?,?,?)
+                                  ON CONFLICT(key_id) DO UPDATE SET calls=calls+1,errors=errors+excluded.errors,
+                                  total_ms=round(total_ms+excluded.total_ms,1),last_seen=excluded.last_seen""",
+                               (identity['id'], int(event['status'] == 'error'), event['duration_ms'], now()))
+                    self.store.event(db, event)
             finally:
                 with self.active_mutex:
                     self.active.pop(request_id, None)
 
     def snapshot(self):
-        with self.lock():
-            data = self._catalog()
-            activity = self._load('activity.json', {'since': now(), 'keys': {}})
-            keys = [dict(self.public_key(k), activity=activity['keys'].get(k['id'], {})) for k in data['keys'].values()]
-            libraries = list(data['libraries'].values())
+        with self.store.transaction() as db:
+            libraries = [self.store.library(row) for row in db.execute('SELECT * FROM libraries ORDER BY rowid')]
+            keys = []
+            grants = {}
+            for row in db.execute('SELECT * FROM key_libraries ORDER BY library_id'):
+                grants.setdefault(row['key_id'], []).append(row['library_id'])
+            activity = {row['key_id']: {k: v for k, v in dict(row).items() if k != 'key_id'}
+                        for row in db.execute('SELECT * FROM activity')}
+            for row in db.execute('SELECT * FROM agent_keys ORDER BY rowid'):
+                keys.append(dict(self.public_key(dict(row)), library_ids=grants.get(row['id'], []),
+                                 activity=activity.get(row['id'], {})))
+            metrics = dict(db.execute('SELECT coalesce(sum(calls),0) AS calls,coalesce(sum(errors),0) AS errors FROM activity').fetchone())
+            metrics['since'] = db.execute("SELECT value FROM metadata WHERE name='since'").fetchone()[0]
         libraries = [dict(row, availability=self.availability(row)) for row in libraries]
         with self.active_mutex:
             active = list(self.active.values())
-        values = list(activity['keys'].values())
         return {'libraries': libraries, 'keys': keys, 'active_requests': active,
-                'metrics': {'calls': sum(x['calls'] for x in values), 'errors': sum(x['errors'] for x in values),
-                            'since': activity['since']}, 'server_time': now()}
+                'metrics': metrics, 'server_time': now()}
 
-    def recent_events(self, limit: int = 100, key_id: str | None = None, library_id: str | None = None):
+    def recent_events(self, limit: int = 100, key_id: str | None = None, library_id: str | None = None,
+                      before_id: int | None = None, status: str | None = None,
+                      start_time: str | None = None, end_time: str | None = None):
+        from .storage import timestamp
         if not 1 <= limit <= 200:
             raise KnowledgeError('invalid_limit', 'limit must be 1..200')
-        rows = []
-        with self.lock():
-            # A bounded recent view, not an unbounded log search across the entire history.
-            for path in sorted((self.directory / 'audit').glob('*.jsonl'), reverse=True)[:7]:
-                with path.open('rb') as stream:
-                    stream.seek(0, 2)
-                    size = stream.tell()
-                    stream.seek(max(0, size - 262144))
-                    if size > 262144:
-                        stream.readline()
-                    lines = stream.read().decode('utf-8').splitlines()
-                for line in reversed(lines):
-                    try:
-                        row = json.loads(line)
-                    except ValueError:
-                        continue
-                    if key_id and row.get('key_id') != key_id:
-                        continue
-                    if library_id and row.get('library_id') != library_id:
-                        continue
-                    rows.append(row)
-                    if len(rows) >= limit:
-                        return {'events': rows, 'window': 'Last 7 log files, last 256 KiB per file'}
-        return {'events': rows, 'window': 'Last 7 log files, last 256 KiB per file'}
+        if before_id is not None and before_id < 1:
+            raise KnowledgeError('invalid_cursor', 'before_id must be positive')
+        if status is not None and status not in ('ok', 'error', 'partial'):
+            raise KnowledgeError('invalid_status', 'status must be ok, error or partial')
+        try:
+            start_time = timestamp(start_time) if start_time else None
+            end_time = timestamp(end_time) if end_time else None
+            if start_time and end_time and start_time > end_time:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise KnowledgeError('invalid_time', 'Use timezone-aware ISO timestamps with start_time <= end_time') from None
+        clauses, values = [], []
+        for column, value in (('key_id', key_id), ('library_id', library_id), ('status', status)):
+            if value:
+                clauses.append(column+'=?'); values.append(value)
+        for operator, value in (('>=', start_time), ('<=', end_time)):
+            if value:
+                clauses.append('timestamp'+operator+'?'); values.append(value)
+        with self.store.transaction() as db:
+            if before_id is not None:
+                cursor = db.execute('SELECT timestamp,id FROM audit_events WHERE id=?', (before_id,)).fetchone()
+                if cursor is None:
+                    raise KnowledgeError('invalid_cursor', 'Unknown event cursor')
+                clauses.append('(timestamp,id)<(?,?)'); values.extend(cursor)
+            where = ' WHERE '+' AND '.join(clauses) if clauses else ''
+            rows = db.execute('SELECT id,event_json FROM audit_events'+where+
+                              ' ORDER BY timestamp DESC,id DESC LIMIT ?', (*values, limit+1)).fetchall()
+        return {'events': [dict(json.loads(row['event_json']), event_id=row['id']) for row in rows[:limit]],
+                'next_before_id': rows[limit-1]['id'] if len(rows)>limit else None,
+                'window': 'SQLite audit history'}

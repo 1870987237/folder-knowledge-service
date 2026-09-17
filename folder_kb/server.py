@@ -302,8 +302,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
         return registry.update_key_grants(key_id, value.library_ids)
 
     @app.get('/admin/api/activity')
-    def activity(limit: int = 100, key_id: str | None = None, library_id: str | None = None):
-        return registry.recent_events(limit, key_id, library_id)
+    def activity(limit: int = 100, key_id: str | None = None, library_id: str | None = None,
+                 before_id: int | None = None, status: str | None = None,
+                 start_time: str | None = None, end_time: str | None = None):
+        return registry.recent_events(limit, key_id, library_id, before_id, status, start_time, end_time)
 
     @app.get('/admin/api/browse/{library_id}')
     def browse(library_id: str, path: str = '.', read: bool = False, offset: int = 0, start_line: int = 1):
