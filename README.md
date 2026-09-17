@@ -4,6 +4,8 @@
 
 服务部署在 Linux Docker 中，只读挂载知识目录。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
+[服务介绍与连接教程（单文件 HTML）](docs/service-guide.html)：下载后直接用浏览器打开，包含架构、Key 发放、Codex CLI / 通用 MCP 客户端接入、REST 示例和故障排查。无需额外启动服务，填写实际地址即可更新页面中的连接示例。
+
 ```mermaid
 flowchart LR
     A[外部 Agent] -->|MCP /mcp| S[只读文件服务]

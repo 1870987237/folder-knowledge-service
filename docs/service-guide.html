@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="文件夹知识服务介绍，以及 MCP、Codex CLI 和 REST 连接教程。">
+<title>文件夹知识服务 · 介绍与连接教程</title>
+<style>
+:root{--ink:#193a32;--text:#31483f;--muted:#687970;--green:#167a67;--line:#dce5df;--pale:#f4f7f5;--white:#fff}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:85px}body{margin:0;color:var(--text);background:var(--white);font-family:"Times New Roman","Microsoft YaHei",sans-serif;font-size:18px;line-height:1.8}a{color:var(--green);text-underline-offset:4px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #88c7b4;outline-offset:3px}header{border-bottom:1px solid var(--line);position:sticky;top:0;background:#fffffffa;z-index:3}.nav{max-width:1184px;padding:13px 32px;margin:auto;display:flex;align-items:center;gap:28px}.brand{font-size:20px;font-weight:700;color:var(--ink);text-decoration:none;white-space:nowrap}.nav nav{display:flex;gap:24px;margin-left:auto;overflow-x:auto;white-space:nowrap}.nav nav a{font-size:16px;text-decoration:none}.nav button{border:0;background:none;color:var(--muted);font-size:15px;white-space:nowrap}main{max-width:1120px;margin:auto;padding:0 24px}h1,h2,h3{color:var(--ink);line-height:1.35}h1{font-size:52px;letter-spacing:-1px;margin:0 0 24px}h2{font-size:32px;margin:0 0 26px}h3{font-size:23px;margin:28px 0 12px}p{margin:0 0 18px}.hero{padding:72px 0 58px;border-bottom:1px solid var(--line)}.lead{font-size:24px;max-width:880px;margin-bottom:22px}.hero-actions{display:flex;align-items:center;gap:28px;margin-top:28px}.primary{display:inline-block;color:#fff;background:var(--green);padding:9px 20px;border:0;border-radius:5px;text-decoration:none;font-size:17px}.muted,.note{color:var(--muted)}.note{font-size:16px}.section{padding:52px 0;border-bottom:1px solid var(--line)}.two{display:grid;grid-template-columns:1fr 1fr;gap:46px}.two h3:first-child{margin-top:0}ul,ol{padding-left:24px;margin-top:10px}li{padding-left:3px;margin:8px 0}strong{color:var(--ink)}.architecture{display:grid;grid-template-columns:1fr 40px 1.5fr 40px 1.2fr;align-items:center;margin:32px 0 22px;gap:10px}.arch-node{border:1px solid var(--line);padding:22px 18px;border-radius:5px}.arch-node strong{display:block;font-size:20px;margin-bottom:6px}.arch-node p{font-size:17px;line-height:1.7;margin:0}.arch-service{border-color:var(--green);background:var(--pale)}.arch-stores{display:grid;gap:15px}.arrow{text-align:center;font-size:26px;color:var(--green)}figure{margin:0}figcaption{font-size:16px;color:var(--muted)}.table-wrap{overflow-x:auto;margin:23px 0}table{border-collapse:collapse;width:100%;font-size:17px}th,td{padding:15px 17px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--pale);font-weight:700;color:var(--ink)}td:first-child{font-weight:700;color:var(--ink)}code,pre{font-family:Consolas,"Liberation Mono","Microsoft YaHei",monospace}p code,li code,td code{font-size:.87em;background:var(--pale);padding:2px 4px;overflow-wrap:anywhere}td:first-child code{white-space:nowrap}pre{margin:0;overflow:auto;line-height:1.75;font-size:15px;padding:22px 22px 26px;color:#203e34;tab-size:2}.code-block{border:1px solid var(--line);border-radius:5px;background:#f8faf9;margin:18px 0 24px;overflow:hidden}.code-bar{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--line);font-size:15px;color:var(--muted)}.copy{padding:3px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--green);font-size:14px}.setup{padding:24px;background:var(--pale);margin:26px 0;border-radius:5px}.form-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:18px;align-items:end}.form-grid label{display:block;font-size:16px;font-weight:700;color:var(--ink)}.form-grid input{display:block;width:100%;margin-top:6px;padding:9px 11px;border:1px solid #b8c9c0;border-radius:4px;background:#fff;font-size:17px;color:var(--ink)}.form-grid button{white-space:nowrap;min-height:48px}.form-error{color:#a73d36;margin:12px 0 0;font-size:16px}.setup p:last-child{margin:12px 0 0}.steps{counter-reset:step}.step{padding:0 0 26px 54px;position:relative}.step h3{margin-top:20px}.step:before{counter-increment:step;content:counter(step);position:absolute;left:0;top:0;color:var(--green);font-size:28px;font-weight:700}.endpoint{display:grid;grid-template-columns:170px minmax(0,1fr);gap:0 16px;margin:20px 0}.endpoint dt,.endpoint dd{padding:9px 0;margin:0;border-bottom:1px solid var(--line)}.endpoint dt{font-weight:700}.endpoint dd{overflow-wrap:anywhere}.important{border-left:3px solid var(--green);padding-left:18px;margin:24px 0}.details{border-top:1px solid var(--line);padding-top:4px}.details summary{font-size:20px;font-weight:700;color:var(--ink);cursor:pointer;padding:14px 0}footer{max-width:1120px;margin:auto;padding:30px 24px 50px;font-size:16px;color:var(--muted)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}noscript p{padding:12px;background:var(--pale)}
+@media(max-width:850px){.nav{padding:12px 20px;gap:16px;flex-wrap:wrap}.nav nav{order:3;width:100%;margin:0;gap:23px}.nav button{margin-left:auto}h1{font-size:39px}.hero{padding-top:42px}.two{grid-template-columns:1fr;gap:16px}.form-grid{grid-template-columns:1fr 1fr}.form-grid button{grid-column:1/-1;justify-self:start}.architecture{grid-template-columns:1fr}.arrow{transform:rotate(90deg);height:35px}.arch-stores{grid-template-columns:1fr 1fr}.section{padding:38px 0}html{scroll-padding-top:125px}}
+@media(max-width:520px){body{font-size:17px}main{padding:0 18px}h1{font-size:34px}h2{font-size:27px}.lead{font-size:21px}.hero-actions{align-items:flex-start;flex-direction:column;gap:15px}.form-grid{grid-template-columns:1fr}.arch-stores{grid-template-columns:1fr}.step{padding-left:35px}.endpoint{grid-template-columns:1fr}.endpoint dt{padding-bottom:0;border-bottom:0}.endpoint dd{padding-top:2px}pre{font-size:14px;padding:15px}th,td{padding:12px;min-width:130px}.setup{padding:17px}}
+@media print{header,.copy,.hero-actions,.setup button{display:none}html{scroll-padding:0}body{font-size:11pt;color:#172d25}main,footer{max-width:none;padding:0}.hero{padding:12px 0 20px}h1{font-size:30pt}h2{font-size:21pt}h3{font-size:15pt}.lead{font-size:16pt}.section{padding:24px 0;break-inside:auto}h2,h3{break-after:avoid}table{font-size:10pt}tr,.code-block,.architecture{break-inside:avoid}pre{font-size:9pt;white-space:pre-wrap;overflow-wrap:anywhere}.note,figcaption,footer{font-size:10pt}.setup{background:none;border:1px solid #ddd}.form-grid{grid-template-columns:2fr 1fr}.form-grid input{font-size:11pt}.endpoint{font-size:11pt}a{color:inherit;text-decoration:none}}
+</style>
+</head>
+<body>
+<header><div class="nav"><a class="brand" href="#top">文件夹知识服务</a><nav aria-label="页面导航"><a href="#architecture">架构</a><a href="#tools">工具</a><a href="#connect">连接教程</a><a href="#usage">调用示例</a><a href="#deploy">部署</a><a href="#troubleshoot">排错</a></nav><button id="print" type="button">打印 / 存为 PDF</button></div></header>
+<main id="top">
+<section class="hero">
+<h1>让 Agent 直接使用<br>文件夹里的知识</h1>
+<p class="lead">通过 MCP 或 REST，按权限浏览目录、搜索关键词、读取原文。知识继续以文件维护，服务统一管理只读访问。</p>
+<p>适用于团队文档、使用手册、经验和案例。服务不调用大模型，不建立向量索引，由 Agent 自行决定如何查找资料和组织答案。</p>
+<div class="hero-actions"><a class="primary" href="#connect">开始连接</a><a href="https://github.com/oh-my-harness/folder-knowledge-service" target="_blank" rel="noopener noreferrer">查看项目仓库</a></div>
+</section>
+
+<section class="section" id="architecture">
+<h2>一层访问服务，两类存储</h2>
+<figure>
+<div class="architecture" aria-label="Agent 通过 MCP 或 REST 访问只读文件服务，服务读取知识文件，使用 SQLite 管理授权和审计。">
+<div class="arch-node"><strong>外部 Agent / 应用</strong><p>MCP Streamable HTTP<br>REST API</p></div><div class="arrow" aria-hidden="true">→</div>
+<div class="arch-node arch-service"><strong>只读知识服务</strong><p>FastAPI + MCP Python SDK<br>校验 Key、知识库授权和路径边界<br>执行查询、控制资源、记录访问</p></div><div class="arrow" aria-hidden="true">→</div>
+<div class="arch-stores"><div class="arch-node"><strong>知识文件夹</strong><p>原始文档、经验、案例<br><code>/knowledge</code> 只读挂载</p></div><div class="arch-node"><strong>SQLite 管理库</strong><p>目录映射、Key 哈希、授权与审计<br><code>/service-data</code> 持久化</p></div></div>
+</div>
+<figcaption>维护者通过独立流程更新知识文件。文件发布后，后续请求即可读取新内容，无需重新建立向量索引。</figcaption>
+</figure>
+<div class="two" style="margin-top:30px"><div><h3>知识内容</h3><p>支持 UTF-8 的 Markdown、TXT、RST、JSON/JSONL、YAML、CSV、TOML、Python、SQL、LOG，以及无扩展名 README。PDF、Word 和图片先由上游整理为文本。</p></div><div><h3>访问边界</h3><p>Agent 只能读取已授权知识库。服务不提供写入、删除或执行文件的工具。这是远程文件工具访问，无需在客户端进行操作系统挂载。</p></div></div>
+</section>
+
+<section class="section" id="tools">
+<h2>Agent 可以使用哪些工具</h2>
+<div class="table-wrap"><table><thead><tr><th>MCP 工具</th><th>用途</th><th>对应 REST 路径</th></tr></thead><tbody>
+<tr><td><code>list_libraries</code></td><td>查看获授权且启用的知识库及目录可用性</td><td><code>/api/v1/libraries</code></td></tr>
+<tr><td><code>knowledge_info</code></td><td>了解支持格式、查询限制和工具使用方式</td><td><code>/api/v1/info</code></td></tr>
+<tr><td><code>list_directory</code></td><td>浏览一层目录，支持分页</td><td><code>/api/v1/list</code></td></tr>
+<tr><td><code>glob</code></td><td>按文件路径查找，例如 <code>**/*.md</code></td><td><code>/api/v1/glob</code></td></tr>
+<tr><td><code>grep</code></td><td>字面或有界正则搜索，返回行列位置与上下文</td><td><code>/api/v1/grep</code></td></tr>
+<tr><td><code>read_file</code></td><td>按行读取原文，支持大文件和超长行续读</td><td><code>/api/v1/read</code></td></tr>
+</tbody></table></div>
+<p><strong>常用过程：</strong>发现知识库，浏览或搜索资料，读取上下文，再引用原文回答。MCP 与 REST 使用相同的知识访问实现和参数名。</p>
+</section>
+
+<section class="section" id="connect">
+<h2>连接教程</h2>
+<p>先由管理员注册知识库并发放 Agent Key，再配置客户端。客户端需支持 <strong>Streamable HTTP</strong> 和自定义认证请求头。</p>
+<form class="setup" id="endpoint-form">
+<div class="form-grid"><label for="base-url">服务根地址<input id="base-url" type="url" value="https://kb.example.com" required autocomplete="off" spellcheck="false" aria-describedby="config-note"></label><label for="library-id">知识库 ID<input id="library-id" value="team-guide" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" autocomplete="off" spellcheck="false"></label><button type="submit" class="primary">更新示例</button></div>
+<p class="note" id="config-note">当前为示例地址。填写实际域名或 IP 与端口，不包含 /mcp。仅更新本页示例，不保存输入、不收集 Key、不发起网络连接。</p><p class="form-error" id="config-error" role="alert" hidden></p>
+</form>
+<noscript><p>脚本未启用。教程仍可阅读，请将示例中的 https://kb.example.com 和 team-guide 手动替换为实际值。</p></noscript>
+<div class="steps">
+<div class="step"><h3>管理员注册知识库</h3><p>打开 <a data-admin href="https://kb.example.com/admin" target="_blank" rel="noopener noreferrer">https://kb.example.com/admin</a>，使用 <code>KB_ADMIN_TOKEN</code> 登录。在“知识库”中添加目录，设置名称、ID 和挂载根目录下的相对路径。</p><p>文件夹选择器支持单击选中、双击进入、路径逐级返回和筛选。固定挂载范围内新增知识库无需重启服务。</p></div>
+<div class="step"><h3>生成并保存 Agent Key</h3><p>进入“Agent 与密钥”，点击“生成 Agent Key”，填写 Agent 名称、勾选可访问知识库，按需设置有效期。</p><p class="important"><strong>完整 Key 只在创建时显示一次。</strong>关闭弹窗前将其保存到客户端密钥存储或环境变量中。服务只保存哈希，无法再次查看原文。遗失后撤销旧 Key 并重新生成。</p><p>已有 Key 可编辑授权，增减可访问知识库，无需更换客户端 Key。管理员令牌用于管理台，不能代替 Agent Key 连接知识接口。</p></div>
+<div class="step"><h3>配置支持 HTTP 的 MCP 客户端</h3>
+<dl class="endpoint"><dt>传输方式</dt><dd>Streamable HTTP</dd><dt>服务地址</dt><dd><code data-mcp>https://kb.example.com/mcp</code></dd><dt>认证请求头</dt><dd><code>Authorization: Bearer &lt;Agent Key&gt;</code></dd></dl>
+<p>不同客户端的配置格式不同。在支持的 MCP 配置界面填写上述字段；密钥通过客户端的密钥管理或环境变量引用，不写入给模型的提示词。本服务使用 Bearer Key，未实现 OAuth 登录流程。</p>
+<h3>Codex CLI 示例</h3><p>以下命令在使用 Codex 的终端执行。先读取 Key 到当前进程环境，再登记 MCP 服务。</p>
+<div class="code-block"><div class="code-bar"><span>Bash · 读取密钥</span><button class="copy" type="button" data-copy="key-env">复制</button></div><pre id="key-env"><code>read -rsp 'Agent Key: ' KB_AGENT_KEY
+printf '\n'
+export KB_AGENT_KEY</code></pre></div>
+<div class="code-block"><div class="code-bar"><span>Codex CLI · 添加远程 MCP</span><button class="copy" type="button" data-copy="codex-command">复制</button></div><pre id="codex-command"><code>codex mcp add folder-knowledge \
+  --url https://kb.example.com/mcp \
+  --bearer-token-env-var KB_AGENT_KEY
+
+codex mcp list</code></pre></div>
+<p class="note">参数依据本机 <code>codex mcp add --help</code> 核对。启动 Codex 的进程必须能读取 <code>KB_AGENT_KEY</code>；已经打开的客户端不会自动取得后来设置的进程环境变量。<code>mcp list</code> 只确认配置已登记，实际连接还需调用工具验证。</p></div>
+<div class="step"><h3>验证真实访问</h3><p>让 Agent 调用 <code>list_libraries</code>，确认出现目标知识库，再调用 <code>list_directory</code> 或 <code>grep</code>。如果一个 Key 对应多个可用知识库，后续调用必须指定 <code>library_id</code>。</p><div class="code-block"><div class="code-bar"><span>可发给 Agent 的验证请求</span><button class="copy" type="button" data-copy="agent-prompt">复制</button></div><pre id="agent-prompt"><code>请通过 folder-knowledge MCP 列出我可访问的知识库。
+然后查看 team-guide 的根目录，选择一个文本文件读取前 30 行。
+回答中注明知识库 ID、相对路径和行号。</code></pre></div></div>
+</div>
+</section>
+
+<section class="section" id="usage">
+<h2>调用示例与续读方式</h2>
+<h3>REST：先列库，再搜索和读取</h3>
+<p>以下 Bash 示例沿用上面的 <code>KB_AGENT_KEY</code>。读取路径和行号应从实际搜索结果取得。</p>
+<div class="code-block"><div class="code-bar"><span>REST · 列出知识库与搜索</span><button class="copy" type="button" data-copy="rest-search">复制</button></div><pre id="rest-search"><code>export KB_URL='https://kb.example.com'
+
+curl -fsS -H "Authorization: Bearer $KB_AGENT_KEY" \
+  "$KB_URL/api/v1/libraries"
+
+curl -fsS -G -H "Authorization: Bearer $KB_AGENT_KEY" \
+  --data-urlencode 'library_id=team-guide' \
+  --data-urlencode 'query=备份' \
+  --data-urlencode 'file_glob=**/*.md' \
+  --data-urlencode 'context=2' \
+  "$KB_URL/api/v1/grep"</code></pre></div>
+<div class="code-block"><div class="code-bar"><span>REST · 读取指定行</span><button class="copy" type="button" data-copy="rest-read">复制</button></div><pre id="rest-read"><code># 将 README.md 和行号替换为实际搜索结果
+curl -fsS -G -H "Authorization: Bearer $KB_AGENT_KEY" \
+  --data-urlencode 'library_id=team-guide' \
+  --data-urlencode 'path=README.md' \
+  --data-urlencode 'start_line=1' \
+  --data-urlencode 'end_line=30' \
+  "$KB_URL/api/v1/read"</code></pre></div>
+<h3>MCP：工具参数示例</h3><p>这是工具调用参数示意，不是向 <code>/mcp</code> 直接 POST 的协议报文。MCP 客户端负责初始化与工具调用协议。</p>
+<div class="code-block"><div class="code-bar"><span>read_file · 首次读取与续读</span><button class="copy" type="button" data-copy="mcp-read">复制</button></div><pre id="mcp-read"><code>{
+  "library_id": "team-guide",
+  "path": "records.jsonl",
+  "start_line": 1,
+  "end_line": 20
+}
+
+{
+  "library_id": "team-guide",
+  "path": "records.jsonl",
+  "cursor": "上一次返回的 next_cursor"
+}</code></pre></div>
+<ul><li>将 <code>next_cursor</code> 传回 <code>cursor</code> 继续读取，超长行可能从同一行的后续列开始。</li><li>搜索续查保留原查询条件，传入 <code>cursor</code> 并保持 <code>offset=0</code>。</li><li>可将搜索结果的 <code>version</code> 传给读取请求的 <code>expected_version</code>，检查文件是否发生变化。</li><li><code>version</code> 基于文件元数据，用于常规更新检测，不是内容哈希。文件变化或服务重启后，需重新开始查询。</li><li><code>partial=true</code> 表示结果不完整。目录遍历未覆盖的范围或跳过项不能靠当前游标补齐，需要缩小查询范围并检查原因。</li></ul>
+<h3>使用项目自带的真实 MCP 检查脚本</h3><p>在已克隆的项目目录中执行。脚本会实际完成 REST 读取、MCP 初始化、工具列表与搜索，有命中时继续读取原文。</p>
+<div class="code-block"><div class="code-bar"><span>Python · 安装客户端依赖并检查连接</span><button class="copy" type="button" data-copy="sdk-check">复制</button></div><pre id="sdk-check"><code>python3 -m venv .venv
+. .venv/bin/activate
+pip install -c constraints.txt .
+
+# 先按连接教程设置 KB_AGENT_KEY
+python examples/check_connection.py \
+  --url https://kb.example.com \
+  --library team-guide \
+  --query '备份'</code></pre></div>
+</section>
+
+<section class="section" id="deploy">
+<h2>管理员部署与日常维护</h2>
+<p>部署在 Linux 服务器，使用 Docker Compose。配置 <code>KB_SOURCE_DIR</code> 指向真实知识目录池，Compose 将它映射为容器内的 <code>/knowledge</code>。</p>
+<div class="code-block"><div class="code-bar"><span>Linux · 从项目根目录部署</span><button class="copy" type="button" data-copy="deploy-code">复制</button></div><pre id="deploy-code"><code>cp .env.example .env
+chmod 600 .env
+python3 -c 'import secrets; print(secrets.token_urlsafe(32))'
+
+# 将生成的随机值填入 .env 的 KB_ADMIN_TOKEN
+# 配置 KB_SOURCE_DIR、KB_ALLOWED_HOSTS、KB_BIND_IP、KB_PORT
+docker compose up -d --build
+docker compose ps</code></pre></div>
+<div class="table-wrap"><table><thead><tr><th>配置</th><th>用途</th></tr></thead><tbody>
+<tr><td><code>KB_SOURCE_DIR</code></td><td>服务器真实知识目录，例如 <code>/srv/knowledge</code>。知识内容只读挂载。</td></tr>
+<tr><td><code>KB_ADMIN_TOKEN</code></td><td>管理台令牌，至少 24 字符。与页面生成的 Agent Key 分开使用。</td></tr>
+<tr><td><code>KB_ALLOWED_HOSTS</code></td><td>实际访问域名或 IP，含端口形式，例如 <code>kb.example.com</code> 或 <code>10.0.0.8:*</code>。</td></tr>
+<tr><td><code>KB_BIND_IP</code> / <code>KB_PORT</code></td><td>默认 <code>127.0.0.1:8790</code>，供同机反向代理。内网直连时绑定服务器内网 IP。</td></tr>
+</tbody></table></div>
+<p>推荐使用 HTTPS 反向代理，保留 <code>Host</code> 和 <code>Authorization</code> 请求头。容器以 UID/GID <code>10001:10001</code> 运行，宿主机需要允许其读取文件和遍历目录。</p>
+<div class="two"><div><h3>动态目录与权限</h3><p>挂载范围内新增目录，可直接注册为知识库。超出范围时需要调整挂载并重建容器。目录映射、启停与 Key 授权变更对后续请求生效，正在执行的请求可以完成。</p><p>目录被删除或不可读时，服务报告原因并保留配置与授权。原目录恢复后，后续请求可继续访问。</p></div><div><h3>持久化与备份</h3><p><code>/service-data/management.sqlite3</code> 保存配置、Key 哈希和访问审计。保留独立数据卷，知识文件另行备份。使用 SQLite Backup API 备份运行中的数据库。</p><p>当前为单实例、单 worker，管理数据卷使用服务器本地磁盘。访问活动按 Key 统计，共用 Key 的客户端记录会合并。</p></div></div>
+<h3>查询预算</h3><p>大文件不会因超过 2 MiB 直接被拒绝。服务按块读取，单次文本扫描最多 32 MiB，目录遍历与读取/搜索分别有 5 秒预算。每次读取最多 500 行范围、500 个行片段和 48,000 个正文字符，达到限制时通过游标继续。</p>
+<p class="note">截至 2026-09-17：本地后端测试 58 项通过、2 项因平台条件跳过，实测 9.6 MB 超长行文件可续读。目标 Linux 服务器的容器、权限与网络验收仍待完成。</p>
+</section>
+
+<section class="section" id="troubleshoot">
+<h2>连接问题排查</h2>
+<div class="table-wrap"><table><thead><tr><th>现象</th><th>检查方式</th></tr></thead><tbody>
+<tr><td>连接超时或拒绝连接</td><td>检查地址、端口、服务器绑定 IP、防火墙和代理。远程机器不能用 <code>127.0.0.1</code> 访问服务器上的服务。</td></tr>
+<tr><td><code>401 unauthorized</code></td><td>使用 Agent Key，检查 <code>Bearer </code> 前缀、环境变量，以及 Key 是否过期或撤销。Admin Token 不能代替它。</td></tr>
+<tr><td><code>421 invalid_host</code></td><td>将实际域名或带端口的 IP 加入 <code>KB_ALLOWED_HOSTS</code>，检查反向代理是否保留预期 Host。</td></tr>
+<tr><td><code>403 library_forbidden</code></td><td>检查该 Key 的知识库授权，以及目标知识库是否启用。</td></tr>
+<tr><td><code>library_required</code></td><td>先调用 <code>list_libraries</code>，再明确传入 <code>library_id</code>。该错误也可能表示当前没有可用授权库。</td></tr>
+<tr><td>列库结果为空</td><td>管理员先注册并启用知识库，再给当前 Key 授权。查看是否误用了另一枚 Key。</td></tr>
+<tr><td><code>503 library_unavailable</code></td><td>检查目录存在性、类型和读取/遍历权限。按返回的 reason 修复目录后重试。</td></tr>
+<tr><td><code>version_changed</code> / <code>invalid_cursor</code></td><td>文件变化、服务重启或查询条件不一致时，放弃旧游标，从首次查询重新开始。</td></tr>
+<tr><td><code>403 invalid_origin</code></td><td>不要把此离线教程页当作跨站 API 客户端。使用支持的 MCP 客户端或终端请求，并按部署策略配置来源。</td></tr>
+<tr><td>工具参数不包含 cursor</td><td>服务更新后，重连 MCP 并刷新工具定义。</td></tr>
+</tbody></table></div>
+<p>排查顺序建议为：网络地址、认证、知识库授权、目录可用性、查询参数。页面能打开只说明管理页面可达，仍需使用 Agent Key 验证一次真实工具调用。</p>
+</section>
+</main>
+<footer>项目：<a href="https://github.com/oh-my-harness/folder-knowledge-service" target="_blank" rel="noopener noreferrer">folder-knowledge-service</a>。依据服务 v0.4.0 实现及 2026-09-17 验证记录整理。此文件可离线打开，所有样式与脚本均内置。</footer>
+<div id="copy-status" class="sr-only" role="status" aria-live="polite"></div>
+<script>
+'use strict';
+const templates = Object.fromEntries(['codex-command','agent-prompt','rest-search','rest-read','mcp-read','sdk-check'].map(id=>[id,document.getElementById(id).textContent]));
+document.getElementById('endpoint-form').addEventListener('submit',event=>{
+  event.preventDefault();const error=document.getElementById('config-error');error.hidden=true;
+  try{
+    const input=document.getElementById('base-url').value.trim(),url=new URL(input);
+    if(!['http:','https:'].includes(url.protocol)||url.username||url.password||url.search||url.hash||url.pathname!=='/'||!/^[a-z0-9.:[\]-]+$/i.test(url.hostname))throw new Error('请填写服务根地址，只包含 http(s)://域名或IP:端口，不含路径、密钥或查询参数。');
+    const library=document.getElementById('library-id').value.trim();
+    if(!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(library))throw new Error('知识库 ID 需为小写字母、数字、下划线或短横线，最长 64 字符。');
+    const base=url.origin;
+    for(const [id,value] of Object.entries(templates))document.getElementById(id).textContent=value.replaceAll('https://kb.example.com',base).replaceAll('team-guide',library);
+    document.querySelectorAll('[data-mcp]').forEach(x=>x.textContent=base+'/mcp');
+    document.querySelectorAll('[data-admin]').forEach(x=>{x.textContent=base+'/admin';x.href=base+'/admin';});
+    document.getElementById('base-url').value=base;
+    document.getElementById('copy-status').textContent='连接示例已更新。';
+  }catch(err){error.textContent=err.message||'地址格式无效';error.hidden=false;}
+});
+document.addEventListener('click',async event=>{
+  const button=event.target.closest('[data-copy]');if(!button)return;
+  const pre=document.getElementById(button.dataset.copy);
+  try{await navigator.clipboard.writeText(pre.textContent);button.textContent='已复制';}
+  catch{const range=document.createRange();range.selectNodeContents(pre);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);button.textContent='已选中，请手动复制';}
+  document.getElementById('copy-status').textContent=button.textContent;
+  setTimeout(()=>button.textContent='复制',2200);
+});
+document.getElementById('print').addEventListener('click',()=>window.print());
+</script>
+</body>
+</html>
