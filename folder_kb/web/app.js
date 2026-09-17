@@ -142,6 +142,10 @@ function directoryBrowser(){
     if(button.hasAttribute('data-select')){selected=button.dataset.select;selection();return;}
     if(button.classList.contains('folder-more'))navigate(current,true);
   });
+  picker.addEventListener('dblclick',event=>{
+    const button=event.target.closest('.folder-select');
+    if(button && !busy){event.preventDefault();navigate(button.dataset.select);}
+  });
   picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();finish();}});
   find('.folder-filter').oninput=render;
   render();find('[data-cancel]').focus();navigate(pathInput.value.trim()||'.');
