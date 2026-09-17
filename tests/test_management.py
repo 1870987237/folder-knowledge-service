@@ -24,7 +24,7 @@ ADMIN = 'test-administrator-token-for-tests-only-abcdef'
 @pytest.fixture
 def managed(tmp_path):
     root = tmp_path / 'knowledge'
-    for name in ('term', 'opc', 'replacement'):
+    for name in ('alpha', 'beta', 'replacement'):
         directory = root / name
         directory.mkdir(parents=True)
         (directory / 'README.md').write_text(name + ' private knowledge\n', encoding='utf-8')
@@ -60,8 +60,8 @@ def test_admin_boundary_and_one_time_secret(managed):
     assert "script-src 'self'" in client.get('/admin').headers['Content-Security-Policy']
     assert client.get('/admin/api/overview').status_code == 401
     assert client.get('/api/v1/list', headers=authorization(ADMIN)).status_code == 401
-    add_library(client, 'term')
-    key = add_key(client, ['term'])
+    add_library(client, 'alpha')
+    key = add_key(client, ['alpha'])
     assert client.get('/admin/api/overview', headers=authorization(key['token'])).status_code == 401
     assert client.get('/admin/api/overview', headers=dict(authorization(ADMIN), Origin='http://evil.example')).status_code == 403
     assert client.get('/admin/api/overview', headers=dict(authorization(ADMIN), Origin='http://[')).status_code == 403
@@ -75,19 +75,19 @@ def test_admin_boundary_and_one_time_secret(managed):
 
 def test_dynamic_scoping_disable_change_and_revoke(managed):
     app, client, settings = managed
-    add_library(client, 'term'); add_library(client, 'opc')
-    key = add_key(client, ['term'])
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha'])
     headers = authorization(key['token'])
-    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == [{'id': 'term', 'name': 'term'}]
-    assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md'}).json()['lines'][0]['text'].startswith('term')
-    assert client.get('/api/v1/read', headers=headers, params={'library_id': 'opc', 'path': 'README.md'}).status_code == 403
-    assert client.get('/api/v1/read', headers=headers, params={'path': '../opc/README.md'}).status_code == 403
-    assert client.put('/admin/api/libraries/term', headers=authorization(ADMIN),
-                      json={'id': 'term', 'name': 'term', 'path': 'replacement', 'enabled': True}).status_code == 200
+    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == [{'id': 'alpha', 'name': 'alpha'}]
+    assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md'}).json()['lines'][0]['text'].startswith('alpha')
+    assert client.get('/api/v1/read', headers=headers, params={'library_id': 'beta', 'path': 'README.md'}).status_code == 403
+    assert client.get('/api/v1/read', headers=headers, params={'path': '../beta/README.md'}).status_code == 403
+    assert client.put('/admin/api/libraries/alpha', headers=authorization(ADMIN),
+                      json={'id': 'alpha', 'name': 'alpha', 'path': 'replacement', 'enabled': True}).status_code == 200
     assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md'}).json()['lines'][0]['text'].startswith('replacement')
-    client.put('/admin/api/libraries/term', headers=authorization(ADMIN),
-               json={'id': 'term', 'name': 'term', 'path': 'replacement', 'enabled': False})
-    assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md', 'library_id': 'term'}).status_code == 403
+    client.put('/admin/api/libraries/alpha', headers=authorization(ADMIN),
+               json={'id': 'alpha', 'name': 'alpha', 'path': 'replacement', 'enabled': False})
+    assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md', 'library_id': 'alpha'}).status_code == 403
     assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == []
     assert client.post('/admin/api/keys/'+key['key']['id']+'/revoke', headers=authorization(ADMIN)).status_code == 200
     assert client.get('/api/v1/libraries', headers=headers).status_code == 401
@@ -95,19 +95,19 @@ def test_dynamic_scoping_disable_change_and_revoke(managed):
 
 def test_multiple_libraries_require_explicit_selection(managed):
     _, client, _ = managed
-    add_library(client, 'term'); add_library(client, 'opc')
-    key = add_key(client, ['term', 'opc'])
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    key = add_key(client, ['alpha', 'beta'])
     assert client.get('/api/v1/info', headers=authorization(key['token'])).status_code == 400
-    assert client.get('/api/v1/info', headers=authorization(key['token']), params={'library_id':'opc'}).json()['library_id'] == 'opc'
+    assert client.get('/api/v1/info', headers=authorization(key['token']), params={'library_id':'beta'}).json()['library_id'] == 'beta'
 
 
 def test_expiry_and_persistence(managed):
     app, client, settings = managed
-    add_library(client, 'term')
+    add_library(client, 'alpha')
     past = (datetime.now(timezone.utc)-timedelta(days=1)).isoformat()
     assert client.post('/admin/api/keys', headers=authorization(ADMIN),
-                       json={'agent_name': 'old', 'library_ids': ['term'], 'expires_at': past}).status_code == 400
-    key = add_key(client, ['term'])
+                       json={'agent_name': 'old', 'library_ids': ['alpha'], 'expires_at': past}).status_code == 400
+    key = add_key(client, ['alpha'])
     restarted = Registry(settings.root, settings.state_dir)
     assert restarted.authenticate(key['token'])['id'] == key['key']['id']
     with restarted.lock():
@@ -118,15 +118,15 @@ def test_expiry_and_persistence(managed):
 
 def test_admin_path_boundaries_and_read_only_preview(managed):
     _, client, settings = managed
-    for path in ('..', '/etc', 'term/README.md'):
+    for path in ('..', '/etc', 'alpha/README.md'):
         result = client.post('/admin/api/libraries', headers=authorization(ADMIN),
                              json={'id': 'bad', 'name': 'bad', 'path': path})
         assert result.status_code in (400, 403)
-    add_library(client, 'term')
-    before = (Path(settings.root)/'term/README.md').read_bytes()
-    assert client.get('/admin/api/browse/term', headers=authorization(ADMIN), params={'path':'README.md','read':True}).status_code == 200
-    assert client.get('/admin/api/browse/term', headers=authorization(ADMIN), params={'path':'../opc/README.md','read':True}).status_code == 403
-    assert (Path(settings.root)/'term/README.md').read_bytes() == before
+    add_library(client, 'alpha')
+    before = (Path(settings.root)/'alpha/README.md').read_bytes()
+    assert client.get('/admin/api/browse/alpha', headers=authorization(ADMIN), params={'path':'README.md','read':True}).status_code == 200
+    assert client.get('/admin/api/browse/alpha', headers=authorization(ADMIN), params={'path':'../beta/README.md','read':True}).status_code == 403
+    assert (Path(settings.root)/'alpha/README.md').read_bytes() == before
     with pytest.raises(ValueError):
         Registry(settings.root, str(Path(settings.root)/'state'))
     with pytest.raises(ValueError):
@@ -135,14 +135,14 @@ def test_admin_path_boundaries_and_read_only_preview(managed):
 
 def test_parallel_keys_and_file_state_not_lost(managed):
     app, client, settings = managed
-    add_library(client, 'term')
+    add_library(client, 'alpha')
     def create(i):
-        return Registry(settings.root, settings.state_dir).create_key('agent-'+str(i), ['term'], None)
+        return Registry(settings.root, settings.state_dir).create_key('agent-'+str(i), ['alpha'], None)
     with ThreadPoolExecutor(max_workers=6) as workers:
         keys = list(workers.map(create, range(12)))
     assert len(app.state.registry.snapshot()['keys']) == 12
     def access(key):
-        return app.state.registry.run(key['token'], 'term', 'read_file', {'path':'README.md'}, 'rest')
+        return app.state.registry.run(key['token'], 'alpha', 'read_file', {'path':'README.md'}, 'rest')
     with ThreadPoolExecutor(max_workers=6) as workers:
         results = list(workers.map(access, keys))
     assert len(results) == 12
@@ -155,8 +155,8 @@ def test_parallel_keys_and_file_state_not_lost(managed):
 
 def test_active_requests_and_log_redaction(managed, monkeypatch):
     app, client, settings = managed
-    add_library(client, 'term')
-    key = add_key(client, ['term'])
+    add_library(client, 'alpha')
+    key = add_key(client, ['alpha'])
     started, release = threading.Event(), threading.Event()
     original = KnowledgeFolder.grep
     def blocked(folder, **kwargs):
@@ -164,7 +164,7 @@ def test_active_requests_and_log_redaction(managed, monkeypatch):
         return original(folder, **kwargs)
     monkeypatch.setattr(KnowledgeFolder, 'grep', blocked)
     with ThreadPoolExecutor(max_workers=1) as workers:
-        future = workers.submit(app.state.registry.run, key['token'], 'term', 'grep', {'query':'SECRET_QUERY_VALUE'}, 'mcp')
+        future = workers.submit(app.state.registry.run, key['token'], 'alpha', 'grep', {'query':'SECRET_QUERY_VALUE'}, 'mcp')
         assert started.wait(3)
         assert app.state.registry.snapshot()['active_requests'][0]['key_id'] == key['key']['id']
         release.set(); future.result()
@@ -175,8 +175,8 @@ def test_active_requests_and_log_redaction(managed, monkeypatch):
 
 def test_real_mcp_identity_isolation_and_live_revocation(managed):
     app, client, settings = managed
-    add_library(client, 'term'); add_library(client, 'opc')
-    term = add_key(client, ['term'], 'term-agent'); opc = add_key(client, ['opc'], 'opc-agent')
+    add_library(client, 'alpha'); add_library(client, 'beta')
+    alpha = add_key(client, ['alpha'], 'alpha-agent'); beta = add_key(client, ['beta'], 'beta-agent')
     sock = socket.socket(); sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
     # A distinct app and lifespan, sharing the file-backed registry as a restarted deployment would.
     server = uvicorn.Server(uvicorn.Config(create_app(settings), log_level='error', access_log=False))
@@ -199,19 +199,19 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
                         result = await session.call_tool('read_file', {'path':'README.md'})
                         assert not result.isError
                         assert result.structuredContent['lines'][0]['text'] == library+' private knowledge'
-                        denied = await session.call_tool('read_file', {'path':'README.md','library_id':'opc' if library=='term' else 'term'})
+                        denied = await session.call_tool('read_file', {'path':'README.md','library_id':'beta' if library=='alpha' else 'alpha'})
                         assert denied.isError
                         assert (await session.call_tool('create_key', {})).isError
         async def run():
-            await asyncio.gather(use(term,'term'), use(opc,'opc'))
+            await asyncio.gather(use(alpha,'alpha'), use(beta,'beta'))
         asyncio.run(run())
         snapshot = app.state.registry.snapshot()
         assert snapshot['metrics']['calls'] == 6 and snapshot['metrics']['errors'] == 2
         records = [e for e in app.state.registry.recent_events()['events'] if e['kind']=='access']
-        assert all(e['agent_name'] == ('term-agent' if e['key_id']==term['key']['id'] else 'opc-agent') for e in records)
-        app.state.registry.revoke_key(term['key']['id'])
+        assert all(e['agent_name'] == ('alpha-agent' if e['key_id']==alpha['key']['id'] else 'beta-agent') for e in records)
+        app.state.registry.revoke_key(alpha['key']['id'])
         with httpx.Client(trust_env=False) as http:
-            assert http.post(f'http://127.0.0.1:{port}/mcp', headers=authorization(term['token']), json={}).status_code == 401
+            assert http.post(f'http://127.0.0.1:{port}/mcp', headers=authorization(alpha['token']), json={}).status_code == 401
     finally:
         server.should_exit=True;thread.join(10);sock.close()
     assert not thread.is_alive()

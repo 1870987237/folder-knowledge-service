@@ -1,6 +1,6 @@
 {
   "id": "synthetic-example",
   "status": "demo_only",
-  "knowledge_path": "terms/selection.md",
-  "note": "仅用于验证文件检索，不是实际实验数据"
+  "knowledge_path": "guides/example.md",
+  "note": "仅用于验证文件检索，不是实际业务数据"
 }

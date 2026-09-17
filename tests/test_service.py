@@ -25,9 +25,9 @@ TOKEN = 'test-only-token-not-for-deployment-12345'
 def root(tmp_path):
     base = tmp_path / 'knowledge'
     base.mkdir()
-    (base / 'terms').mkdir()
-    (base / 'README.md').write_text('# Index\nSee terms.\n', encoding='utf-8')
-    (base / 'terms' / '经验.md').write_text('场景\nTerm cal=1.8\n边界\nTerm val=2.0\n', encoding='utf-8')
+    (base / 'guides').mkdir()
+    (base / 'README.md').write_text('# Index\nSee guides.\n', encoding='utf-8')
+    (base / 'guides' / '经验.md').write_text('场景\nGuide version=1.8\n边界\nGuide revision=2.0\n', encoding='utf-8')
     (base / '.env').write_text('SECRET=not-readable', encoding='utf-8')
     (base / '.git').mkdir()
     (base / '.git' / 'secret.md').write_text('SECRET', encoding='utf-8')
@@ -46,9 +46,9 @@ def test_list_glob_and_pagination(folder):
     assert first['entries'] != second['entries']
     assert first['partial'] is False
     files = folder.glob('**/*.md')['files']
-    assert [r['path'] for r in files] == ['README.md', 'terms/经验.md']
+    assert [r['path'] for r in files] == ['README.md', 'guides/经验.md']
     assert [r['path'] for r in folder.glob('*.md')['files']] == ['README.md']
-    assert folder.glob('*.md', path='terms')['files'][0]['path'] == 'terms/经验.md'
+    assert folder.glob('*.md', path='guides')['files'][0]['path'] == 'guides/经验.md'
 
 
 def test_read_lines_bom_and_live_update(root, folder):
@@ -64,8 +64,8 @@ def test_read_lines_bom_and_live_update(root, folder):
     assert folder.read_file('new.md')['lines'][0]['text'] == 'changed'
 
 
-@pytest.mark.parametrize('path', ['../secret.md', '/etc/passwd', 'C:/secret.md', 'terms/../../secret.md',
-                                  'terms\\经验.md', '.env', '.git/secret.md', 'README.md:stream', 'bad\x00.md'])
+@pytest.mark.parametrize('path', ['../secret.md', '/etc/passwd', 'C:/secret.md', 'guides/../../secret.md',
+                                  'guides\\经验.md', '.env', '.git/secret.md', 'README.md:stream', 'bad\x00.md'])
 def test_path_boundary(folder, path):
     with pytest.raises(KnowledgeError):
         folder.read_file(path)
@@ -110,13 +110,13 @@ def test_open_handle_escape_is_rejected(root, folder, tmp_path, monkeypatch):
 
 
 def test_grep_literal_regex_context_and_paging(folder):
-    result = folder.grep('term', path='terms', ignore_case=True, limit=1)
+    result = folder.grep('guide', path='guides', ignore_case=True, limit=1)
     assert result['matches'][0]['line'] == 2
-    assert result['matches'][0]['path'] == 'terms/经验.md'
+    assert result['matches'][0]['path'] == 'guides/经验.md'
     assert result['next_offset'] == 1
-    assert folder.grep('term', path='terms', ignore_case=True, offset=1)['matches'][0]['line'] == 4
-    assert len(folder.grep(r'cal=\d+\.\d+', regex_mode=True)['matches']) == 1
-    assert not folder.grep(r'cal=\d+')['matches']
+    assert folder.grep('guide', path='guides', ignore_case=True, offset=1)['matches'][0]['line'] == 4
+    assert len(folder.grep(r'version=\d+\.\d+', regex_mode=True)['matches']) == 1
+    assert not folder.grep(r'version=\d+')['matches']
     assert not folder.grep('SECRET')['matches']
     with pytest.raises(KnowledgeError, match='regular expression'):
         folder.grep('(', regex_mode=True)
@@ -162,9 +162,9 @@ def test_rest_auth_guard_read_only_and_no_mutation(root):
             assert client.get(path).status_code == 401
         client.headers['Authorization'] = 'Bearer ' + TOKEN
         assert client.get('/api/v1/info').json()['read_only']
-        assert client.get('/api/v1/read', params={'path': 'terms/经验.md'}).json()['total_lines'] == 4
+        assert client.get('/api/v1/read', params={'path': 'guides/经验.md'}).json()['total_lines'] == 4
         assert client.get('/api/v1/read', params={'path': '../secret.md'}).status_code == 403
-        assert client.get('/api/v1/grep', params={'query': 'Term'}).json()['matches']
+        assert client.get('/api/v1/grep', params={'query': 'Guide'}).json()['matches']
         assert client.get('/api/v1/info', headers={'Host': 'evil.example'}).status_code == 421
         assert client.get('/api/v1/info', headers={'Origin': 'https://evil.example'}).status_code == 403
         for method in ('post', 'put', 'patch', 'delete'):
@@ -194,7 +194,7 @@ def test_mcp_over_real_http_matches_rest(root):
             base = f'http://127.0.0.1:{port}'
             headers = {'Authorization': 'Bearer ' + TOKEN}
             async with httpx.AsyncClient(base_url=base, headers=headers, trust_env=False) as rest:
-                expected = (await rest.get('/api/v1/grep', params={'query': 'Term'})).json()
+                expected = (await rest.get('/api/v1/grep', params={'query': 'Guide'})).json()
                 assert (await rest.post('/mcp', headers={'Authorization': 'Bearer invalid'}, json={})).status_code == 401
                 too_big = await rest.post('/mcp', content=b'x' * 65537,
                                           headers={'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream'})
@@ -206,11 +206,11 @@ def test_mcp_over_real_http_matches_rest(root):
                     listed = await session.list_tools()
                     assert {t.name for t in listed.tools} == {'knowledge_info', 'list_directory', 'glob', 'read_file', 'grep'}
                     assert all(t.annotations.readOnlyHint and not t.annotations.destructiveHint for t in listed.tools)
-                    result = await session.call_tool('grep', {'query': 'Term'})
+                    result = await session.call_tool('grep', {'query': 'Guide'})
                     assert not result.isError
                     assert result.structuredContent == expected
-                    result = await session.call_tool('read_file', {'path': 'terms/经验.md', 'start_line': 2, 'end_line': 2})
-                    assert result.structuredContent['lines'][0]['text'] == 'Term cal=1.8'
+                    result = await session.call_tool('read_file', {'path': 'guides/经验.md', 'start_line': 2, 'end_line': 2})
+                    assert result.structuredContent['lines'][0]['text'] == 'Guide version=1.8'
                     denied = await session.call_tool('read_file', {'path': '../secret.md'})
                     assert denied.isError
                     assert (await session.call_tool('write_file', {'path': 'x', 'text': 'x'})).isError

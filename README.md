@@ -50,12 +50,12 @@ flowchart LR
 
 ```text
 /srv/knowledge/
-  term-select/
+  team-guide/
     README.md
     definitions/
     experience/
     cases/
-  opc-manual/
+  product-manual/
     README.md
 ```
 
@@ -85,7 +85,7 @@ curl http://127.0.0.1:8790/healthz
 
 若改为绑定内网 IP，最后一条健康检查也改用该 IP。容器内部始终使用 8790。
 
-访问 `https://你的服务域名/admin`，输入管理员令牌。首次启动没有自动开放的知识库：先添加 `term-select`、`opc-manual` 等目录映射，再生成 Agent Key。路径是相对于挂载根目录的服务器路径；只有明确选择 `.` 才会开放整个目录池。
+访问 `https://你的服务域名/admin`，输入管理员令牌。首次启动没有自动开放的知识库：先添加 `team-guide`、`product-manual` 等目录映射，再生成 Agent Key。路径是相对于挂载根目录的服务器路径；只有明确选择 `.` 才会开放整个目录池。
 
 固定挂载范围内新增子目录后，可直接在页面注册。超出挂载范围的新目录需要修改 `KB_SOURCE_DIR` 或部署挂载并重新创建容器，不允许页面任意读取服务器文件系统。
 
@@ -111,10 +111,10 @@ Agent 可以依次调用：
 
 ```json
 {"tool":"list_libraries","arguments":{}}
-{"tool":"list_directory","arguments":{"library_id":"term-select","path":"."}}
-{"tool":"glob","arguments":{"library_id":"term-select","pattern":"**/*.md","path":"experience"}}
-{"tool":"grep","arguments":{"library_id":"term-select","query":"sigma","path":"experience","context":2}}
-{"tool":"read_file","arguments":{"library_id":"term-select","path":"experience/example.md","start_line":10,"end_line":60}}
+{"tool":"list_directory","arguments":{"library_id":"team-guide","path":"."}}
+{"tool":"glob","arguments":{"library_id":"team-guide","pattern":"**/*.md","path":"experience"}}
+{"tool":"grep","arguments":{"library_id":"team-guide","query":"example","path":"experience","context":2}}
+{"tool":"read_file","arguments":{"library_id":"team-guide","path":"experience/example.md","start_line":10,"end_line":60}}
 ```
 
 上面是工具调用示意，不是 MCP 协议的原始请求体。服务会通过 `tools/list` 发布真实参数 schema。Key 只有一个可用知识库时可省略 `library_id`；有多个时必须指定。建议给 Agent 的指导是：
@@ -129,7 +129,7 @@ python3 -m venv .venv
 pip install -c constraints.txt .
 read -rs -p 'Agent Key: ' KB_AGENT_KEY; echo
 export KB_AGENT_KEY
-python examples/check_connection.py --url https://你的服务域名 --library term-select --query sigma
+python examples/check_connection.py --url https://你的服务域名 --library team-guide --query example
 ```
 
 ## REST 示例
@@ -139,14 +139,14 @@ curl -H "Authorization: Bearer $KB_AGENT_KEY" \
   https://你的服务域名/api/v1/libraries
 
 curl -G -H "Authorization: Bearer $KB_AGENT_KEY" \
-  --data-urlencode 'library_id=term-select' \
-  --data-urlencode 'query=sigma' \
+  --data-urlencode 'library_id=team-guide' \
+  --data-urlencode 'query=example' \
   --data-urlencode 'file_glob=**/*.md' \
   --data-urlencode 'context=2' \
   https://你的服务域名/api/v1/grep
 
 curl -G -H "Authorization: Bearer $KB_AGENT_KEY" \
-  --data-urlencode 'library_id=term-select' \
+  --data-urlencode 'library_id=team-guide' \
   --data-urlencode 'path=experience/example.md' \
   --data-urlencode 'start_line=10' \
   --data-urlencode 'end_line=60' \

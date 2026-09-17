@@ -24,8 +24,8 @@ def main():
         docker('volume', 'create', volume)
         with tempfile.TemporaryDirectory(prefix='kb-smoke-') as directory:
             root = Path(directory)/'knowledge'
-            (root/'term').mkdir(parents=True)
-            (root/'term/README.md').write_text('container smoke knowledge\n', encoding='utf-8')
+            (root/'manual').mkdir(parents=True)
+            (root/'manual/README.md').write_text('container smoke knowledge\n', encoding='utf-8')
             docker('run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
                    '--security-opt=no-new-privileges:true', '--tmpfs', '/tmp:rw,noexec,nosuid,size=16m',
                    '-p', '127.0.0.1::8790', '--mount', f'type=bind,source={root},target=/knowledge,readonly',
@@ -54,15 +54,15 @@ def main():
             wait_ready()
             assert docker('exec', name, 'id', '-u') == '10001'
             assert docker('inspect', name, '--format', '{{.HostConfig.ReadonlyRootfs}}') == 'true'
-            request('/admin/api/libraries', 'POST', {'id':'term','name':'Term','path':'term'})
-            key = request('/admin/api/keys', 'POST', {'agent_name':'smoke-agent','library_ids':['term']})
-            assert request('/api/v1/read?library_id=term&path=README.md', credential=key['token'])['lines'][0]['text']=='container smoke knowledge'
+            request('/admin/api/libraries', 'POST', {'id':'manual','name':'Manual','path':'manual'})
+            key = request('/admin/api/keys', 'POST', {'agent_name':'smoke-agent','library_ids':['manual']})
+            assert request('/api/v1/read?library_id=manual&path=README.md', credential=key['token'])['lines'][0]['text']=='container smoke knowledge'
             docker('exec', name, 'python', '-c',
                    "from pathlib import Path\nimport errno\ntry:\n Path('/knowledge/write-must-fail.txt').write_text('x')\nexcept OSError as e:\n assert e.errno == errno.EROFS\nelse:\n raise AssertionError('Knowledge mount is writable')")
             assert not (root/'write-must-fail.txt').exists()
             docker('restart', name)
             wait_ready()
-            assert request('/api/v1/read?path=README.md', credential=key['token'])['library_id']=='term'
+            assert request('/api/v1/read?path=README.md', credential=key['token'])['library_id']=='manual'
             request('/admin/api/keys/'+key['key']['id']+'/revoke', 'POST')
             try:
                 request('/api/v1/info', credential=key['token'])

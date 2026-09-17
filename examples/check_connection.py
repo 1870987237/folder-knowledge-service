@@ -40,7 +40,7 @@ async def check(url: str, query: str, library_id: str | None = None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--url', default=os.getenv('KB_URL', 'http://127.0.0.1:8790'))
-    parser.add_argument('--query', default='Term')
+    parser.add_argument('--query', default='example')
     parser.add_argument('--library', default=None)
     args = parser.parse_args()
     asyncio.run(check(args.url.rstrip('/'), args.query, args.library))
