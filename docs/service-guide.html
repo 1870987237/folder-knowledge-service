@@ -7,6 +7,7 @@
 <title>Folder KB · 实现方式、接入与后续改进</title>
 <style>
 :root{--fg:#1a1a2e;--muted:#6b7280;--accent:#4f46e5;--border:#e5e7eb;--code-bg:#f6f8fa}*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:20px}body{font-family:"Times New Roman","Microsoft YaHei",sans-serif;color:var(--fg);background:#fff;max-width:1080px;margin:0 auto;padding:40px 24px 80px;line-height:1.75;font-size:15px}h1{font-size:26px;border-bottom:3px solid var(--accent);padding-bottom:12px;margin:0 0 12px}h2{font-size:20px;margin:48px 0 18px;border-left:4px solid var(--accent);padding-left:10px}h3{font-size:16px;margin:28px 0 12px}p{margin:12px 0}a{color:var(--accent);text-underline-offset:3px}.meta,.note,.gallery-note,.config-foot{color:var(--muted);font-size:13px}.meta button{float:right}.toc{background:#f9fafb;border:1px solid var(--border);border-radius:8px;padding:14px 24px;margin:24px 0}.toc ol{margin:8px 0;padding-left:24px}.toc a{text-decoration:none}.toc li{margin:4px 0}button,input{font:inherit}button,summary{cursor:pointer}button{border:1px solid var(--border);border-radius:4px;background:#fff;color:var(--accent);padding:4px 10px;font-size:13px}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}code,pre{font-family:Consolas,"SF Mono","Microsoft YaHei",monospace;font-size:13px}code{background:var(--code-bg);padding:1px 5px;border-radius:4px}pre{background:var(--code-bg);border:1px solid var(--border);border-radius:6px;padding:12px 16px;overflow-x:auto;line-height:1.6;margin:16px 0}pre code{background:none;padding:0}table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px}th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;vertical-align:top}th{background:#f9fafb}td code{overflow-wrap:anywhere}.table-wrap{overflow-x:auto}.architecture{display:grid;grid-template-columns:1fr 24px 1.5fr 24px 1.2fr;align-items:center;gap:8px;margin:24px 0 14px}.arch-node{border:1px solid var(--border);border-radius:6px;padding:14px;background:#fafbfc}.arch-node strong{font-size:15px;display:block}.arch-node p{font-size:13px;margin:6px 0 0;line-height:1.7}.arch-service{border-color:#c7d2fe;background:#eef2ff}.arch-stores{display:grid;gap:10px}.arrow{text-align:center;color:var(--accent);font-size:20px}figure{margin:18px 0}figcaption{font-size:13px;color:var(--muted)}.implementation-facts{display:grid;grid-template-columns:105px 1fr;font-size:14px;margin:20px 0}.implementation-facts dt,.implementation-facts dd{border-bottom:1px solid var(--border);padding:10px 0;margin:0}.implementation-facts dt{font-weight:700}.screen-panel{margin:14px 0 24px}.screen-panel img{display:block;width:100%;max-width:900px;height:auto;border:1px solid var(--border);border-radius:4px}.gallery-note{margin-top:12px}.code-block{margin:18px 0}.code-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--muted)}.code-block pre{margin-top:8px}.agent-instructions pre{white-space:pre-wrap;overflow-wrap:anywhere}.config-options{margin:20px 0}.config-options summary{color:var(--accent);font-size:14px}.setup{background:#f9fafb;border:1px solid var(--border);border-radius:6px;padding:16px;margin-top:12px}.form-grid{display:grid;grid-template-columns:2fr 1fr auto;gap:14px;align-items:end}.form-grid label{font-size:13px}.form-grid input{display:block;width:100%;border:1px solid #d1d5db;border-radius:4px;padding:7px 9px;margin-top:5px}.primary{padding:8px 12px;white-space:nowrap}.form-error{font-size:13px;color:#b91c1c}.two{display:block}ul{padding-left:24px}li{margin:6px 0}.boundary{border-left:3px solid #d1d5db;padding-left:14px;color:#4b5563;font-size:14px}.flow{white-space:pre-wrap}footer{margin-top:60px;padding-top:16px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.access-figure{margin:18px 0 28px;break-inside:avoid}.access-tree{display:block;width:100%;height:auto;background:#fff}.access-figure figcaption{text-align:center;margin-top:8px}
 @media(max-width:650px){body{padding:24px 18px 50px}.architecture{grid-template-columns:1fr}.arrow{transform:rotate(90deg);height:26px}.arch-stores{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr}.form-grid button{justify-self:start}.meta button{float:none;display:block;margin-top:8px}.implementation-facts{grid-template-columns:1fr}.implementation-facts dt{border:0;padding-bottom:0}.implementation-facts dd{padding-top:3px}th,td{padding:7px 9px}.code-bar{flex-wrap:wrap}}
 @media print{body{max-width:none;padding:0;font-size:11pt}button,.config-options{display:none}h1{font-size:22pt}h2{font-size:16pt;break-after:avoid}h3{break-after:avoid}.architecture{grid-template-columns:1fr 20px 1.5fr 20px 1.2fr}.arch-stores{grid-template-columns:1fr}.arrow{transform:none}.architecture,.screen-panel,tr{break-inside:avoid}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:9pt}.code-block{break-inside:auto}a{color:inherit}footer{font-size:10pt}}
 </style>
@@ -17,7 +18,46 @@
 <section class="intro"><h1>Folder KB 文件夹知识服务</h1><p class="meta">当前实现：Python / FastAPI / MCP / SQLite · 文档更新：2026-09-18 <button id="print" type="button">打印 / 存为 PDF</button></p><p>以文件夹和文档保存知识，通过 MCP 与 REST 为 Agent 提供只读搜索和阅读能力。</p></section>
 <nav class="toc" aria-label="目录"><strong>目录</strong><ol><li><a href="#architecture">实现方式</a></li><li><a href="#tools">工具能力</a></li><li><a href="#management">管理界面</a></li><li><a href="#connect">Agent 接入</a></li><li><a href="#roadmap">后续改进方向</a></li><li><a href="#usage">附录：调用示例</a> / <a href="#deploy">部署与维护</a> / <a href="#troubleshoot">连接排查</a></li></ol></nav>
 <section class="section" id="architecture">
-<h2>1. 实现方式</h2><p>在 Linux 上部署 Python 服务（FastAPI + MCP Python SDK），只读挂载知识目录。Agent 通过 MCP 或 REST 调用文件工具，服务直接搜索和读取文件，不建立向量索引、不调用大模型。</p>
+<h2>1. 实现方式</h2><h3>1.1 Agent 如何访问知识</h3>
+<figure class="access-figure"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 510" role="img" aria-labelledby="access-tree-title access-tree-desc" class="access-tree">
+<title id="access-tree-title">Agent 的本地与远程知识访问</title>
+<desc id="access-tree-desc">Agent 是根节点，通过实线直角连接本地工作目录、项目文档、本地资料，通过虚线直角连接远程知识库 A、B、C。远程知识通过 MCP 或 REST 只读访问。</desc>
+<defs>
+<marker id="local-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#1a1a2e"/></marker>
+<marker id="remote-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#4f46e5"/></marker>
+<g id="access-folder"><path d="M 3 13 V 60 Q 3 67 10 67 H 86 Q 93 67 93 60 V 23 Q 93 16 86 16 H 41 L 30 5 H 10 Q 3 5 3 13 Z" fill="#ffffff" stroke="#1a1a2e" stroke-width="3.5" stroke-linejoin="round"/></g>
+</defs>
+<rect x="20" y="235" width="485" height="253" rx="8" fill="#fafbfc" stroke="#c8ced9" stroke-width="1.5"/>
+<rect x="535" y="235" width="485" height="253" rx="8" fill="#fcfcff" stroke="#a5a3f5" stroke-width="1.5"/>
+<g fill="none" stroke="#1a1a2e" stroke-width="3" stroke-linejoin="miter">
+<path d="M 485 140 V 205 H 262 V 285"/>
+<path d="M 117 285 H 407"/>
+<path d="M 117 285 V 326" marker-end="url(#local-arrow)"/>
+<path d="M 262 285 V 326" marker-end="url(#local-arrow)"/>
+<path d="M 407 285 V 326" marker-end="url(#local-arrow)"/>
+</g>
+<g fill="none" stroke="#4f46e5" stroke-width="3" stroke-dasharray="9 6" stroke-linejoin="miter">
+<path d="M 555 140 V 205 H 777 V 285"/>
+<path d="M 632 285 H 922"/>
+<path d="M 632 285 V 326" marker-end="url(#remote-arrow)"/>
+<path d="M 777 285 V 326" marker-end="url(#remote-arrow)"/>
+<path d="M 922 285 V 326" marker-end="url(#remote-arrow)"/>
+</g>
+<rect x="425" y="20" width="190" height="120" rx="10" fill="#eef2ff" stroke="#4f46e5" stroke-width="3"/>
+<g fill="none" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round">
+<path d="M 520 52 V 43"/><rect x="495" y="53" width="50" height="31" rx="10"/><path d="M 490 62 V 75 M 550 62 V 75"/>
+</g><circle cx="520" cy="39" r="4" fill="#4f46e5" stroke="#1a1a2e" stroke-width="2"/><circle cx="508" cy="67" r="3" fill="#1a1a2e"/><circle cx="532" cy="67" r="3" fill="#1a1a2e"/>
+<g text-anchor="middle" font-family="'Times New Roman','Microsoft YaHei',sans-serif" fill="#1a1a2e">
+<text x="520" y="119" font-size="28" font-weight="700">Agent</text>
+<text x="350" y="190" font-size="19" font-weight="700">本地文件工具</text>
+<text x="750" y="190" font-size="19" font-weight="700" fill="#4f46e5">MCP / REST · 只读访问</text>
+<use href="#access-folder" x="69" y="343"/><use href="#access-folder" x="214" y="343"/><use href="#access-folder" x="359" y="343"/>
+<use href="#access-folder" x="584" y="343"/><use href="#access-folder" x="729" y="343"/><use href="#access-folder" x="874" y="343"/>
+<g font-size="18"><text x="117" y="437">工作目录</text><text x="262" y="437">项目文档</text><text x="407" y="437">本地资料</text><text x="632" y="437">知识库 A</text><text x="777" y="437">知识库 B</text><text x="922" y="437">知识库 C</text></g>
+<g font-size="20" font-weight="700"><text x="262" y="475">本地文件系统</text><text x="777" y="475">远程知识库文件夹</text></g>
+</g>
+</svg><figcaption>实线表示本地文件访问，虚线表示通过 MCP / REST 只读访问远程知识库；无需操作系统挂载。</figcaption></figure>
+<h3>1.2 服务端如何实现</h3><p>在 Linux 上部署 Python 服务（FastAPI + MCP Python SDK），只读挂载知识目录。Agent 通过 MCP 或 REST 调用文件工具，服务直接搜索和读取文件，不建立向量索引、不调用大模型。</p>
 <figure>
 <div class="architecture" aria-label="Agent 通过 MCP 或 REST 访问只读文件服务，服务读取知识文件，使用 SQLite 管理授权和审计。">
 <div class="arch-node"><strong>外部 Agent / 应用</strong><p>MCP Streamable HTTP<br>REST API</p></div><div class="arrow" aria-hidden="true">→</div>
