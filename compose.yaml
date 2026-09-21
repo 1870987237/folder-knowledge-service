@@ -27,5 +27,42 @@ services:
     mem_limit: 512m
     cpus: 2.0
 
+  git-sync:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "folder_kb.git_worker"]
+    environment:
+      KB_ROOT: /knowledge
+      KB_STATE_DIR: /service-data
+      KB_GIT_CREDENTIALS_DIR: /git-credentials
+      KB_GIT_TIMEOUT: ${KB_GIT_TIMEOUT:-300}
+      KB_GIT_MAX_BYTES: ${KB_GIT_MAX_BYTES:-268435456}
+    volumes:
+      - type: bind
+        source: ${KB_SOURCE_DIR:?Set KB_SOURCE_DIR to the absolute knowledge folder}
+        target: /knowledge
+        bind:
+          create_host_path: false
+      - service-data:/service-data
+      - type: bind
+        source: ${KB_GIT_CREDENTIALS_DIR:-./git-credentials}
+        target: /git-credentials
+        read_only: true
+        bind:
+          create_host_path: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3,time; d=sqlite3.connect('/service-data/management.sqlite3'); r=d.execute(\"select value from metadata where name='git_worker_heartbeat'\").fetchone(); assert r and time.time()-float(r[0])<30"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+
 volumes:
   service-data:

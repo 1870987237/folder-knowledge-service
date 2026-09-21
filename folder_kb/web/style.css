@@ -22,3 +22,4 @@
 .folder-selection{display:flex;gap:12px;align-items:baseline;font-size:12px}.folder-selection>span{color:var(--muted);flex-shrink:0}.folder-selection strong{font-weight:600;overflow-wrap:anywhere}
 .folder-actions{display:flex;justify-content:flex-end;gap:10px}.folder-picker button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 @media(max-width:480px){.folder-toolbar{flex-wrap:wrap}.folder-selection{flex-direction:column;gap:5px}.folder-list{min-height:170px}.folder-open{margin:6px;padding:6px}}
+.repo-url{overflow-wrap:anywhere;max-width:350px}.repo-error{max-width:280px;white-space:normal}.repo-actions{flex-wrap:wrap;min-width:140px}

@@ -4,7 +4,8 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, x => ({'&':'
 let token = '', page = 'overview', snapshot = null, events = [], timer = null, refreshing = false, refreshQueued = false;
 let filters = {key_id: '', library_id: '', status: '', start_time: '', end_time: ''};
 let eventCursor = '', nextEventCursor = null;
-const pages = {overview:'服务概览',libraries:'知识库',keys:'Agent 与密钥',activity:'访问活动'};
+let repositoryState = {repositories:[],worker_online:false};
+const pages = {overview:'服务概览',libraries:'知识库',repositories:'Git 仓库',keys:'Agent 与密钥',activity:'访问活动'};
 const badge = (text, kind='') => `<span class="badge ${kind}">${escapeHTML(text)}</span>`;
 const availabilityBadge = row => badge(row.availability?.message || '状态待检查', row.availability?.status === 'available' ? 'good' : 'bad');
 const empty = (title, description='') => `<div class="empty"><strong>${escapeHTML(title)}</strong>${description?`<p>${escapeHTML(description)}</p>`:''}</div>`;
@@ -37,15 +38,16 @@ function modal(title, html){$('#modal-title').textContent=title;$('#modal-body')
 async function refresh(){
   if(refreshing){refreshQueued=true;return;}refreshing=true;
   try{const currentToken=token;const [next,activity]=await Promise.all([api('/overview'),api('/activity?'+new URLSearchParams(Object.fromEntries(Object.entries({limit:100,...filters,before_id:page==='activity'?eventCursor:''}).filter(([,value])=>value!==''))))]);
-    if(!token || currentToken!==token)return;snapshot=next;events=activity.events;nextEventCursor=activity.next_before_id;$('#banner').classList.add('hidden');render();
+    const repos=await api('/repositories');
+    if(!token || currentToken!==token)return;repositoryState=repos;snapshot=next;events=activity.events;nextEventCursor=activity.next_before_id;$('#banner').classList.add('hidden');render();
   }finally{refreshing=false;if(refreshQueued){refreshQueued=false;if(token)refresh().catch(report);}}
 }
 function render(){
   if(!snapshot)return;
   $('#page-title').textContent=pages[page];
   document.querySelectorAll('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===page));
-  const action=$('#page-action');action.classList.toggle('hidden',!['libraries','keys'].includes(page));action.textContent=page==='libraries'?'+ 添加知识库':'+ 生成 Agent Key';action.onclick=()=>page==='libraries'?libraryForm():keyForm();
-  $('#view').innerHTML=page==='overview'?overview():page==='libraries'?libraryTable():page==='keys'?keysTable():activityView();
+  const action=$('#page-action');action.classList.toggle('hidden',!['libraries','keys','repositories'].includes(page));action.textContent=page==='repositories'?'+ 添加仓库':page==='libraries'?'+ 添加知识库':'+ 生成 Agent Key';action.onclick=()=>page==='repositories'?repositoryForm():page==='libraries'?libraryForm():keyForm();
+  $('#view').innerHTML=page==='repositories'?repositoriesView():page==='overview'?overview():page==='libraries'?libraryTable():page==='keys'?keysTable():activityView();
   $('#filter-key')?.addEventListener('change',event=>{filters.key_id=event.target.value;eventCursor='';refresh().catch(report);});
   $('#filter-status')?.addEventListener('change',event=>{filters.status=event.target.value;eventCursor='';refresh().catch(report);});
   for(const field of ['start_time','end_time'])$('#filter-'+field)?.addEventListener('change',event=>{filters[field]=event.target.value?new Date(event.target.value).toISOString():'';eventCursor='';refresh().catch(report);});
@@ -80,11 +82,12 @@ $('#view').addEventListener('click',async event=>{
 function libraryForm(row=null){
   modal(row?'编辑知识库':'添加知识库',`<form id="library-form"><div class="field"><label>知识库名称</label><input name="name" maxlength="80" required value="${escapeHTML(row?.name||'')}" placeholder="例如：团队知识库"></div><div class="field"><label>知识库 ID</label><input name="id" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" required ${row?'readonly':''} value="${escapeHTML(row?.id||'')}" placeholder="team-guide"><p class="hint">供 Agent 指定 library_id，创建后不可修改。</p></div><div class="field"><label for="library-path">知识文件夹</label><div class="form-row"><input id="library-path" name="path" required value="${escapeHTML(row?.path||'')}" placeholder="选择文件夹或填写相对路径"><button type="button" id="choose-dir" class="secondary">选择目录</button></div><p class="hint">只能注册已挂载范围内的目录；“.” 表示整个挂载根目录。</p></div><label class="check"><input name="enabled" type="checkbox" ${!row||row.enabled?'checked':''}>启用知识库</label>${row?'<p class="hint">更换目录会影响已授权给该知识库的全部 Key。</p>':''}<p id="form-error" class="error"></p><div class="modal-actions"><button class="primary" type="submit">保存知识库</button></div></form>`);
   $('#choose-dir').onclick=()=>directoryBrowser();
+  if(row?.repository){$('#library-path').readOnly=true;$('#choose-dir').disabled=true;$('#choose-dir').textContent='Git 管理';}
   $('#library-form').onsubmit=async event=>{event.preventDefault();const data=new FormData(event.target);const button=event.submitter;button.disabled=true;
     try{await api('/libraries'+(row?'/'+row.id:''),{method:row?'PUT':'POST',body:JSON.stringify({id:data.get('id'),name:data.get('name'),path:data.get('path'),enabled:data.has('enabled')})});$('#modal').close();await refresh();toast('知识库配置已生效');}catch(error){$('#form-error').textContent=error.message;}finally{button.disabled=false;}};
 }
-function directoryBrowser(){
-  const form=$('#library-form'),pathInput=form.querySelector('[name=path]'),title=$('#modal-title').textContent;
+function directoryBrowser(form=$('#library-form'),pathInput=form.querySelector('[name=path]')){
+  const title=$('#modal-title').textContent;
   const picker=document.createElement('section');picker.className='folder-picker';picker.setAttribute('aria-label','选择知识文件夹');
   const folderIcon='<svg class="folder-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9H3V7Z" fill="currentColor" fill-opacity=".14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
   picker.innerHTML=`<div class="folder-toolbar"><button type="button" class="secondary compact" data-up aria-label="返回上一级">↑ 上一级</button><nav class="folder-crumbs" aria-label="当前目录"></nav></div><input type="search" class="folder-filter" placeholder="筛选已加载的文件夹" aria-label="筛选文件夹"><div class="folder-location"></div><div class="folder-list" aria-label="文件夹列表"></div><button type="button" class="folder-more secondary compact hidden">加载更多</button><p class="folder-error error hidden" role="alert"></p><div class="folder-footer"><div class="folder-selection" aria-live="polite"><span>已选文件夹</span><strong></strong></div><div class="folder-actions"><button type="button" class="secondary" data-cancel>取消</button><button type="button" class="primary" data-confirm>使用此文件夹</button></div></div>`;

@@ -262,7 +262,35 @@ class KeyGrantsInput(BaseModel):
     library_ids: list[str] = Field(max_length=64)
 
 
+class RepositoryInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(min_length=1, max_length=80)
+    url: str = Field(default='', max_length=2048)
+    branch: str = Field(default='', max_length=200)
+    import_path: str | None = Field(default=None, max_length=1024)
+    credential: str = Field(default='', max_length=64)
+    interval_seconds: int = Field(default=0, ge=0, le=2592000)
+
+
+class RepositorySettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(min_length=1, max_length=80)
+    credential: str = Field(default='', max_length=64)
+    interval_seconds: int = Field(default=0, ge=0, le=2592000)
+    enabled: bool = True
+
+
+class RepositoryBinding(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    library_id: str = Field(min_length=1, max_length=64)
+    name: str = Field(min_length=1, max_length=80)
+    subpath: str = Field(default='.', min_length=1, max_length=1024)
+    existing: bool = False
+
+
 def add_admin_routes(app: FastAPI, registry: Registry):
+    from .repositories import RepositoryCatalog
+    repositories = RepositoryCatalog(registry)
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')
 
@@ -278,6 +306,34 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     @app.get('/admin/api/directories')
     def directories(path: str = '.', offset: int = 0):
         return registry.directories(path, offset)
+
+    @app.get('/admin/api/repositories')
+    def repository_list():
+        return repositories.list()
+
+    @app.post('/admin/api/repositories', status_code=201)
+    def repository_create(value: RepositoryInput):
+        return repositories.create(**value.model_dump())
+
+    @app.put('/admin/api/repositories/{repository_id}')
+    def repository_update(repository_id: str, value: RepositorySettings):
+        return repositories.update(repository_id, **value.model_dump())
+
+    @app.post('/admin/api/repositories/{repository_id}/sync', status_code=202)
+    def repository_sync(repository_id: str):
+        return repositories.enqueue(repository_id)
+
+    @app.get('/admin/api/repositories/{repository_id}/jobs')
+    def repository_jobs(repository_id: str):
+        return repositories.jobs(repository_id)
+
+    @app.post('/admin/api/repositories/{repository_id}/libraries')
+    def repository_bind(repository_id: str, value: RepositoryBinding):
+        return repositories.bind(repository_id, **value.model_dump())
+
+    @app.delete('/admin/api/repositories/{repository_id}/libraries/{library_id}')
+    def repository_unbind(repository_id: str, library_id: str):
+        return repositories.unbind(repository_id, library_id)
 
     @app.post('/admin/api/libraries', status_code=201)
     def create_library(value: LibraryInput):

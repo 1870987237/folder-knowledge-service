@@ -115,6 +115,9 @@ class Registry:
                 raise KnowledgeError('duplicate_library', 'Library ID already exists', 409)
             if not create and not previous:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
+            binding = db.execute('SELECT 1 FROM repository_libraries WHERE library_id=?', (library_id,)).fetchone()
+            if binding and path != previous['path']:
+                raise KnowledgeError('git_managed_path', '此知识库由 Git 仓库管理，请在 Git 仓库页调整或解除关联', 409)
             # Metadata and enable/disable remain editable during an outage.
             if previous and path == previous['path']:
                 relative = previous['path']
@@ -294,6 +297,11 @@ class Registry:
         libraries = [dict(row, availability=self.availability(row)) for row in libraries]
         with self.active_mutex:
             active = list(self.active.values())
+        with self.store.transaction() as db:
+            bindings = {r['library_id']: dict(r) for r in db.execute('SELECT * FROM repository_libraries')}
+        for library in libraries:
+            if library['id'] in bindings:
+                library['repository'] = bindings[library['id']]
         return {'libraries': libraries, 'keys': keys, 'active_requests': active,
                 'metrics': metrics, 'server_time': now()}
 

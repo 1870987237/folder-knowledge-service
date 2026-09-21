@@ -93,8 +93,13 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version != 1:
+            elif version not in (1, 2):
                 raise ValueError('Unsupported management database version')
+            if version in (0, 1):
+                from .repositories import REPOSITORY_SCHEMA
+                for statement in REPOSITORY_SCHEMA:
+                    db.execute(statement)
+                db.execute('PRAGMA user_version=2')
             db.commit()
 
     @contextmanager
