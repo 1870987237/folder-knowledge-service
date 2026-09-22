@@ -147,9 +147,11 @@ class Inbox:
                                           'updated_at', 'status', 'attempts', 'lease_until')}
         value['submitted_by'] = {'type': 'agent_key', 'id': row['key_id']}
         value['result'] = json.loads(row['result']) if row['result'] else None
+        material = json.loads(row['payload'])
+        value['title'], value['kind'] = material['title'], material['kind']
         # A processing conclusion does not attest publication.
         if include_material:
-            value['material'] = json.loads(row['payload'])
+            value['material'] = material
         return value
 
     @staticmethod
