@@ -65,7 +65,7 @@ class Material(StrictModel):
     schema_version: Literal['1.0'] = '1.0'
     submission_id: str = Field(min_length=1, max_length=128, pattern=r'^[A-Za-z0-9][A-Za-z0-9._:-]*$')
     library_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-z0-9][a-z0-9_-]*$')
-    kind: Literal['knowledge', 'correction', 'observation', 'memory'] = 'knowledge'
+    kind: Literal['new_content', 'correction', 'observation'] = 'new_content'
     title: str = Field(default='', max_length=200)
     content: Content
     source: Source | None = None

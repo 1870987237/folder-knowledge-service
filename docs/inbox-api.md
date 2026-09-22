@@ -34,13 +34,15 @@ REST 的请求体与 MCP 的 `material` 参数使用同一 JSON：
 | `schema_version` | 当前仅接受 `1.0`，省略时默认该值 |
 | `submission_id` | 必填；调用方生成，重试沿用。1～128 字符，字母数字开头，允许字母、数字、`._:-` |
 | `library_id` | 必填；目标知识库 ID，不是文件路径 |
-| `kind` | `knowledge` 新知识、`correction` 纠错、`observation` 观察记录、`memory` 记忆；默认 knowledge，仅表示材料用途 |
+| `kind` | `new_content` 新增内容、`correction` 纠错、`observation` 观察记录；默认 new_content，仅表示提交意图，不触发不同处理流程 |
 | `title` | 可选，最多 200 字符 |
 | `content` | 必填；format 为 text / markdown，默认 markdown；text 不能为空白，最多 32 KiB UTF-8，保留正文原始空白 |
 | `source` | 可选；reference 最多 2048 字符，description 最多 1024 字符；只存引用，不访问链接或读取路径 |
 | `context` | 可选；最多 16 个字符串键值对，键 1～64 字符，值最多 1024 字符；描述场景、版本等条件 |
 
 服务端生成记录 `id`、`submitted_by`、接收/更新时间、处理状态；客户端不能指定这些字段。来源和场景属于提交者声明，未经验证。未知字段拒绝；不支持文件上传或附件内容。格式不要求知识库把正式知识组织成 QA、事实表或任何固定目录。
+
+新增知识和新增记忆均使用 `new_content`；内容最终如何组织，由目标知识库及其模板决定，不由收件箱类别决定。
 
 规范化材料最多 48 KiB UTF-8；HTTP 请求体（包括 JSON 包装）最多 64 KiB。完整机器可读约束见 [JSON Schema](schemas/material-v1.schema.json)；UTF-8 字节上限另由服务端校验。MCP 通过 tools/list 发布参数 schema，REST OpenAPI 在 `/openapi.json`（管理员认证）。
 

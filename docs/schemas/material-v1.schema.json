@@ -68,12 +68,11 @@
       "type": "string"
     },
     "kind": {
-      "default": "knowledge",
+      "default": "new_content",
       "enum": [
-        "knowledge",
+        "new_content",
         "correction",
-        "observation",
-        "memory"
+        "observation"
       ],
       "title": "Kind",
       "type": "string"

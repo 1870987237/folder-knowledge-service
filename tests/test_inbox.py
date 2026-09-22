@@ -152,7 +152,7 @@ def test_claim_lease_retry_completion_and_audit(env):
 @pytest.mark.parametrize('patch', [
     {'schema_version': '2.0'}, {'content': {'text': ' '}}, {'content': {'text': '中' * 11000}},
     {'submitted_by': 'admin'}, {'attachments': ['/etc/passwd']}, {'context': {'a': 'x' * 1025}},
-    {'submission_id': '../evil'}, {'kind': 'execute'},
+    {'submission_id': '../evil'}, {'kind': 'execute'}, {'kind': 'knowledge'}, {'kind': 'memory'},
 ])
 def test_invalid_envelopes(env, patch):
     app, client, key, _ = env
