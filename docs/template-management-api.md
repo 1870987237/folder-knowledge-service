@@ -33,7 +33,7 @@ curl -X POST "$BASE_URL/admin/api/templates" \
   -H "Content-Type: application/json" \
   --data-binary @data/template-upload/registration.json
 
-curl -X PUT "$BASE_URL/admin/api/templates/reference-docs/versions/0.1.0/package" \
+curl -X PUT "$BASE_URL/admin/api/templates/reference-docs/versions/0.2.0/package" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/zip" \
   --data-binary @data/template-upload/package.zip
@@ -45,14 +45,14 @@ curl -X PUT "$BASE_URL/admin/api/templates/reference-docs/versions/0.1.0/package
 |---|---|
 | id / version | 分别标识模板及固定版本；允许字符见 OpenAPI，不允许路径跳转 |
 | name / description / maintainer | 名称、说明及开发者 |
-| protocol_version | 当前固定 1.0 |
+| protocol_version | 支持 1.0 / 1.1；显式工作范围绑定要求 1.1 |
 | source | type=uploaded-zip，archive_sha256 为 ZIP 文件摘要 |
 | capabilities | initialize / update，至少一个且不可重复 |
 | entrypoints | 与 capabilities 一一对应的 argv 数组；本版采用 `["python","program.py","update"]` 形式，脚本必须在包内 |
 | runtime | type 为 container 或 trusted-python-demo；container 声明必须提供按 SHA-256 固定的镜像；另含 timeout_seconds、memory_mb、cpus |
 | config_schema | JSON Schema Draft 2020-12，根类型必须为 object；允许本地引用，不访问远程 Schema |
 | required_secrets | 所需凭据名称，不填写密钥。本版可登记，但包含所需凭据的模板暂不能绑定 |
-| output | directory 固定 knowledge；required_files 声明应存在的候选文件，默认 INDEX.md，执行阶段再校验 |
+| output | 1.0 的 directory 为 knowledge，1.1 为 workspace；required_files 声明应存在的候选文件，默认 INDEX.md，执行阶段再校验 |
 
 成功注册返回 201，status=registered。相同 ID+版本及相同规范化元数据重试返回 duplicate=true；改变任何元数据需使用新版本，否则 409。注册后没有编辑旧版本的接口。
 
@@ -77,7 +77,7 @@ installed 表示该包曾完成安装，不等于程序可运行。绑定时会�
 curl -X PUT "$BASE_URL/admin/api/libraries/team-guide/template" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"template_id":"reference-docs","template_version":"0.1.0","config":{}}'
+  -d '{"template_id":"reference-docs","template_version":"0.2.0","config":{}}'
 ```
 
 绑定要求：
@@ -87,7 +87,43 @@ curl -X PUT "$BASE_URL/admin/api/libraries/team-guide/template" \
 - config 通过开发者声明的 Schema；不自动填充 Schema 的 default，不修改配置。
 - required_secrets 为空；凭据管理完成后再开放依赖密钥的模板绑定。
 
-不同知识库持有独立的 config。同一知识库再次 PUT 可更换版本或配置，但不会立即更新知识；没有自动升级到最新版本的行为。元数据中不要填写密钥，实际凭据注入后续单独实现。
+不同工作范围持有独立的 config；共享同一工作范围的检索视图必须使用相同模板版本、配置及排除规则。同一知识库再次 PUT 可更换版本或配置，但不会立即更新知识；没有自动升级到最新版本的行为。元数据中不要填写密钥，实际凭据注入后续单独实现。
+
+### 单独配置工作根与检索目录
+
+绑定请求可增加 workspace，例如现有库只挂载 KB_ROOT/repo/knowledge，但更新需要整个 repo：
+
+```json
+{
+  "template_id": "reference-docs",
+  "template_version": "0.2.0",
+  "config": {},
+  "workspace": {
+    "type": "local",
+    "root_path": "repo",
+    "knowledge_subpath": "knowledge",
+    "exclude_paths": ["temporary"]
+  }
+}
+```
+
+Git 托管库的 workspace 则使用：
+
+```json
+{
+  "type": "git",
+  "repository_id": "已登记的仓库ID",
+  "workspace_subpath": ".",
+  "knowledge_subpath": "knowledge",
+  "exclude_paths": []
+}
+```
+
+root_path 必须在 KB_ROOT 内；Git 库必须对应现有 repository_libraries 关联，且已有发布版本。workspace_subpath 相对仓库根，knowledge_subpath 相对工作根，二者组合必须等于当前检索映射。平台在启动任务前重新解析，不固定保存某次发布的绝对路径。
+
+GET 绑定返回 workspace 和 workspace_key。省略 workspace 时只使用原挂载目录作为工作根，knowledge_subpath 为“.”。修改挂载后需确认模板工作配置；当前配置不匹配则拒绝生成快照。共同工作范围使用不同模板/配置/排除规则返回 workspace_binding_conflict；切换共同模板时须一致调整所有视图，当前可先解除相关绑定再重新绑定。
+
+默认排除项、完整候选与删除声明见[工作目录协议](template-protocol.md)。当前不实现任务互斥调度或自动发布。
 
 ## 5. 查询与解除
 
@@ -109,4 +145,4 @@ python -m folder_kb.template_demo
 
 演示已复用同一 TemplateCatalog 注册、安装和绑定逻辑，仍在全新独立目录中运行，不操作正在运行的服务。
 
-下一步实现独立 worker 与容器执行，补齐凭据引用、资源限制、任务状态恢复、当前授权检查以及候选发布。本版继续使用数据库 v4，无新增迁移。
+下一步实现独立 worker 与容器执行，补齐凭据引用、资源限制、任务状态恢复、当前授权检查以及候选发布。当前使用数据库 v5，旧绑定迁移后不自动扩大工作范围，HTTP 服务与 Git worker 需同步升级。

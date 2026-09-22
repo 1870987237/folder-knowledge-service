@@ -93,7 +93,7 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version not in (1, 2, 3, 4):
+            elif version not in (1, 2, 3, 4, 5):
                 raise ValueError('Unsupported management database version')
             if version in (0, 1):
                 from .repositories import REPOSITORY_SCHEMA
@@ -110,6 +110,12 @@ class SqliteStore:
                 for statement in TEMPLATE_SCHEMA:
                     db.execute(statement)
                 db.execute('PRAGMA user_version=4')
+            if version < 5:
+                columns = {row['name'] for row in db.execute('PRAGMA table_info(library_templates)')}
+                if 'workspace_json' not in columns:
+                    db.execute('ALTER TABLE library_templates ADD COLUMN workspace_json TEXT')
+                    db.execute('ALTER TABLE library_templates ADD COLUMN workspace_key TEXT')
+                db.execute('PRAGMA user_version=5')
             db.commit()
 
     @contextmanager

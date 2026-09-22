@@ -31,6 +31,8 @@ flowchart LR
 
 [设计、目录结构、程序协议和实现顺序](docs/template-protocol.md)。当前已提供[模板注册、ZIP 安装与绑定 API](docs/template-management-api.md)，使用现有管理员令牌；安装及绑定不运行代码。本地演示仅执行可信参考程序，容器隔离、调度、凭据绑定、发布和 UI 尚未实现。
 
+模板可处理比检索目录更大的工作范围：例如工作快照包含 knowledge/、sources/、metadata/，但 Agent 只读取 knowledge/。范围须由管理员显式绑定，辅助文件会随候选保留；详见[工作目录协议](docs/template-protocol.md)。
+
 ## 提供的能力
 
 | MCP 工具 | REST GET | 用途 |
@@ -297,7 +299,7 @@ SQLite 使用 Python 标准库，无需单独部署数据库。启用 WAL、外�
 | `inbox_grants` | Key 按知识库配置的材料提交权限 |
 | `inbox_items` | 标准材料正文、提交身份、幂等信息、领取租约及处理结果 |
 | `template_versions` | 模板版本的平台注册信息及程序摘要 |
-| `library_templates` | 知识库与模板版本、实例配置的绑定 |
+| `library_templates` | 知识库与模板版本、实例配置、工作范围和检索子目录的绑定 |
 | `template_jobs` | 模板处理任务、基准版本及候选结果 |
 
 统计只计入已认证并进入执行的知识操作；认证失败、协议初始化和参数校验失败不计入工具调用统计。日志不保存搜索词、完整正文或令牌。历史记录不再受最近 7 个日志文件限制，默认不自动清理。管理 API `/admin/api/activity` 支持 `key_id`、`library_id`、`status`（`ok/error/partial`）、带时区的 `start_time/end_time` 和 `limit`（最多 200）。将返回的 `next_before_id` 传为 `before_id` 可继续查询更早记录。
@@ -314,7 +316,7 @@ docker compose cp knowledge:/service-data/backups/management-backup.sqlite3 ./ba
 
 备份文件名应每次不同，命令拒绝覆盖已有文件。恢复时停服，将备份放入空的管理数据目录并命名为 `management.sqlite3`，确保容器用户可读写，再启动。不要在运行中只复制主数据库文件，也不要将旧 WAL/SHM 与恢复文件混用。知识文档另行备份；明文 Key 不可从数据库恢复，遗失时应撤销重建。
 
-已有 SQLite 在启动时自动迁移，保留知识库及 Key。当前数据库为 v4（增加模板元数据表），HTTP 服务与 Git worker 需一起升级；旧程序不能打开 v4 数据库。更新前备份数据库；恢复时同时停止 `knowledge` 与 `git-sync`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
+已有 SQLite 在启动时自动迁移，保留知识库及 Key。当前数据库为 v5（绑定增加工作范围字段），HTTP 服务与 Git worker 需一起升级；旧程序不能打开 v5 数据库。更新前备份数据库；恢复时同时停止 `knowledge` 与 `git-sync`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
 
 数据卷应位于服务器本地磁盘，不放在 NFS/SMB 共享文件系统上。当前采用一个 HTTP 服务进程和一个独立 Git 同步进程；操作系统锁阻止重复同步进程启动。正在处理的请求保存在 HTTP 进程内存，未实现多副本状态汇总。
 

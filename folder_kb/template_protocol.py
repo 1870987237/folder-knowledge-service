@@ -9,15 +9,15 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
-import shutil
 import subprocess
 import sys
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .core import is_link
 from .inbox import Material
+from .workspaces import scoped_path, copy_workspace, workspace_digest, workspace_files, excluded
 
 
 class Contract(BaseModel):
@@ -36,13 +36,34 @@ class Record(Contract):
 
 
 class JobRequest(Contract):
-    protocol_version: Literal["1.0"] = "1.0"
+    protocol_version: Literal["1.1"] = "1.1"
     job_id: str
     operation: Literal["initialize", "update"]
     library_id: str
     base_version: str
     template: TemplateRef
     config: dict = Field(default_factory=dict)
+    knowledge_subpath: str = "."
+    workspace_key: str = ""
+    source_version: str | None = None
+    exclude_paths: list[str] = Field(default_factory=list, max_length=64)
+
+    @field_validator("knowledge_subpath")
+    @classmethod
+    def safe_subpath(cls, value):
+        scoped_path(value)
+        if excluded(value):
+            raise ValueError("Retrieval path is excluded")
+        return value
+
+    @field_validator("exclude_paths")
+    @classmethod
+    def safe_exclusions(cls, values):
+        for value in values:
+            scoped_path(value)
+            if value == ".":
+                raise ValueError("Cannot exclude the entire workspace")
+        return values
 
 
 class MaterialResult(Contract):
@@ -53,12 +74,16 @@ class MaterialResult(Contract):
 
 
 class JobResult(Contract):
-    protocol_version: Literal["1.0"]
+    protocol_version: Literal["1.1"]
     job_id: str
     library_id: str
     base_version: str
     template: TemplateRef
-    candidate_path: Literal["knowledge"]
+    candidate_path: Literal["workspace"]
+    knowledge_subpath: str
+    workspace_key: str
+    source_version: str | None
+    deleted_paths: list[str] = Field(default_factory=list, max_length=2000)
     summary: str = Field(min_length=1, max_length=4000)
     materials: list[MaterialResult] = Field(max_length=100)
 
@@ -89,22 +114,24 @@ def write_json(path: Path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def prepare_job(job: Path, request: JobRequest, records: list[Record], knowledge: Path):
+def prepare_job(job: Path, request: JobRequest, records: list[Record], workspace: Path):
     if len(records) > 100 or len({r.id for r in records}) != len(records):
         raise ValueError("A job requires at most 100 uniquely identified records")
     if any(r.material.library_id != request.library_id for r in records):
         raise ValueError("Cross-library material is not allowed")
     if request.operation == "initialize" and records:
         raise ValueError("Initialization does not consume materials")
-    if tree_digest(knowledge) != request.base_version:
+    if excluded(request.knowledge_subpath, request.exclude_paths):
+        raise ValueError("Retrieval directory is excluded")
+    if workspace_digest(workspace, request.exclude_paths) != request.base_version:
         raise ValueError("Base version changed before snapshot")
     job.mkdir(parents=True, exist_ok=False)
     inputs = job / "input"
     inputs.mkdir()
     (job / "work").mkdir()
     (job / "output").mkdir()
-    shutil.copytree(knowledge, inputs / "knowledge")
-    if tree_digest(inputs / "knowledge") != request.base_version:
+    copy_workspace(workspace, inputs / "workspace", request.exclude_paths)
+    if workspace_digest(inputs / "workspace") != request.base_version:
         raise ValueError("Knowledge changed while snapshotting")
     write_json(inputs / "request.json", request.model_dump())
     (inputs / "materials.jsonl").write_text(
@@ -118,14 +145,28 @@ def validate_result(job: Path, request: JobRequest, records: list[Record]) -> Jo
     if result_file.stat().st_size > 1024 * 1024:
         raise ValueError("Result exceeds limit")
     result = JobResult.model_validate_json(result_file.read_text(encoding="utf-8"))
-    for field in ("job_id", "library_id", "base_version", "template"):
+    for field in ("job_id", "library_id", "base_version", "template", "knowledge_subpath", "workspace_key", "source_version"):
         if getattr(result, field) != getattr(request, field):
             raise ValueError("Result identity/base version does not match request")
     ids = [r.record_id for r in result.materials]
     if len(ids) != len(set(ids)) or set(ids) != {r.id for r in records}:
         raise ValueError("Result must account for each input record exactly once")
-    knowledge = output / "knowledge"
-    tree_digest(knowledge)
+    workspace = output / "workspace"
+    tree_digest(workspace)
+    for path in workspace.rglob('*'):
+        if excluded(path.relative_to(workspace).as_posix(), request.exclude_paths):
+            raise ValueError("Candidate reintroduced an excluded path")
+    original = job / "input/workspace"
+    before = {p.relative_to(original).as_posix() for p in workspace_files(original, include_dirs=True)}
+    after = {p.relative_to(workspace).as_posix() for p in workspace_files(workspace, include_dirs=True)}
+    for deleted in result.deleted_paths:
+        scoped_path(deleted)
+        if deleted == '.' or deleted not in before or deleted in after:
+            raise ValueError("Invalid or inconsistent declared deletion")
+    undeclared = {p for p in before - after if not any(p == d or p.startswith(d + '/') for d in result.deleted_paths)}
+    if undeclared:
+        raise ValueError("Candidate dropped workspace files without declaring deletion")
+    knowledge = workspace / request.knowledge_subpath
     if not (knowledge / "INDEX.md").is_file():
         raise ValueError("Candidate requires INDEX.md")
     for item in result.materials:
@@ -133,8 +174,8 @@ def validate_result(job: Path, request: JobRequest, records: list[Record]) -> Jo
             relative = PurePosixPath(reference)
             if not reference or relative.is_absolute() or ".." in relative.parts or "\\" in reference or ":" in reference:
                 raise ValueError("Invalid output reference")
-            path = (knowledge / reference).resolve()
-            if not path.is_relative_to(knowledge.resolve()) or not path.is_file():
+            path = (workspace / reference).resolve()
+            if not path.is_relative_to(workspace.resolve()) or not path.is_file():
                 raise ValueError("Output reference does not exist within candidate")
     return result
 

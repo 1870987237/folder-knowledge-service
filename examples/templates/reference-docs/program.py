@@ -18,8 +18,10 @@ def main():
         raise ValueError("Operation does not match request")
     args.work.mkdir(exist_ok=True)
     # The platform supplies a new, empty output directory for every attempt.
-    destination = args.output / "knowledge"
-    shutil.copytree(args.input / "knowledge", destination)
+    workspace = args.output / "workspace"
+    shutil.copytree(args.input / "workspace", workspace)
+    destination = workspace / request["knowledge_subpath"]
+    destination.mkdir(parents=True, exist_ok=True)
     records = [json.loads(line) for line in
                (args.input / "materials.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
     notes = destination / "demo-inbox"
@@ -40,15 +42,17 @@ def main():
         (destination / relative).write_text(text, encoding="utf-8")
         results.append({"record_id": record["id"], "outcome": "partially_accepted",
                         "summary": "已整理为候选审核材料，未验证事实或替换已有知识。",
-                        "references": [relative]})
+                        "references": [(Path(request["knowledge_subpath"]) / relative).as_posix()]})
     (notes / "INDEX.md").write_text(
         "# 测试材料索引\n\n" + "".join("- [" + p.stem + "](" + p.name + ")\n"
            for p in sorted(notes.glob("*.md")) if p.name != "INDEX.md"), encoding="utf-8")
     if not (destination / "INDEX.md").exists():
         (destination / "INDEX.md").write_text("# 知识目录\n\n- [待审核材料](demo-inbox/INDEX.md)\n", encoding="utf-8")
-    result = {"protocol_version": "1.0", "job_id": request["job_id"],
+    result = {"protocol_version": "1.1", "job_id": request["job_id"],
               "library_id": request["library_id"], "base_version": request["base_version"],
-              "template": request["template"], "candidate_path": "knowledge",
+              "template": request["template"], "candidate_path": "workspace",
+              "knowledge_subpath": request["knowledge_subpath"], "workspace_key": request["workspace_key"],
+              "source_version": request["source_version"], "deleted_paths": [],
               "summary": "测试模板已生成候选目录；尚未审核或发布。", "materials": results}
     (args.output / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
