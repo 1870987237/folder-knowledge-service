@@ -98,6 +98,9 @@ def test_idempotency_concurrency_restart_backup_and_outage(env, tmp_path):
     other_id = envelope(submission_id='feedback-002')
     assert client.post(URL, headers=auth(key['token']), json=other_id).status_code == 202
     page = client.get('/admin/api/inbox?limit=1', headers=auth(ADMIN)).json()
+    assert page['items'][0]['title'] == 'Corrections'
+    assert page['items'][0]['kind'] == 'correction'
+    assert 'material' not in page['items'][0]
     next_page = client.get('/admin/api/inbox', headers=auth(ADMIN), params={'after': page['next_after']}).json()
     assert len(next_page['items']) == 1 and next_page['items'][0]['id'] != page['items'][0]['id']
     reopened = create_app(settings)
