@@ -25,6 +25,12 @@ flowchart LR
 
 [标准内容、授权与调用说明](docs/inbox-api.md) · [材料 JSON Schema](docs/schemas/material-v1.schema.json)。本版提供接口，管理 UI、LLM 整理和自动更新程序尚未接入。
 
+## 知识库模板原型
+
+模板元数据由平台保存，程序由知识库开发者提供并在平台资源上运行。已提供不调用大模型的测试模板，可执行 `python -m folder_kb.template_demo`，在独立演示目录跑通注册、绑定、收件箱材料处理及候选知识生成。正式知识不会自动更新。
+
+[设计、目录结构、程序协议和实现顺序](docs/template-protocol.md)。目前是可信程序的本地协议测试，容器隔离、注册 API、调度、发布和 UI 尚未实现。
+
 ## 提供的能力
 
 | MCP 工具 | REST GET | 用途 |
@@ -290,6 +296,9 @@ SQLite 使用 Python 标准库，无需单独部署数据库。启用 WAL、外�
 | `repository_jobs` | 同步队列、结果、前后 commit 及错误 |
 | `inbox_grants` | Key 按知识库配置的材料提交权限 |
 | `inbox_items` | 标准材料正文、提交身份、幂等信息、领取租约及处理结果 |
+| `template_versions` | 模板版本的平台注册信息及程序摘要 |
+| `library_templates` | 知识库与模板版本、实例配置的绑定 |
+| `template_jobs` | 模板处理任务、基准版本及候选结果 |
 
 统计只计入已认证并进入执行的知识操作；认证失败、协议初始化和参数校验失败不计入工具调用统计。日志不保存搜索词、完整正文或令牌。历史记录不再受最近 7 个日志文件限制，默认不自动清理。管理 API `/admin/api/activity` 支持 `key_id`、`library_id`、`status`（`ok/error/partial`）、带时区的 `start_time/end_time` 和 `limit`（最多 200）。将返回的 `next_before_id` 传为 `before_id` 可继续查询更早记录。
 
@@ -305,7 +314,7 @@ docker compose cp knowledge:/service-data/backups/management-backup.sqlite3 ./ba
 
 备份文件名应每次不同，命令拒绝覆盖已有文件。恢复时停服，将备份放入空的管理数据目录并命名为 `management.sqlite3`，确保容器用户可读写，再启动。不要在运行中只复制主数据库文件，也不要将旧 WAL/SHM 与恢复文件混用。知识文档另行备份；明文 Key 不可从数据库恢复，遗失时应撤销重建。
 
-已有 SQLite 在启动时自动迁移，保留知识库及 Key。收件箱使用数据库 v3，HTTP 服务与 Git worker 需一起升级；旧程序不能打开 v3 数据库。更新前备份数据库；恢复时同时停止 `knowledge` 与 `git-sync`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
+已有 SQLite 在启动时自动迁移，保留知识库及 Key。当前数据库为 v4（增加模板元数据表），HTTP 服务与 Git worker 需一起升级；旧程序不能打开 v4 数据库。更新前备份数据库；恢复时同时停止 `knowledge` 与 `git-sync`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
 
 数据卷应位于服务器本地磁盘，不放在 NFS/SMB 共享文件系统上。当前采用一个 HTTP 服务进程和一个独立 Git 同步进程；操作系统锁阻止重复同步进程启动。正在处理的请求保存在 HTTP 进程内存，未实现多副本状态汇总。
 
