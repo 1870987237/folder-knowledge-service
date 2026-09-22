@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
-import shutil
 import uuid
 
 from .inbox import Completion, Inbox, Material, Release
 from .management import Registry
 from .storage import now
 from .template_protocol import JobRequest, Record, TemplateRef, prepare_job, run_reference, tree_digest, write_json
+from .template_package import build_package
+from .templates import TemplateCatalog, TemplateRegistration, TemplateBinding
 
 
 
@@ -31,16 +33,14 @@ def run_demo(output: Path) -> dict:
     definition = json.loads((examples / "template-platform-config.json").read_text(encoding="utf-8"))
     source = examples / "templates/reference-docs"
     package = state / "templates" / definition["id"] / definition["version"] / "package"
-    package.parent.mkdir(parents=True)
-    shutil.copytree(source, package)
-    template = TemplateRef(id=definition["id"], version=definition["version"], package_sha256=tree_digest(package))
-    write_json(package.parent / "manifest.json", template.model_dump())
-    definition["source"] = {"type": "bundled-reference", "package_sha256": template.package_sha256}
-    with registry.store.transaction(write=True) as db:
-        db.execute("INSERT INTO template_versions VALUES (?,?,?,?,?)",
-                   (template.id, template.version, json.dumps(definition, ensure_ascii=False), template.package_sha256, now()))
-        db.execute("INSERT INTO library_templates VALUES (?,?,?,?)",
-                   ("demo-library", template.id, template.version, "{}"))
+    archive = build_package(source)
+    definition["source"] = {"type": "uploaded-zip", "archive_sha256": hashlib.sha256(archive).hexdigest()}
+    catalog = TemplateCatalog(registry)
+    catalog.register(TemplateRegistration.model_validate(definition))
+    installed = catalog.install(definition["id"], definition["version"], archive)
+    template = TemplateRef(id=definition["id"], version=definition["version"],
+                           package_sha256=installed["package_sha256"])
+    catalog.bind("demo-library", TemplateBinding(template_id=template.id, template_version=template.version))
 
     empty = demo / "empty-base"
     empty.mkdir()
