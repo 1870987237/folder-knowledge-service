@@ -114,16 +114,21 @@ class AccessGuard:
                 error = JSONResponse({'error': 'unauthorized'}, 401, headers={'WWW-Authenticate': 'Bearer'})
         if error:
             return await error(scope, receive, send)
-        if path.startswith(('/api/v1/inbox/', '/admin/api/inbox')) and scope['method'] in ('POST', 'PUT'):
+        inbox_body = path.startswith(('/api/v1/inbox/', '/admin/api/inbox'))
+        template_body = ((path == '/admin/api/templates') or
+                         (path.startswith('/admin/api/libraries/') and path.endswith('/template')))
+        if (inbox_body or template_body) and scope['method'] in ('POST', 'PUT'):
             # Bound streamed bodies as well as Content-Length before JSON parsing.
             body = bytearray()
             while True:
                 message = await receive()
                 if message['type'] == 'http.disconnect':
                     return
-                body.extend(message.get('body', b''))
-                if len(body) > 65536:
-                    return await JSONResponse({'error': 'material_too_large'}, 413)(scope, receive, send)
+                chunk = message.get('body', b'')
+                if len(body) + len(chunk) > 65536:
+                    code = 'material_too_large' if inbox_body else 'request_too_large'
+                    return await JSONResponse({'error': code}, 413)(scope, receive, send)
+                body.extend(chunk)
                 if not message.get('more_body', False):
                     break
             original_receive = receive
@@ -336,6 +341,8 @@ class RepositoryBinding(BaseModel):
 
 def add_admin_routes(app: FastAPI, registry: Registry):
     from .repositories import RepositoryCatalog
+    from .templates import add_template_routes
+    add_template_routes(app, registry)
     repositories = RepositoryCatalog(registry)
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')
