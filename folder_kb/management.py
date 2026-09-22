@@ -184,8 +184,11 @@ class Registry:
             self.validate_grants(db, library_ids)
             previous = key['library_ids']
             key['library_ids'] = sorted(set(library_ids))
-            db.execute('DELETE FROM key_libraries WHERE key_id=?', (kid,))
-            db.executemany('INSERT INTO key_libraries VALUES (?,?)', [(kid, lid) for lid in key['library_ids']])
+            # Preserve dependent grants for unchanged libraries; removed grants cascade.
+            db.executemany('DELETE FROM key_libraries WHERE key_id=? AND library_id=?',
+                           [(kid, lid) for lid in set(previous) - set(key['library_ids'])])
+            db.executemany('INSERT OR IGNORE INTO key_libraries VALUES (?,?)',
+                           [(kid, lid) for lid in key['library_ids']])
             self.store.event(db, {'kind': 'admin', 'action': 'key_grants_update', 'key_id': kid,
                                  'previous_library_ids': previous, 'library_ids': key['library_ids'], 'status': 'ok'})
             return self.public_key(key)
