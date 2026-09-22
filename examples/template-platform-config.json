@@ -1,0 +1,40 @@
+{
+  "protocol_version": "1.0",
+  "id": "reference-docs",
+  "name": "通用文档协议测试模板",
+  "description": "将材料整理为带出处的候选审核文档，不调用模型",
+  "version": "0.1.0",
+  "maintainer": "template-developer",
+  "capabilities": [
+    "initialize",
+    "update"
+  ],
+  "entrypoints": {
+    "initialize": [
+      "python",
+      "program.py",
+      "initialize"
+    ],
+    "update": [
+      "python",
+      "program.py",
+      "update"
+    ]
+  },
+  "runtime": {
+    "type": "trusted-python-demo",
+    "timeout_seconds": 30
+  },
+  "config_schema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "required_secrets": [],
+  "output": {
+    "directory": "knowledge",
+    "required_files": [
+      "INDEX.md"
+    ]
+  }
+}
