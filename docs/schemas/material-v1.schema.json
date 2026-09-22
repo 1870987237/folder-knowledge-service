@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Content": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "default": "markdown",
+          "enum": [
+            "text",
+            "markdown"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 32768,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Content",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "reference": {
+          "default": "",
+          "maxLength": 2048,
+          "title": "Reference",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "maxLength": 1024,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "submission_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+      "title": "Submission Id",
+      "type": "string"
+    },
+    "library_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "title": "Library Id",
+      "type": "string"
+    },
+    "kind": {
+      "default": "knowledge",
+      "enum": [
+        "knowledge",
+        "correction",
+        "observation",
+        "memory"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "title": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Title",
+      "type": "string"
+    },
+    "content": {
+      "$ref": "#/$defs/Content"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Source"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "context": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "maxProperties": 16,
+      "title": "Context",
+      "type": "object"
+    }
+  },
+  "required": [
+    "submission_id",
+    "library_id",
+    "content"
+  ],
+  "title": "Material",
+  "type": "object"
+}
