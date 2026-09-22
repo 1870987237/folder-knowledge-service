@@ -13,6 +13,7 @@ from .storage import now
 from .template_protocol import JobRequest, Record, TemplateRef, prepare_job, run_reference, tree_digest, write_json
 from .template_package import build_package
 from .templates import TemplateCatalog, TemplateRegistration, TemplateBinding
+from .workspaces import WorkspaceSpec, workspace_digest
 
 
 
@@ -22,11 +23,15 @@ def run_demo(output: Path) -> dict:
     demo = output.resolve() / ("run-" + uuid.uuid4().hex[:12])
     demo.mkdir(parents=True, exist_ok=False)
     root, state = demo / "knowledge", demo / "platform-data"
-    library = root / "demo-library"
+    workspace = root / "demo-library"
+    library = workspace / "knowledge"
     library.mkdir(parents=True)
     (library / "INDEX.md").write_text("# Existing knowledge\n\nDo not replace published content.\n", encoding="utf-8")
     registry = Registry(str(root), str(state))
-    registry.save_library("demo-library", "Protocol demo", "demo-library", True, create=True)
+    (workspace / "metadata").mkdir()
+    (workspace / "metadata/sources.json").write_text('{"source":"keep this auxiliary data"}', encoding="utf-8")
+    (workspace / ".env").write_text("EXAMPLE_SECRET=excluded-demo-placeholder", encoding="utf-8")
+    registry.save_library("demo-library", "Protocol demo", "demo-library/knowledge", True, create=True)
     inbox = Inbox(registry)
 
     examples = Path(__file__).resolve().parents[1] / "examples"
@@ -40,12 +45,14 @@ def run_demo(output: Path) -> dict:
     installed = catalog.install(definition["id"], definition["version"], archive)
     template = TemplateRef(id=definition["id"], version=definition["version"],
                            package_sha256=installed["package_sha256"])
-    catalog.bind("demo-library", TemplateBinding(template_id=template.id, template_version=template.version))
+    catalog.bind("demo-library", TemplateBinding(template_id=template.id, template_version=template.version,
+                 workspace=WorkspaceSpec(type="local", root_path="demo-library", knowledge_subpath="knowledge")))
+    scope = catalog.snapshot_source("demo-library")
 
     empty = demo / "empty-base"
     empty.mkdir()
     initialize = JobRequest(job_id=uuid.uuid4().hex[:12], operation="initialize", library_id="demo-library",
-                            base_version=tree_digest(empty), template=template)
+                            base_version=workspace_digest(empty), template=template, knowledge_subpath="knowledge", workspace_key=scope["workspace_key"])
     init_job = state / "jobs" / initialize.job_id
     prepare_job(init_job, initialize, [], empty)
     run_reference(init_job, initialize, [], package)
@@ -62,9 +69,10 @@ def run_demo(output: Path) -> dict:
         receipt = inbox.submit(key["token"], material)
         records.append(Record(id=receipt["id"], material=material))
 
-    before = tree_digest(library)
+    before = workspace_digest(scope["root"], scope["spec"].exclude_paths)
     request = JobRequest(job_id=uuid.uuid4().hex[:12], operation="update", library_id="demo-library",
-                         base_version=before, template=template)
+                         base_version=before, template=template, knowledge_subpath=scope["spec"].knowledge_subpath,
+                         workspace_key=scope["workspace_key"], source_version=scope["source_version"], exclude_paths=scope["spec"].exclude_paths)
     job = state / "jobs" / request.job_id
     with registry.store.transaction(write=True) as db:
         db.execute("""INSERT INTO template_jobs
@@ -75,9 +83,9 @@ def run_demo(output: Path) -> dict:
     try:
         for record in records:
             claims[record.id] = inbox.claim(record.id, 900)["claim_token"]
-        prepare_job(job, request, records, library)
+        prepare_job(job, request, records, scope["root"])
         result = run_reference(job, request, records, package)
-        if tree_digest(library) != before:
+        if workspace_digest(scope["root"], request.exclude_paths) != before:
             raise ValueError("Published base changed; candidate requires a new run")
         for item in result.materials:
             inbox.finish(item.record_id, Completion(claim_token=claims[item.record_id], outcome=item.outcome,
@@ -98,9 +106,11 @@ def run_demo(output: Path) -> dict:
         raise
     summary = {"demo_directory": str(demo), "database": str(registry.store.path),
                "template": template.model_dump(), "initialize_job": initialize.job_id, "update_job": request.job_id,
-               "candidate_directory": str(job / "output/knowledge"), "result": str(job / "output/result.json"),
-               "status": "candidate_ready", "published": False, "original_knowledge_unchanged": tree_digest(library) == before,
-               "material_count": len(records)}
+               "candidate_directory": str(job / "output/workspace/knowledge"),
+               "candidate_workspace": str(job / "output/workspace"), "result": str(job / "output/result.json"),
+               "status": "candidate_ready", "published": False, "original_knowledge_unchanged": workspace_digest(workspace, request.exclude_paths) == before,
+               "auxiliary_preserved": (job / "output/workspace/metadata/sources.json").read_bytes() == (workspace / "metadata/sources.json").read_bytes(),
+               "credentials_excluded": not (job / "input/workspace/.env").exists(), "material_count": len(records)}
     write_json(demo / "summary.json", summary)
     return summary
 

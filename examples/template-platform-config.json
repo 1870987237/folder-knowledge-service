@@ -1,9 +1,9 @@
 {
-  "protocol_version": "1.0",
+  "protocol_version": "1.1",
   "id": "reference-docs",
   "name": "通用文档协议测试模板",
   "description": "将材料整理为带出处的候选审核文档，不调用模型",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "maintainer": "template-developer",
   "capabilities": [
     "initialize",
@@ -32,7 +32,7 @@
   },
   "required_secrets": [],
   "output": {
-    "directory": "knowledge",
+    "directory": "workspace",
     "required_files": [
       "INDEX.md"
     ]

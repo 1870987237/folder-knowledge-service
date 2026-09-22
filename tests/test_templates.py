@@ -8,6 +8,7 @@ import pytest
 
 from folder_kb.management import Registry
 from folder_kb.template_demo import run_demo
+from folder_kb.workspaces import workspace_digest
 from folder_kb.template_protocol import (JobRequest, Record, TemplateRef, prepare_job,
                                          run_reference, tree_digest, validate_result, write_json)
 
@@ -22,7 +23,7 @@ def job(tmp_path):
     (knowledge / "INDEX.md").write_text("# Existing\n", encoding="utf-8")
     template = TemplateRef(id="reference-docs", version="0.1.0", package_sha256=tree_digest(package))
     request = JobRequest(job_id="job1", operation="update", library_id="alpha",
-                         base_version=tree_digest(knowledge), template=template)
+                         base_version=workspace_digest(knowledge), template=template)
     record = Record(id="record1", material={"submission_id": "one", "library_id": "alpha",
                                           "kind": "new_content", "content": {"text": "A new fact"},
                                           "context": {"condition": "example"}})
@@ -33,11 +34,12 @@ def job(tmp_path):
 def test_roundtrip(tmp_path):
     summary = run_demo(tmp_path)
     assert summary["published"] is False and summary["original_knowledge_unchanged"]
+    assert summary["auxiliary_preserved"] and summary["credentials_excluded"]
     result = json.loads(Path(summary["result"]).read_text(encoding="utf-8"))
     assert len(result["materials"]) == 3
     assert all(x["outcome"] == "partially_accepted" for x in result["materials"])
     with sqlite3.connect(summary["database"]) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 5
         assert db.execute("SELECT count(*) FROM template_versions").fetchone()[0] == 1
         assert db.execute("SELECT count(*) FROM library_templates").fetchone()[0] == 1
         assert db.execute("SELECT status FROM template_jobs").fetchone()[0] == "candidate_ready"
@@ -49,14 +51,14 @@ def test_repeat_and_cross_library(job):
     package, knowledge, request, record, target = job
     prepare_job(target, request, [record], knowledge)
     result = run_reference(target, request, [record], package)
-    candidate = target / "output/knowledge"
+    candidate = target / "output/workspace"
     assert result.materials[0].references
     assert (knowledge / "INDEX.md").read_text() == "# Existing\n"
-    new_request = request.model_copy(update={"job_id": "job2", "base_version": tree_digest(candidate)})
+    new_request = request.model_copy(update={"job_id": "job2", "base_version": workspace_digest(candidate)})
     second = target.parent / "job2"
     prepare_job(second, new_request, [record], candidate)
     run_reference(second, new_request, [record], package)
-    assert len(list((second / "output/knowledge/demo-inbox").glob("*.md"))) == 2
+    assert len(list((second / "output/workspace/demo-inbox").glob("*.md"))) == 2
     other = record.model_copy(update={"material": record.material.model_copy(update={"library_id": "beta"})})
     with pytest.raises(ValueError, match="Cross-library"):
         prepare_job(target.parent / "invalid", request, [other], knowledge)
@@ -124,4 +126,4 @@ def test_v3_migration(tmp_path):
     assert reopened.authenticate(key["token"])["library_ids"] == ["alpha"]
     with reopened.store.transaction() as db:
         assert db.execute("SELECT count(*) FROM template_versions").fetchone()[0] == 0
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 5

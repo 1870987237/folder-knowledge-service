@@ -49,8 +49,9 @@ def env(tmp_path):
     settings = Settings(str(root), admin_token=ADMIN, state_dir=str(tmp_path / 'state'),
                         allowed_hosts=('testserver',))
     app = create_app(settings)
-    app.state.registry.save_library('alpha', 'Alpha', '.', True, create=True)
-    app.state.registry.save_library('beta', 'Beta', '.', True, create=True)
+    for name in ('alpha', 'beta'):
+        (root / name).mkdir()
+        app.state.registry.save_library(name, name, name, True, create=True)
     key = app.state.registry.create_key('agent', ['alpha'], None)
     with TestClient(app) as client:
         yield app, client, key, settings

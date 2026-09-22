@@ -23,6 +23,7 @@ from .errors import KnowledgeError
 from .inbox import StrictModel
 from .storage import now
 from .template_protocol import tree_digest, write_json
+from .workspaces import WorkspaceSpec, resolve_workspace
 
 MAX_PACKAGE_BYTES = 32 * 1024 * 1024
 MAX_ENTRIES = 2000
@@ -92,7 +93,7 @@ class Runtime(StrictModel):
 
 
 class OutputSpec(StrictModel):
-    directory: Literal['knowledge'] = 'knowledge'
+    directory: Literal['knowledge', 'workspace'] = 'knowledge'
     required_files: list[str] = Field(default_factory=lambda: ['INDEX.md'], max_length=32)
 
     @field_validator('required_files')
@@ -106,7 +107,7 @@ class OutputSpec(StrictModel):
 class TemplateRegistration(StrictModel):
     id: str = Field(pattern=ID_PATTERN)
     version: str = Field(pattern=VERSION_PATTERN)
-    protocol_version: Literal['1.0'] = '1.0'
+    protocol_version: Literal['1.0', '1.1'] = '1.0'
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default='', max_length=2000)
     maintainer: str = Field(min_length=1, max_length=100)
@@ -122,6 +123,8 @@ class TemplateRegistration(StrictModel):
     def contract(self):
         relative_path(self.id)
         relative_path(self.version)
+        if self.output.directory != ('workspace' if self.protocol_version == '1.1' else 'knowledge'):
+            raise ValueError('Output directory must match the protocol version')
         if len(set(self.capabilities)) != len(self.capabilities) or set(self.entrypoints) != set(self.capabilities):
             raise ValueError("Capabilities and entrypoints must match exactly")
         for command in self.entrypoints.values():
@@ -146,6 +149,7 @@ class TemplateBinding(StrictModel):
     template_id: str = Field(pattern=ID_PATTERN)
     template_version: str = Field(pattern=VERSION_PATTERN)
     config: dict = Field(default_factory=dict)
+    workspace: WorkspaceSpec | None = None
 
     @model_validator(mode='after')
     def size_limit(self):
@@ -326,6 +330,18 @@ class TemplateCatalog:
                 raise KnowledgeError('template_cannot_update', 'Knowledge binding requires update capability', 409)
             if definition['required_secrets']:
                 raise KnowledgeError('template_secrets_unavailable', 'Credential binding is not implemented yet', 409)
+            if value.workspace is not None and definition['protocol_version'] != '1.1':
+                raise KnowledgeError('workspace_protocol_required', 'Explicit workspaces require template protocol 1.1', 409)
+            scope = resolve_workspace(self.registry, db, library, value.workspace)
+            scope_json = scope['spec'].model_dump_json()
+            for other in db.execute('SELECT * FROM library_templates WHERE workspace_key=? AND library_id<>?',
+                                    (scope['workspace_key'], library_id)):
+                old_scope = WorkspaceSpec.model_validate_json(other['workspace_json'])
+                if (other['template_id'] != value.template_id or other['template_version'] != value.template_version or
+                        json.loads(other['config_json']) != value.config or
+                        old_scope.exclude_paths != scope['spec'].exclude_paths):
+                    raise KnowledgeError('workspace_binding_conflict',
+                                         'Views sharing a workspace must use the same template, configuration and exclusions', 409)
             try:
                 Draft202012Validator(definition['config_schema']).validate(value.config)
             except ValidationError:
@@ -339,10 +355,13 @@ class TemplateCatalog:
                 raise KnowledgeError('template_package_unavailable', 'Installed package is missing or unsafe', 409) from None
             if digest != row['package_sha256']:
                 raise KnowledgeError('template_package_changed', 'Installed package no longer matches its digest', 409)
-            db.execute("""INSERT INTO library_templates VALUES (?,?,?,?)
+            db.execute("""INSERT INTO library_templates
+                (library_id,template_id,template_version,config_json,workspace_json,workspace_key) VALUES (?,?,?,?,?,?)
                 ON CONFLICT(library_id) DO UPDATE SET template_id=excluded.template_id,
-                template_version=excluded.template_version,config_json=excluded.config_json""",
-                (library_id, value.template_id, value.template_version, json.dumps(value.config, ensure_ascii=False)))
+                template_version=excluded.template_version,config_json=excluded.config_json,
+                workspace_json=excluded.workspace_json,workspace_key=excluded.workspace_key""",
+                (library_id, value.template_id, value.template_version, json.dumps(value.config, ensure_ascii=False),
+                 scope_json, scope['workspace_key']))
             self.event(db, 'template_bind', value.template_id, value.template_version, library_id)
         return self.binding(library_id)
 
@@ -353,7 +372,19 @@ class TemplateCatalog:
             row = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()
             return {'library_id': library_id, 'binding': None if row is None else {
                 'template_id': row['template_id'], 'template_version': row['template_version'],
-                'config': json.loads(row['config_json'])}}
+                'config': json.loads(row['config_json']),
+                'workspace': json.loads(row['workspace_json']) if row['workspace_json'] else None,
+                'workspace_key': row['workspace_key']}}
+
+    def snapshot_source(self, library_id):
+        """Resolve the source and visible view together in one DB snapshot before each job."""
+        with self.store.transaction() as db:
+            library = db.execute('SELECT * FROM libraries WHERE id=? AND enabled=1', (library_id,)).fetchone()
+            binding = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()
+            if not library or not binding:
+                raise KnowledgeError('workspace_unavailable', 'Enabled library and template binding required', 409)
+            specification = WorkspaceSpec.model_validate_json(binding['workspace_json']) if binding['workspace_json'] else None
+            return resolve_workspace(self.registry, db, library, specification)
 
     def unbind(self, library_id):
         self.binding(library_id)
