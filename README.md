@@ -1,10 +1,41 @@
-# 文件夹知识库服务
+<p align="center">
+  <img src="docs/assets/brand.svg" width="400" alt="Folder KB · 文件夹知识库服务">
+</p>
+
+<h3 align="center">让 Agent 像读取本地文件一样，访问你的远程知识。</h3>
+
+<p align="center">
+  文件夹就是知识库。通过 MCP 和 REST，连接文档、团队经验与个人记忆。
+</p>
+
+<p align="center">
+  <a href="#linux-部署">快速部署</a> ·
+  <a href="#外部-agent-接入">接入 Agent</a> ·
+  <a href="#web-管理台">管理平台</a> ·
+  <a href="docs/inbox-api.md">增量收件箱</a> ·
+  <a href="https://github.com/oh-my-harness/folder-kb-memory-template">记忆模板</a>
+</p>
+
+<p align="center">
+  <img src="docs/assets/overview.svg" width="1280" alt="Agent 为根节点：实线连接本地项目和文档，虚线经 Folder KB 连接远程团队知识与个人记忆；通过 MCP 或 REST 读取，无需操作系统挂载。">
+</p>
+
+<p align="center"><strong>MCP + REST</strong> &nbsp; / &nbsp; <strong>只读知识访问</strong> &nbsp; / &nbsp; <strong>Git 同步</strong> &nbsp; / &nbsp; <strong>SQLite 管理</strong></p>
+
+## 文件即知识
 
 以**文件夹和文档作为正式知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite，知识内容不建向量索引、不调用 LLM；维护者更新文件后，下次访问即可读到变化。
 
 服务部署在 Linux Docker 中。HTTP/MCP 容器只读挂载知识目录，独立 Git 同步进程负责拉取与发布。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
-[服务介绍与连接教程（单文件 HTML）](docs/service-guide.html)：下载后直接用浏览器打开，包含架构、管理台演示截图、可直接交给 Agent 执行的 MCP 配置指令、REST 示例和故障排查。采用连续阅读的技术文档排版，截图内嵌，并单列后续改进方向。Agent 自行识别客户端、配置连接并验证工具调用；填写实际地址即可更新指令与示例。
+| 连接已有知识 | 管理访问边界 | 接收知识增量 |
+|---|---|---|
+| 保留原有目录，用 `glob`、`grep`、`read_file` 查阅内容。 | 按知识库配置 Agent Key，管理目录、Git 版本和访问记录。 | 将材料交给收件箱，再由模板或维护者整理为候选知识。 |
+
+[服务介绍与连接教程](docs/service-guide.html)包含架构、管理台截图和连接示例，可下载为单文件 HTML 阅读。部署验收见 [VALIDATION.md](VALIDATION.md)。
+
+<details>
+<summary><strong>查看服务内部架构</strong></summary>
 
 ```mermaid
 flowchart LR
@@ -18,6 +49,8 @@ flowchart LR
     M --> F[独立 SQLite：配置、授权、统计、审计]
     S -->|每次访问校验当前授权| M
 ```
+
+</details>
 
 ## 收件箱：提交待整理材料
 
