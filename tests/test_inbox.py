@@ -15,7 +15,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 from folder_kb.backup import backup
 from folder_kb.errors import KnowledgeError
-from folder_kb.inbox import Material
+from folder_kb.inbox import Material, KeyPermissions
 from folder_kb.server import Settings, create_app
 
 ADMIN = 'inbox-administrator-token-for-tests-only'
@@ -52,6 +52,52 @@ def envelope(**changes):
 
 def grant(app, key):
     app.state.inbox.grants(key['key']['id'], ['alpha'])
+
+
+def test_combined_permissions_auth_validation_and_effect(env):
+    app, client, key, _ = env
+    endpoint = '/admin/api/keys/' + key['key']['id'] + '/permissions'
+    desired = {'library_ids': ['alpha', 'beta'], 'submit_library_ids': ['beta']}
+    assert client.get(endpoint).status_code == 401
+    assert client.get(endpoint, headers=auth(key['token'])).status_code == 401
+    assert client.put(endpoint, headers=auth(key['token']), json=desired).status_code == 401
+    before = client.get(endpoint, headers=auth(ADMIN)).json()
+    for bad, status in [
+        ({'library_ids': ['alpha'], 'submit_library_ids': ['beta']}, 400),
+        ({'library_ids': ['missing'], 'submit_library_ids': []}, 400),
+        ({'library_ids': ['alpha']}, 422),
+        ({'library_ids': ['alpha'] * 65, 'submit_library_ids': []}, 422),
+    ]:
+        assert client.put(endpoint, headers=auth(ADMIN), json=bad).status_code == status
+        assert client.get(endpoint, headers=auth(ADMIN)).json() == before
+    response = client.put(endpoint, headers=auth(ADMIN), json=desired)
+    assert response.status_code == 200
+    assert response.json() == dict(desired, key_id=key['key']['id'])
+    assert client.post(URL, headers=auth(key['token']), json=envelope(library_id='beta')).status_code == 202
+    assert client.post(URL, headers=auth(key['token']), json=envelope()).status_code == 403
+    assert app.state.registry.authenticate(key['token'])['id'] == key['key']['id']
+    assert client.put(endpoint, headers=auth(ADMIN), json={'library_ids': [], 'submit_library_ids': []}).status_code == 200
+    assert client.get('/api/v1/libraries', headers=auth(key['token'])).json()['libraries'] == []
+    app.state.registry.revoke_key(key['key']['id'])
+    assert client.put(endpoint, headers=auth(ADMIN), json=desired).status_code == 409
+    assert client.get('/admin/api/keys/missing/permissions', headers=auth(ADMIN)).status_code == 404
+
+
+def test_combined_permissions_roll_back_on_write_failure(env):
+    app, _, key, _ = env
+    inbox, kid = app.state.inbox, key['key']['id']
+    grant(app, key)
+    before = inbox.permissions(kid)
+    with inbox.store.transaction(write=True) as db:
+        audit_before = db.execute('SELECT count(*) FROM audit_events').fetchone()[0]
+        db.execute("""CREATE TRIGGER reject_test_grant BEFORE INSERT ON inbox_grants
+                      WHEN NEW.library_id='beta' BEGIN SELECT RAISE(ABORT, 'test failure'); END""")
+    with pytest.raises(KnowledgeError) as error:
+        inbox.permissions(kid, KeyPermissions(library_ids=['beta'], submit_library_ids=['beta']))
+    assert error.value.code == 'state_unavailable'
+    assert inbox.permissions(kid) == before
+    with inbox.store.transaction() as db:
+        assert db.execute('SELECT count(*) FROM audit_events').fetchone()[0] == audit_before
 
 
 def test_default_read_only_grants_and_ownership(env):

@@ -7,13 +7,14 @@ from functools import partial
 import hmac
 import ipaddress
 import os
+import secrets
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import anyio
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.transport_security import TransportSecuritySettings
@@ -75,6 +76,9 @@ class AccessGuard:
         host = headers.get(b'host', b'').decode('latin-1').lower()
         origin = headers.get(b'origin')
         path = scope['path']
+        nonce = secrets.token_urlsafe(24) if path in ('/admin', '/admin/') else None
+        if nonce:
+            scope.setdefault('state', {})['csp_nonce'] = nonce
         origin_value = origin.decode('latin-1') if origin else ''
         try:
             parsed_origin = urlsplit(origin_value)
@@ -142,10 +146,14 @@ class AccessGuard:
             receive = buffered_receive
         async def secured_send(message):
             if message['type'] == 'http.response.start':
+                style_policy = "'self'" + (f" 'nonce-{nonce}'" if nonce else '')
+                csp = (f"default-src 'self'; script-src 'self'; style-src {style_policy}; "
+                       "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; "
+                       "base-uri 'none'; form-action 'self'")
                 message.setdefault('headers', []).extend([
                     (b'cache-control', b'no-store'), (b'x-content-type-options', b'nosniff'),
                     (b'referrer-policy', b'no-referrer'),
-                    (b'content-security-policy', b"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")])
+                    (b'content-security-policy', csp.encode('ascii'))])
             await send(message)
         await self.app(scope, receive, secured_send)
 
@@ -349,8 +357,9 @@ def add_admin_routes(app: FastAPI, registry: Registry):
 
     @app.get('/admin', include_in_schema=False)
     @app.get('/admin/', include_in_schema=False)
-    def admin_page():
-        return FileResponse(assets / 'index.html')
+    def admin_page(request: Request):
+        return HTMLResponse((assets / 'index.html').read_text(encoding='utf-8')
+                            .replace('__CSP_NONCE__', request.state.csp_nonce))
 
     @app.get('/admin/api/overview')
     def overview():

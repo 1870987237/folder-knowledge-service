@@ -84,6 +84,11 @@ class SubmissionGrants(StrictModel):
     library_ids: list[str] = Field(max_length=64)
 
 
+class KeyPermissions(StrictModel):
+    library_ids: list[str] = Field(max_length=64)
+    submit_library_ids: list[str] = Field(max_length=64)
+
+
 class Claim(StrictModel):
     lease_seconds: int = Field(default=900, ge=30, le=3600)
 
@@ -139,6 +144,36 @@ class Inbox:
                 self.store.event(db, {'kind': 'admin', 'action': 'inbox_grants_update',
                                       'key_id': key_id, 'library_ids': library_ids, 'status': 'ok'})
             return {'key_id': key_id, 'submit_library_ids': [r[0] for r in db.execute(
+                'SELECT library_id FROM inbox_grants WHERE key_id=? ORDER BY library_id', (key_id,))]}
+
+    def permissions(self, key_id, value: KeyPermissions | None = None):
+        """Read or save both scopes together, so one save cannot partially succeed."""
+        with self.store.transaction(write=value is not None) as db:
+            key = self.store.key(db, key_id)
+            if key is None:
+                raise KnowledgeError('unknown_key', 'Key does not exist', 404)
+            if value is not None:
+                if key['revoked_at']:
+                    raise KnowledgeError('key_revoked', 'Cannot grant a revoked key', 409)
+                reads = sorted(set(value.library_ids))
+                submissions = sorted(set(value.submit_library_ids))
+                if not set(submissions).issubset(reads):
+                    raise KnowledgeError('invalid_grants', 'Submission libraries must be within access grants')
+                self.registry.validate_grants(db, reads)
+                previous = key['library_ids']
+                db.executemany('DELETE FROM key_libraries WHERE key_id=? AND library_id=?',
+                               [(key_id, lid) for lid in set(previous) - set(reads)])
+                db.executemany('INSERT OR IGNORE INTO key_libraries VALUES (?,?)',
+                               [(key_id, lid) for lid in reads])
+                db.execute('DELETE FROM inbox_grants WHERE key_id=?', (key_id,))
+                db.executemany('INSERT INTO inbox_grants VALUES (?,?)',
+                               [(key_id, lid) for lid in submissions])
+                self.store.event(db, {'kind': 'admin', 'action': 'key_grants_update', 'key_id': key_id,
+                                      'previous_library_ids': previous, 'library_ids': reads, 'status': 'ok'})
+                self.store.event(db, {'kind': 'admin', 'action': 'inbox_grants_update', 'key_id': key_id,
+                                      'library_ids': submissions, 'status': 'ok'})
+                key['library_ids'] = reads
+            return {'key_id': key_id, 'library_ids': key['library_ids'], 'submit_library_ids': [r[0] for r in db.execute(
                 'SELECT library_id FROM inbox_grants WHERE key_id=? ORDER BY library_id', (key_id,))]}
 
     @staticmethod
@@ -256,6 +291,14 @@ def add_inbox_routes(app, inbox):
     @app.put('/admin/api/keys/{key_id}/inbox-grants')
     def set_grants(key_id: str, value: SubmissionGrants):
         return inbox.grants(key_id, value.library_ids)
+
+    @app.get('/admin/api/keys/{key_id}/permissions')
+    def get_permissions(key_id: str):
+        return inbox.permissions(key_id)
+
+    @app.put('/admin/api/keys/{key_id}/permissions')
+    def set_permissions(key_id: str, value: KeyPermissions):
+        return inbox.permissions(key_id, value)
 
     @app.get('/admin/api/inbox')
     def listing(library_id: str | None = None, status: Literal['pending', 'processing', 'completed'] | None = None,

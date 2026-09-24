@@ -214,7 +214,7 @@ def test_admin_http_routes_and_agent_boundary(setup):
     app=create_app(Settings(str(r.pool.root),admin_token=ADMIN,state_dir=str(r.directory),allowed_hosts=('testserver',)))
     headers={'Authorization':'Bearer '+ADMIN}
     with TestClient(app) as client:
-        assert client.get('/admin/assets/repositories.js').status_code==200
+        assert client.get('/admin').status_code==200
         assert client.post('/admin/api/repositories',json={'name':'Docs','url':URL,'branch':'main'}).status_code==401
         result=client.post('/admin/api/repositories',headers=headers,json={'name':'Docs','url':URL,'branch':'main'})
         assert result.status_code==201,result.text
