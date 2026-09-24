@@ -33,8 +33,9 @@ function MaterialDetail({ id }: { id: string }) {
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   const row = resource.data, material = row?.material;
   if (!row || !material) return <><LoadError error={resource.error} retry={resource.refresh} />{resource.loading && <Spin />}</>;
+  const managed = row.update_job && ['queued','running','candidate_ready','publish_queued','publishing'].includes(row.update_job.status);
   const active = row.status === 'processing' && (row.lease_until || 0) * 1000 > clock;
-  const own = active && claims.get(id)?.leaseUntil === row.lease_until, claimable = row.status !== 'completed' && !active;
+  const own = active && claims.get(id)?.leaseUntil === row.lease_until, claimable = row.status !== 'completed' && !active && !managed;
   async function action(name: 'claim' | 'release') {
     setBusy(true); setError('');
     try { const result = await api.request<InboxItem>(`/inbox/${id}/${name}`, 'POST', name === 'claim' ? { lease_seconds: 900 } : { claim_token: claims.get(id)?.token });
@@ -50,7 +51,8 @@ function MaterialDetail({ id }: { id: string }) {
   <Collapse ghost items={[{ key: 'source', label: '来源与场景', children: <JsonView value={{ submission_id: row.submission_id, source: material.source, context: material.context }} /> }]} /><LoadError error={resource.error || error} retry={resource.refresh} />
   {row.result ? <div className="result-section"><Space><CheckOutlined /><Typography.Text strong>处理结果 · {outcomes[row.result.outcome]}</Typography.Text></Space><Typography.Paragraph className="pre-wrap block-gap">{row.result.summary}</Typography.Paragraph>{row.result.references.length > 0 && <Typography.Paragraph>引用：{row.result.references.join('、')}</Typography.Paragraph>}{row.result.version && <Typography.Text>版本：{row.result.version}</Typography.Text>}</div> : <>
     {active && <Alert className="block-gap" type={own ? 'info' : 'warning'} title={`${own ? '已在当前会话领取' : '已被领取，当前会话没有处理凭证'} · ${date((row.lease_until || 0) * 1000)} 到期`} description={own ? '刷新整个页面或退出后，需等待租约到期再领取。' : undefined} />}
-    {row.status === 'processing' && !active && <Alert className="block-gap" type="warning" title="租约已过期，可重新领取。" />}
+    {managed && <Alert type="info" title="由更新任务处理" action={<Button href="#updates">查看更新任务</Button>} />}
+    {row.status === 'processing' && !active && !managed && <Alert className="block-gap" type="warning" title="租约已过期，可重新领取。" />}
     {own && <div className="result-section"><AsyncForm<{ outcome: string; summary: string; references: string; version: string }> initial={{ outcome: 'accepted' }} submitText="保存处理结果" submit={async values => {
       await api.request(`/inbox/${id}/complete`, 'POST', { claim_token: claims.get(id)?.token, outcome: values.outcome, summary: values.summary.trim(), references: (values.references || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean), version: values.version || null }); claims.delete(id); refresh(); message.success('处理结果已保存');
     }} footer={<Button onClick={() => action('release')} loading={busy}>放回待处理</Button>}>

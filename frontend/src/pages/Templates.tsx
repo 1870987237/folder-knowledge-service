@@ -41,7 +41,7 @@ export function TemplatesPage() {
         try { if (file.size > 32 * 1024 * 1024) throw new Error('ZIP 不能超过 32 MiB。'); const result = await api.request<Template>(url(target) + '/package', 'PUT', file); setSelected(current => current && url(current) === url(target) ? result : current); refresh(); message.success('程序包已安装'); }
         catch (e) { setUploadError(errorMessage(e)); } finally { setUploading(false); } return false;
       }}><Button type="primary" icon={<UploadOutlined />} loading={uploading}>上传 package.zip</Button></Upload>}
-      <Alert className="block-gap" type="info" title="当前支持安装和绑定；程序自动调度与发布尚未开放。" />
+      <Alert className="block-gap" type="info" title="安装并绑定后，在知识库的更新设置中启用处理程序。" />
       <Collapse className="block-gap" items={[{ key: 'definition', label: '完整定义与校验摘要', children: <JsonView value={selected} /> }]} /></>}
     </Drawer>
   </>;
@@ -78,7 +78,7 @@ export function TemplateBinding({ library }: { library: Library }) {
       }
       await api.request(`/libraries/${library.id}/template`, 'PUT', { template_id: t.definition.id, template_version: t.definition.version, config: parseObject(values.config), ...(workspace ? { workspace } : {}) }); refresh(); message.success('模板绑定已保存');
     }} footer={resource.data?.binding && <Button danger onClick={() => modal.confirm({ title: '解除模板绑定？', content: '知识文件与模板程序包会保留。', onOk: async () => { try { await api.request(`/libraries/${library.id}/template`, 'DELETE'); refresh(); message.success('已解除绑定'); } catch (e) { message.error(errorMessage(e)); throw e; } } })}>解除绑定</Button>}>
-      <Form.Item name="template" label="模板版本" rules={required}><Select showSearch optionFilterProp="label" placeholder="选择已安装的版本" options={templates.map(t => ({ value: t.definition.id + '/' + t.definition.version, label: `${t.definition.name} · ${t.definition.version}${t.definition.required_secrets.length ? '（凭据注入暂未开放）' : ''}`, disabled: t.definition.required_secrets.length > 0 }))} /></Form.Item>
+      <Form.Item name="template" label="模板版本" rules={required}><Select showSearch optionFilterProp="label" placeholder="选择已安装的版本" options={templates.map(t => ({ value: t.definition.id + '/' + t.definition.version, label: `${t.definition.name} · ${t.definition.version}` }))} /></Form.Item>
       <Form.Item name="mode" label="更新程序工作范围"><Select options={[{ value: 'default', label: '仅当前检索目录' }, { value: 'custom', label: '指定完整工作目录' }]} /></Form.Item>
       {mode === 'custom' && <><Form.Item name="root" label={library.repository ? '工作根（相对 Git 仓库根）' : '工作根（相对挂载根）'} rules={required}>{library.repository ? <Input /> : <PathInput />}</Form.Item><Form.Item name="subpath" label="检索子目录（相对工作根）" rules={required}><Input /></Form.Item><Form.Item name="excludes" label="额外排除路径（每行一项）"><Input.TextArea rows={3} /></Form.Item><Alert type="info" title="工作根与检索子目录须对应当前挂载；.git、.env、私钥等默认排除。" className="block-gap" /></>}
       <Form.Item name="config" label="实例配置（JSON）" rules={required}><Input.TextArea rows={6} className="json-input" /></Form.Item>

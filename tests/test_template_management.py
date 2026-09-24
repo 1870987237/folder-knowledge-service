@@ -181,7 +181,8 @@ def test_schema_local_ref_and_secret_gate(env):
     assert client.put('/admin/api/libraries/alpha/template', headers=auth(), json=value).status_code == 200
     install(client, metadata=definition(archive(), version='0.2.0', required_secrets=['MODEL_API_KEY']))
     value['template_version'] = '0.2.0'
-    assert client.put('/admin/api/libraries/alpha/template', headers=auth(), json=value).json()['error'] == 'template_secrets_unavailable'
+    # Binding is declarative; credentials are checked at execution.
+    assert client.put('/admin/api/libraries/alpha/template', headers=auth(), json=value).status_code == 200
 
 
 def test_concurrent_install_and_orphan_recovery(env):

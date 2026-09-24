@@ -328,8 +328,6 @@ class TemplateCatalog:
             definition = json.loads(row['metadata_json'])
             if 'update' not in definition['capabilities']:
                 raise KnowledgeError('template_cannot_update', 'Knowledge binding requires update capability', 409)
-            if definition['required_secrets']:
-                raise KnowledgeError('template_secrets_unavailable', 'Credential binding is not implemented yet', 409)
             if value.workspace is not None and definition['protocol_version'] != '1.1':
                 raise KnowledgeError('workspace_protocol_required', 'Explicit workspaces require template protocol 1.1', 409)
             scope = resolve_workspace(self.registry, db, library, value.workspace)

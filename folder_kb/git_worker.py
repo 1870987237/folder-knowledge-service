@@ -26,9 +26,9 @@ class SyncError(Exception):
 
 
 @contextmanager
-def worker_lock(directory):
+def worker_lock(directory, filename='git-worker.lock'):
     """OS lock dies with the process; no second worker can recover live jobs."""
-    with (directory / 'git-worker.lock').open('a+b') as handle:
+    with (directory / filename).open('a+b') as handle:
         handle.seek(0)
         if os.name == 'nt':
             import msvcrt
