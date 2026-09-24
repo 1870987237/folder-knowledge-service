@@ -121,7 +121,9 @@ class AccessGuard:
         inbox_body = path.startswith(('/api/v1/inbox/', '/admin/api/inbox'))
         template_body = ((path == '/admin/api/templates') or
                          (path.startswith('/admin/api/libraries/') and path.endswith('/template')))
-        if (inbox_body or template_body) and scope['method'] in ('POST', 'PUT'):
+        update_body = (path.startswith(('/admin/api/models', '/admin/api/update-jobs')) or
+                       path.endswith(('/update-policy', '/update-jobs')))
+        if (inbox_body or template_body or update_body) and scope['method'] in ('POST', 'PUT'):
             # Bound streamed bodies as well as Content-Length before JSON parsing.
             body = bytearray()
             while True:
@@ -351,6 +353,8 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     from .repositories import RepositoryCatalog
     from .templates import add_template_routes
     add_template_routes(app, registry)
+    from .updates import add_update_routes
+    add_update_routes(app, registry)
     repositories = RepositoryCatalog(registry)
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')

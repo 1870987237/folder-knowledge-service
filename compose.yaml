@@ -64,5 +64,37 @@ services:
       timeout: 5s
       start_period: 15s
 
+  template-worker:
+    profiles: [updates]
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "folder_kb.template_worker"]
+    environment:
+      KB_ROOT: /knowledge
+      KB_STATE_DIR: /service-data
+      KB_TEMPLATE_TRUSTED_PYTHON: "1"
+      KB_MODEL_KEY_ALLOWLIST: FKB_LLM_API_KEY
+      FKB_LLM_API_KEY: ${KB_MODEL_API_KEY:-}
+    volumes:
+      - type: bind
+        source: ${KB_SOURCE_DIR:?Set KB_SOURCE_DIR to the absolute knowledge folder}
+        target: /knowledge
+        bind:
+          create_host_path: false
+      - service-data:/service-data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3,time,datetime; d=sqlite3.connect('/service-data/management.sqlite3'); r=d.execute(\"select value from metadata where name='template_worker_heartbeat'\").fetchone(); assert r and time.time()-datetime.datetime.fromisoformat(r[0]).timestamp()<30"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+
 volumes:
   service-data:

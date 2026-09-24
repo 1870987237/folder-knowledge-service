@@ -4,6 +4,7 @@ import { App, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, 
 import { FolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { useSession } from '../context';
 import { AsyncForm, Availability, FileBrowser, idRules, NameCell, PageHeader, PathInput, required, Surface } from '../components';
+import { UpdateSettings } from './Updates';
 import { TemplateBinding } from './Templates';
 import type { Library } from '../types';
 
@@ -30,6 +31,7 @@ export function LibrariesPage() {
     <Drawer closable={{ placement: 'end' }} title={library?.name || '知识库详情'} open={!!library} onClose={() => setSelected(undefined)} size={800} destroyOnHidden>{library && <><div className="drawer-meta"><Typography.Text code>{library.id}</Typography.Text><Availability library={library} /></div><Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
       { key: 'files', label: '知识文件', children: <FileBrowser key={library.id + library.path} library={library} /> },
       { key: 'template', label: '模板与工作范围', children: <TemplateBinding key={library.id} library={library} /> },
+      { key: 'updates', label: '更新设置', children: <UpdateSettings key={library.id} library={library} /> },
       { key: 'settings', label: '基本设置', children: <LibraryForm key={library.id} library={library} done={() => setSelected(undefined)} /> },
     ]} /></>}</Drawer>
   </>;

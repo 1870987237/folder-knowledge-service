@@ -133,11 +133,16 @@ def resolve_workspace(registry, db, library, specification: WorkspaceSpec | None
         root_relative = specification.root_path
         identity = ['local', str(registry.pool.root), root_relative]
     root = registry.folder_for_path(root_relative).root
+    if specification.type == 'local':
+        identity = ['local', os.path.normcase(str(root))]
+        logical_key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        published = db.execute('SELECT root_path FROM workspace_publications WHERE workspace_key=?', (logical_key,)).fetchone()
+        if published:
+            root_relative = published['root_path']
+            root = registry.folder_for_path(root_relative).root
     retrieval = registry.folder_for_path((PurePosixPath(root_relative) / specification.knowledge_subpath).as_posix()).root
     current = registry.folder_for_path(library['path']).root
     if not retrieval.is_relative_to(root) or retrieval != current:
         raise KnowledgeError('workspace_view_mismatch', 'Workspace retrieval subdirectory must match the library mount', 409)
-    if specification.type == 'local':
-        identity = ['local', os.path.normcase(str(root))]
     key = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     return {'spec': specification, 'root': root, 'workspace_key': key, 'source_version': commit}

@@ -226,7 +226,17 @@ class Inbox:
                 if key['id'] != row['key_id']:
                     raise KnowledgeError('inbox_not_found', 'Submission does not exist', 404)
                 self.authorize(db, token, row['library_id'])
-            return self.record(row)
+            return dict(self.record(row), update_job=self.job_status(db, item_id))
+
+    @staticmethod
+    def job_status(db, item_id):
+        job = db.execute('SELECT j.id,j.status FROM update_jobs j JOIN update_job_items i ON i.job_id=j.id WHERE i.item_id=? ORDER BY j.created_at DESC,j.id DESC LIMIT 1', (item_id,)).fetchone()
+        return dict(job) if job else None
+
+    @staticmethod
+    def assert_manual(db, item_id):
+        if db.execute("SELECT 1 FROM update_jobs j JOIN update_job_items i ON i.job_id=j.id WHERE i.item_id=? AND j.status IN ('queued','running','candidate_ready','publish_queued','publishing')", (item_id,)).fetchone():
+            raise KnowledgeError('inbox_managed_by_job', 'Submission belongs to an update job; review it on the update jobs page', 409)
 
     def listing(self, library_id=None, status=None, after=0, limit=50):
         with self.store.transaction() as db:
@@ -235,11 +245,12 @@ class Inbox:
                 'AND (? IS NULL OR library_id=?) AND (? IS NULL OR status=?) ORDER BY sequence LIMIT ?',
                 (after, library_id, library_id, status, status, limit + 1)).fetchall()
             page = rows[:limit]
-            return {'items': [self.record(row, False) for row in page],
+            return {'items': [dict(self.record(row, False), update_job=self.job_status(db, row['id'])) for row in page],
                     'next_after': page[-1]['sequence'] if len(rows) > limit else None}
 
     def claim(self, item_id, lease_seconds):
         with self.store.transaction(write=True) as db:
+            self.assert_manual(db, item_id)
             row = self.require_item(db, item_id)
             if row['status'] == 'completed' or (
                     row['status'] == 'processing' and row['lease_until'] > time.time()):
@@ -256,6 +267,7 @@ class Inbox:
 
     def finish(self, item_id, value: Completion | Release):
         with self.store.transaction(write=True) as db:
+            self.assert_manual(db, item_id)
             row = self.require_item(db, item_id)
             if (row['status'] != 'processing' or row['lease_until'] <= time.time() or
                     not secrets.compare_digest(row['claim_digest'], hashlib.sha256(value.claim_token.encode()).hexdigest())):

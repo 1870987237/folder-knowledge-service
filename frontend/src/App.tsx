@@ -12,7 +12,9 @@ import { RepositoriesPage } from './pages/Repositories';
 import { ActivityPage } from './pages/Activity';
 import { OverviewPage } from './pages/Overview';
 
-const knownPages = ['overview', 'libraries', 'inbox', 'templates', 'repositories', 'keys', 'activity'];
+import { ModelsPage, UpdatesPage } from './pages/Updates';
+
+const knownPages = ['models', 'updates', 'overview', 'libraries', 'inbox', 'templates', 'repositories', 'keys', 'activity'];
 function initialPage() { const key = location.hash.slice(1); return knownPages.includes(key) ? key : 'overview'; }
 export function AdminApp() {
   const [session, setSession] = useState<{ api: Api; overview: Overview }>();
@@ -45,13 +47,13 @@ function Workspace({ client, initial, logout }: { client: Api; initial: Overview
     return () => { alive = false; window.clearInterval(timer); };
   }, [client, revision]);
   useEffect(() => () => { claims.current.clear(); }, []);
-  const content = ({ overview: <OverviewPage navigate={navigate} />, libraries: <LibrariesPage />, inbox: <InboxPage />, templates: <TemplatesPage />, repositories: <RepositoriesPage />, keys: <KeysPage />, activity: <ActivityPage /> } as Record<string, React.ReactNode>)[page];
+  const content = ({ models: <ModelsPage />, updates: <UpdatesPage />, overview: <OverviewPage navigate={navigate} />, libraries: <LibrariesPage />, inbox: <InboxPage />, templates: <TemplatesPage />, repositories: <RepositoriesPage />, keys: <KeysPage />, activity: <ActivityPage /> } as Record<string, React.ReactNode>)[page];
   return <SessionContext.Provider value={{ api: client, overview, refresh, revision, claims: claims.current }}><Layout className="app-layout"><Layout.Sider theme="light" width={232} breakpoint="lg" collapsedWidth={0} collapsed={collapsed} trigger={null} onBreakpoint={broken => { setMobile(broken); setCollapsed(broken); }} className="app-sidebar">
     <div className="brand"><span className="brand-mark"><FolderOutlined /></span><Typography.Text strong>Folder KB</Typography.Text></div>
     <Menu mode="inline" selectedKeys={[page]} onClick={({ key }) => navigate(key)} items={[
       { key: 'overview', icon: <DashboardOutlined />, label: '服务概览' },
-      { type: 'group', label: '知识工作区', children: [{ key: 'libraries', icon: <DatabaseOutlined />, label: '知识库' }, { key: 'inbox', icon: <InboxOutlined />, label: '增量收件箱' }, { key: 'templates', icon: <AppstoreOutlined />, label: '模板' }] },
-      { type: 'group', label: '服务管理', children: [{ key: 'repositories', icon: <BranchesOutlined />, label: 'Git 仓库' }, { key: 'keys', icon: <KeyOutlined />, label: 'Agent 与密钥' }, { key: 'activity', icon: <HistoryOutlined />, label: '访问活动' }] },
+      { type: 'group', label: '知识工作区', children: [{ key: 'libraries', icon: <DatabaseOutlined />, label: '知识库' }, { key: 'inbox', icon: <InboxOutlined />, label: '增量收件箱' }, { key: 'updates', icon: <HistoryOutlined />, label: '更新任务' }, { key: 'templates', icon: <AppstoreOutlined />, label: '模板' }] },
+      { type: 'group', label: '服务管理', children: [{ key: 'models', icon: <ApiOutlined />, label: '模型连接' }, { key: 'repositories', icon: <BranchesOutlined />, label: 'Git 仓库' }, { key: 'keys', icon: <KeyOutlined />, label: 'Agent 与密钥' }, { key: 'activity', icon: <HistoryOutlined />, label: '访问活动' }] },
     ]} /><div className="sidebar-footer"><Button type="text" icon={<LogoutOutlined />} onClick={logout}>退出登录</Button></div>
   </Layout.Sider><Layout.Content className="app-content">{mobile && <Button className="mobile-menu" icon={<MenuOutlined />} aria-label="展开导航" onClick={() => setCollapsed(!collapsed)} />}{error && <Alert className="block-gap" type="error" showIcon title={error} action={<Button onClick={refresh}>重试</Button>} />}<div className="page-container" key={page}>{content || <Spin />}</div></Layout.Content></Layout></SessionContext.Provider>;
 }

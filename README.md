@@ -56,13 +56,13 @@ flowchart LR
 
 管理模式新增标准材料接口，通过 REST `POST /api/v1/inbox/submissions` 或 MCP `submit_material` 提交待整理内容。现有 Key 默认只读，管理员须单独配置提交授权；材料保存在独立状态数据库，可领取和回填处理结果，不自动修改或发布正式知识。
 
-[标准内容、授权与调用说明](docs/inbox-api.md) · [材料 JSON Schema](docs/schemas/material-v1.schema.json)。本版提供接口和管理页面，LLM 整理及自动更新程序尚未接入。
+[标准内容、授权与调用说明](docs/inbox-api.md) · [材料 JSON Schema](docs/schemas/material-v1.schema.json)。已接入模型连接、独立更新进程和人工审核发布；见[模型驱动更新](docs/template-updates.md)。
 
 ## 知识库模板原型
 
 模板元数据由平台保存，程序由知识库开发者提供并在平台资源上运行。已提供不调用大模型的测试模板，可执行 `python -m folder_kb.template_demo`，在独立演示目录跑通注册、绑定、收件箱材料处理及候选知识生成。正式知识不会自动更新。
 
-[设计、目录结构、程序协议和实现顺序](docs/template-protocol.md)。当前已提供[模板注册、ZIP 安装与绑定 API](docs/template-management-api.md)，使用现有管理员令牌；安装及绑定不运行代码。本地演示仅执行可信参考程序，管理页面支持注册、安装与绑定；容器隔离、调度、凭据绑定和发布尚未实现。
+[设计、目录结构、程序协议和实现顺序](docs/template-protocol.md)。当前已提供[模板注册、ZIP 安装与绑定 API](docs/template-management-api.md)，使用现有管理员令牌；安装及绑定不运行代码。管理页面支持注册、安装、绑定、模型配置、任务审核与发布；更新进程仅执行审阅过的可信 Python 程序。每任务容器隔离及 Git 写回仍待实现。
 
 模板可处理比检索目录更大的工作范围：例如工作快照包含 knowledge/、sources/、metadata/，但 Agent 只读取 knowledge/。范围须由管理员显式绑定，辅助文件会随候选保留；详见[工作目录协议](docs/template-protocol.md)。
 
@@ -117,7 +117,7 @@ flowchart LR
 - **模板**：导入开发者提供的 `registration.json`，注册版本并上传对应 `package.zip`；支持查看元数据、安装状态与校验摘要。
 - **知识库 → 模板配置**：在详情抽屉的“模板与工作范围”选择已安装的版本，填写实例 JSON 配置。默认仅使用检索目录，也可指定完整本地或 Git 工作目录、检索子目录及额外排除路径；可随时解除绑定。
 
-模板安装和绑定不会运行更新程序。程序调度、容器执行与候选发布尚未开放。
+模板安装和绑定不会运行更新程序。在知识库“更新设置”中明确启用后，独立 worker 自动处理新材料，候选经管理员审核后发布。配置方法见[更新流程](docs/template-updates.md)。
 
 
 ## Git 仓库管理
@@ -350,7 +350,10 @@ SQLite 使用 Python 标准库，无需单独部署数据库。启用 WAL、外�
 | `inbox_items` | 标准材料正文、提交身份、幂等信息、领取租约及处理结果 |
 | `template_versions` | 模板版本的平台注册信息及程序摘要 |
 | `library_templates` | 知识库与模板版本、实例配置、工作范围和检索子目录的绑定 |
-| `template_jobs` | 模板处理任务、基准版本及候选结果 |
+| `template_jobs` | 旧参考演示的任务记录 |
+| `model_connections` / `update_policies` | 模型连接引用、环境变量映射和更新设置 |
+| `update_jobs` / `update_job_items` | 更新任务、候选结果及收件箱关联 |
+| `workspace_publications` | 完整工作区的当前发布版本 |
 
 统计只计入已认证并进入执行的知识操作；认证失败、协议初始化和参数校验失败不计入工具调用统计。日志不保存搜索词、完整正文或令牌。历史记录不再受最近 7 个日志文件限制，默认不自动清理。管理 API `/admin/api/activity` 支持 `key_id`、`library_id`、`status`（`ok/error/partial`）、带时区的 `start_time/end_time` 和 `limit`（最多 200）。将返回的 `next_before_id` 传为 `before_id` 可继续查询更早记录。
 
@@ -366,9 +369,9 @@ docker compose cp knowledge:/service-data/backups/management-backup.sqlite3 ./ba
 
 备份文件名应每次不同，命令拒绝覆盖已有文件。恢复时停服，将备份放入空的管理数据目录并命名为 `management.sqlite3`，确保容器用户可读写，再启动。不要在运行中只复制主数据库文件，也不要将旧 WAL/SHM 与恢复文件混用。知识文档另行备份；明文 Key 不可从数据库恢复，遗失时应撤销重建。
 
-已有 SQLite 在启动时自动迁移，保留知识库及 Key。当前数据库为 v5（绑定增加工作范围字段），HTTP 服务与 Git worker 需一起升级；旧程序不能打开 v5 数据库。更新前备份数据库；恢复时同时停止 `knowledge` 与 `git-sync`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
+已有 SQLite 在启动时自动迁移，保留知识库及 Key。当前数据库为 v6（模型连接、更新队列和发布映射），HTTP 服务与所有 worker 需一起升级；旧程序不能打开 v6 数据库。更新前备份数据库；恢复时同时停止 `knowledge`、`git-sync` 与 `template-worker`，并恢复数据库引用的知识发布目录。凭据另行备份。只恢复数据库不能恢复知识文件。
 
-数据卷应位于服务器本地磁盘，不放在 NFS/SMB 共享文件系统上。当前采用一个 HTTP 服务进程和一个独立 Git 同步进程；操作系统锁阻止重复同步进程启动。正在处理的请求保存在 HTTP 进程内存，未实现多副本状态汇总。
+数据卷应位于服务器本地磁盘，不放在 NFS/SMB 共享文件系统上。采用一个 HTTP 服务进程、独立 Git 同步进程和可选的模板更新进程；各 worker 使用独立操作系统锁防止重复启动。正在处理的请求保存在 HTTP 进程内存，未实现多副本状态汇总。
 
 实现使用 [官方 MCP Python SDK v1 维护线](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x) 的 Streamable HTTP 和 FastAPI。依赖版本固定在 `constraints.txt`；升级后应重新验证协议与目录访问边界。
 

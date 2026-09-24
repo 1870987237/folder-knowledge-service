@@ -46,6 +46,7 @@ export interface Material {
   source?: Record<string, string>; context?: Record<string, string>;
 }
 export interface InboxItem {
+  update_job?: { id: string; status: string } | null;
   id: string; library_id: string; submission_id: string; title?: string; kind?: string;
   status: string; created_at: string; updated_at: string; lease_until?: number;
   submitted_by: { id: string; type: string }; material?: Material; claim_token?: string;

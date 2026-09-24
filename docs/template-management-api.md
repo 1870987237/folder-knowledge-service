@@ -8,7 +8,7 @@
 开发者打包 → 注册元数据 → 上传并校验 ZIP → 安装固定版本 → 知识库绑定版本及配置
 ```
 
-安装、绑定不会运行程序、拉取镜像或修改正式知识。程序调度、容器隔离和凭据绑定待后续实现；runtime 中的资源字段当前是声明，不代表配额已执行。
+安装、绑定不会运行程序、拉取镜像或修改正式知识。程序调度、模型连接及人工审核发布见[更新流程](template-updates.md)。每任务容器隔离尚未实现；runtime 的 memory_mb、cpus 是声明，尚不代表独立任务配额。
 
 管理页面入口：**模板**中注册并上传程序包，**知识库 → 模板配置**中设置版本、实例配置和工作范围。
 
@@ -53,7 +53,7 @@ curl -X PUT "$BASE_URL/admin/api/templates/reference-docs/versions/0.2.0/package
 | entrypoints | 与 capabilities 一一对应的 argv 数组；本版采用 `["python","program.py","update"]` 形式，脚本必须在包内 |
 | runtime | type 为 container 或 trusted-python-demo；container 声明必须提供按 SHA-256 固定的镜像；另含 timeout_seconds、memory_mb、cpus |
 | config_schema | JSON Schema Draft 2020-12，根类型必须为 object；允许本地引用，不访问远程 Schema |
-| required_secrets | 所需凭据名称，不填写密钥。本版可登记，但包含所需凭据的模板暂不能绑定 |
+| required_secrets | 所需环境变量名，不填写密钥；运行前校验所选模型连接及变量映射 |
 | output | 1.0 的 directory 为 knowledge，1.1 为 workspace；required_files 声明应存在的候选文件，默认 INDEX.md，执行阶段再校验 |
 
 成功注册返回 201，status=registered。相同 ID+版本及相同规范化元数据重试返回 duplicate=true；改变任何元数据需使用新版本，否则 409。注册后没有编辑旧版本的接口。
@@ -87,7 +87,7 @@ curl -X PUT "$BASE_URL/admin/api/libraries/team-guide/template" \
 - 库存在，模板版本已安装且支持 update。
 - 包目录仍与安装摘要一致。
 - config 通过开发者声明的 Schema；不自动填充 Schema 的 default，不修改配置。
-- required_secrets 为空；凭据管理完成后再开放依赖密钥的模板绑定。
+- required_secrets 可声明所需环境变量，执行前由更新进程校验凭据注入。
 
 不同工作范围持有独立的 config；共享同一工作范围的检索视图必须使用相同模板版本、配置及排除规则。同一知识库再次 PUT 可更换版本或配置，但不会立即更新知识；没有自动升级到最新版本的行为。元数据中不要填写密钥，实际凭据注入后续单独实现。
 
@@ -125,7 +125,7 @@ root_path 必须在 KB_ROOT 内；Git 库必须对应现有 repository_libraries
 
 GET 绑定返回 workspace 和 workspace_key。省略 workspace 时只使用原挂载目录作为工作根，knowledge_subpath 为“.”。修改挂载后需确认模板工作配置；当前配置不匹配则拒绝生成快照。共同工作范围使用不同模板/配置/排除规则返回 workspace_binding_conflict；切换共同模板时须一致调整所有视图，当前可先解除相关绑定再重新绑定。
 
-默认排除项、完整候选与删除声明见[工作目录协议](template-protocol.md)。当前不实现任务互斥调度或自动发布。
+默认排除项、完整候选与删除声明见[工作目录协议](template-protocol.md)。任务按工作区互斥调度，候选必须人工审核发布，见[更新流程](template-updates.md)。
 
 ## 5. 查询与解除
 
@@ -136,7 +136,7 @@ GET 绑定返回 workspace 和 workspace_key。省略 workspace 时只使用原�
 | GET | /admin/api/libraries/{library_id}/template | 查看当前绑定；未绑定返回 binding=null |
 | DELETE | /admin/api/libraries/{library_id}/template | 解除绑定，保留知识文件和模板程序包 |
 
-本版没有删除模板版本或启动模板任务的 HTTP 接口。所有上述接口只允许管理员令牌，Agent Key 不能调用。操作审计保存模板 ID、版本及目标库，不记录配置正文或 ZIP 内容。
+本版没有删除模板版本的 HTTP 接口。任务启动与审核接口见[更新流程](template-updates.md)。所有上述接口只允许管理员令牌，Agent Key 不能调用。操作审计保存模板 ID、版本及目标库，不记录配置正文或 ZIP 内容。
 
 ## 6. 验证与后续
 
@@ -147,4 +147,4 @@ python -m folder_kb.template_demo
 
 演示已复用同一 TemplateCatalog 注册、安装和绑定逻辑，仍在全新独立目录中运行，不操作正在运行的服务。
 
-下一步实现独立 worker 与容器执行，补齐凭据引用、资源限制、任务状态恢复、当前授权检查以及候选发布。当前使用数据库 v5，旧绑定迁移后不自动扩大工作范围，HTTP 服务与 Git worker 需同步升级。
+已提供独立可信 Python worker、模型凭据引用、任务恢复、当前授权检查和人工审核发布。每任务容器隔离及 Git 写回尚未实现。数据库为 v6，旧绑定迁移不自动启用更新；HTTP 与所有 worker 需同步升级。
