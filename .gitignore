@@ -7,6 +7,9 @@ logs/
 data/
 build/
 dist/
+node_modules/
+folder_kb/web/*
+!folder_kb/web/.gitkeep
 
 *.sqlite3
 *.sqlite3-wal

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import threading
@@ -57,7 +58,10 @@ def add_key(client, libraries, name='agent'):
 def test_admin_boundary_and_one_time_secret(managed):
     app, client, settings = managed
     assert client.get('/admin').status_code == 200
-    assert client.get('/admin/assets/app.js').status_code == 200
+    page = client.get('/admin')
+    assets = re.findall(r'(?:src|href)="(/admin/assets/[^" ]+\.(?:js|css))"', page.text)
+    assert assets, 'Build the admin frontend with npm run build in frontend/'
+    assert all(client.get(asset).status_code == 200 for asset in assets)
     assert "script-src 'self'" in client.get('/admin').headers['Content-Security-Policy']
     assert client.get('/admin/api/overview').status_code == 401
     assert client.get('/api/v1/list', headers=authorization(ADMIN)).status_code == 401
@@ -73,6 +77,21 @@ def test_admin_boundary_and_one_time_secret(managed):
         disk = '\n'.join(db.iterdump())
     assert key['token'] not in disk and ADMIN not in disk
     assert client.get('/admin/api/overview', headers=authorization(ADMIN)).headers['cache-control'] == 'no-store'
+
+
+def test_admin_styles_use_a_fresh_csp_nonce(managed):
+    _, client, _ = managed
+    first, second = client.get('/admin'), client.get('/admin/')
+    nonces = []
+    for page in (first, second):
+        nonce = re.search(r'name="csp-nonce" content="([^"]+)"', page.text).group(1)
+        assert nonce != '__CSP_NONCE__'
+        assert f"style-src 'self' 'nonce-{nonce}'" in page.headers['content-security-policy']
+        assert "script-src 'self';" in page.headers['content-security-policy']
+        assert 'unsafe-inline' not in page.headers['content-security-policy']
+        assert page.headers['cache-control'] == 'no-store'
+        nonces.append(nonce)
+    assert nonces[0] != nonces[1]
 
 
 def test_dynamic_scoping_disable_change_and_revoke(managed):
