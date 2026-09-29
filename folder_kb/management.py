@@ -116,6 +116,9 @@ class Registry:
             if not create and not previous:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
             binding = db.execute('SELECT 1 FROM repository_libraries WHERE library_id=?', (library_id,)).fetchone()
+            owned = db.execute('SELECT 1 FROM library_ownership WHERE library_id=?', (library_id,)).fetchone()
+            if owned and path != previous['path']:
+                raise KnowledgeError('owned_library_path', '已分配归属的库不能直接重映射目录', 409)
             if binding and path != previous['path']:
                 raise KnowledgeError('git_managed_path', '此知识库由 Git 仓库管理，请在 Git 仓库页调整或解除关联', 409)
             # Metadata and enable/disable remain editable during an outage.
@@ -204,6 +207,7 @@ class Registry:
             return self.public_key(key)
 
     def _authenticate(self, token: str, db):
+        from .collaboration import owned_key_allowed
         if len(token) > 256:
             raise KnowledgeError('unauthorized', 'Invalid, revoked or expired key', 401)
         parts = token.split('_', 2)
@@ -212,6 +216,10 @@ class Registry:
                 not hmac.compare_digest(key['digest'], hashlib.sha256(token.encode()).hexdigest()) or
                 (key['expires_at'] and datetime.fromisoformat(key['expires_at']).timestamp() <= time.time())):
             raise KnowledgeError('unauthorized', 'Invalid, revoked or expired key', 401)
+        owner = db.execute('SELECT u.status FROM key_owners o JOIN users u ON u.id=o.user_id WHERE key_id=?', (key['id'],)).fetchone()
+        if owner and owner[0] != 'active':
+            raise KnowledgeError('unauthorized', 'Key owner is disabled', 401)
+        key['library_ids'] = [lid for lid in key['library_ids'] if owned_key_allowed(db, key['id'], lid)]
         return self.public_key(key)
 
     def authenticate(self, token: str):
@@ -224,6 +232,7 @@ class Registry:
             allowed = [self.store.library(row) for row in db.execute(
                 'SELECT l.* FROM libraries l JOIN key_libraries g ON l.id=g.library_id '
                 'WHERE g.key_id=? AND l.enabled=1 ORDER BY l.id', (key['id'],))]
+            allowed = [x for x in allowed if x['id'] in key['library_ids']]
             if library_id is None:
                 if len(allowed) != 1:
                     raise KnowledgeError('library_required', 'Specify library_id; use list_libraries to see available libraries')
@@ -239,7 +248,7 @@ class Registry:
             rows = [self.store.library(row) for row in db.execute(
                 'SELECT l.* FROM libraries l JOIN key_libraries g ON l.id=g.library_id '
                 'WHERE g.key_id=? AND l.enabled=1 ORDER BY l.rowid', (key['id'],))]
-        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)} for row in rows]
+        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)} for row in rows if row['id'] in key['library_ids']]
 
     def run(self, token: str, library_id: str | None, tool: str, kwargs: dict, transport: str):
         identity = self.authenticate(token)

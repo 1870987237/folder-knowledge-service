@@ -1,11 +1,12 @@
-import { Component, type CSSProperties, type ReactNode } from 'react';
+import { Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, Button, ConfigProvider, Result, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 import 'dayjs/locale/zh-cn';
 import { AdminApp } from './App';
-import { adminTheme } from './theme';
+import { PortalApp } from './Portal';
+import { adminTheme, themeVariables } from './theme';
 import './styles.css';
 
 dayjs.locale('zh-cn');
@@ -17,7 +18,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean
 }
 function ThemeBridge() {
   const { token } = theme.useToken();
-  const style = { '--app-bg': token.colorBgLayout, '--app-surface': token.colorBgContainer, '--app-border': token.colorBorderSecondary, '--app-primary': token.colorPrimary, '--app-selected': token.colorPrimaryBg, '--app-muted': token.colorTextSecondary, '--app-radius': `${token.borderRadius}px`, '--app-gap': `${token.marginLG}px` } as CSSProperties;
-  return <div className="theme-root" style={style}><ErrorBoundary><AdminApp /></ErrorBoundary></div>;
+  const style = themeVariables(token);
+  return <div className="theme-root" style={style}><ErrorBoundary>{location.pathname.startsWith('/workspace') ? <PortalApp /> : <AdminApp />}</ErrorBoundary></div>;
 }
 createRoot(document.getElementById('root')!).render(<ConfigProvider locale={zhCN} theme={adminTheme} csp={nonce && nonce !== '__CSP_NONCE__' ? { nonce } : undefined}><App><ThemeBridge /></App></ConfigProvider>);

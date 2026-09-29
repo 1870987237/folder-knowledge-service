@@ -52,7 +52,7 @@ export interface InboxItem {
   submitted_by: { id: string; type: string }; material?: Material; claim_token?: string;
   result?: { outcome: string; summary: string; references: string[]; version?: string };
 }
-export interface Entry { path: string; type: 'file' | 'directory'; size?: number }
+export interface Entry { path: string; type: 'file' | 'directory'; size?: number; bytes?: number; modified_at?: string }
 export interface DirectoryPage { entries: Entry[]; next_offset: number | null; partial?: boolean }
 export interface FilePage {
   lines: { line: number; column?: number; text: string; line_complete?: boolean }[];

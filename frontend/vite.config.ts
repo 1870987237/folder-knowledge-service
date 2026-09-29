@@ -5,5 +5,5 @@ export default defineConfig({
   plugins: [react()],
   base: '/admin/assets/',
   build: { assetsDir: '', sourcemap: false },
-  server: { proxy: { '/admin/api': 'http://127.0.0.1:8791' } },
+  server: { proxy: { '/admin/api': 'http://127.0.0.1:8791', '/portal/api': 'http://127.0.0.1:8791' } },
 });

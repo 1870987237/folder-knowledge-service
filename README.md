@@ -52,6 +52,12 @@ flowchart LR
 
 </details>
 
+## 用户知识工作区
+
+用户打开 `/workspace` 注册，管理员在 `/admin` 的“账号与组织”中审批。工作区支持个人私有库、组织成员及库权限、Markdown 阅读与搜索、草稿送审和人工发布，以及随用户权限收缩的 Agent Key。
+
+普通文档库可编辑，现有模板库与 Git 库先支持查看，更新仍走原有流程。Linux 部署需为普通文档的发布目录增加专用可写挂载；[设计、使用和迁移说明](docs/human-workspace.md)。
+
 ## 收件箱：提交待整理材料
 
 管理模式新增标准材料接口，通过 REST `POST /api/v1/inbox/submissions` 或 MCP `submit_material` 提交待整理内容。现有 Key 默认只读，管理员须单独配置提交授权；材料保存在独立状态数据库，可领取和回填处理结果，不自动修改或发布正式知识。

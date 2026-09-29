@@ -39,7 +39,7 @@ def test_roundtrip(tmp_path):
     assert len(result["materials"]) == 3
     assert all(x["outcome"] == "partially_accepted" for x in result["materials"])
     with sqlite3.connect(summary["database"]) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 7
         assert db.execute("SELECT count(*) FROM template_versions").fetchone()[0] == 1
         assert db.execute("SELECT count(*) FROM library_templates").fetchone()[0] == 1
         assert db.execute("SELECT status FROM template_jobs").fetchone()[0] == "candidate_ready"
@@ -126,4 +126,4 @@ def test_v3_migration(tmp_path):
     assert reopened.authenticate(key["token"])["library_ids"] == ["alpha"]
     with reopened.store.transaction() as db:
         assert db.execute("SELECT count(*) FROM template_versions").fetchone()[0] == 0
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 7

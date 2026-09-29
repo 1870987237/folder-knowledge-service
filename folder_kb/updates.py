@@ -158,6 +158,9 @@ class Updates:
 
     @staticmethod
     def permitted(db, item):
+        from .collaboration import owned_key_allowed
+        if not owned_key_allowed(db, item['key_id'], item['library_id'], submit=True):
+            return False
         return db.execute('''SELECT 1 FROM agent_keys k JOIN inbox_grants g ON g.key_id=k.id
             JOIN libraries l ON l.id=g.library_id WHERE k.id=? AND g.library_id=? AND l.enabled=1
             AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at>?)''',
@@ -175,13 +178,21 @@ class Updates:
                 if retry_id:
                     items = db.execute('SELECT i.* FROM inbox_items i JOIN update_job_items j ON j.item_id=i.id WHERE j.job_id=? ORDER BY i.sequence', (retry_id,)).fetchall()
                 else:
-                    items = db.execute('''SELECT i.* FROM inbox_items i
+                    candidates = db.execute('''SELECT i.* FROM inbox_items i
                         JOIN agent_keys k ON k.id=i.key_id
                         JOIN inbox_grants g ON g.key_id=i.key_id AND g.library_id=i.library_id
                         WHERE i.library_id=? AND i.status='pending' AND k.revoked_at IS NULL
                         AND (k.expires_at IS NULL OR k.expires_at>?)
                         AND NOT EXISTS (SELECT 1 FROM update_job_items j WHERE j.item_id=i.id)
-                        ORDER BY i.sequence LIMIT ?''', (library_id, now(), context['policy']['max_batch_size'])).fetchall()
+                        ORDER BY i.sequence''', (library_id, now()))
+                    # Filter current human ownership before filling the batch;
+                    # revoked submissions must not starve later authorized keys.
+                    items = []
+                    for item in candidates:
+                        if self.permitted(db, item):
+                            items.append(item)
+                            if len(items) >= context['policy']['max_batch_size']:
+                                break
                 if not items:
                     raise KnowledgeError('no_pending_material', 'No new pending submissions', 409)
                 if any(i['status'] != 'pending' or not self.permitted(db, i) for i in items):

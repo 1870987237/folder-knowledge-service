@@ -319,6 +319,8 @@ class TemplateCatalog:
 
     def bind(self, library_id, value: TemplateBinding):
         with self.store.transaction(write=True) as db:
+            if db.execute('SELECT 1 FROM library_ownership WHERE library_id=? AND native=1', (library_id,)).fetchone():
+                raise KnowledgeError('native_library_managed', '普通文档库由草稿发布流程管理，不能绑定模板', 409)
             library = db.execute('SELECT * FROM libraries WHERE id=?', (library_id,)).fetchone()
             if library is None:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)

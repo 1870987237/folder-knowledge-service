@@ -168,6 +168,8 @@ class RepositoryCatalog:
         if not 1 <= len(name.strip()) <= 80:
             raise KnowledgeError('invalid_name', '知识库名称需为 1–80 个字符')
         with self.store.transaction(write=True) as db:
+            if db.execute('SELECT 1 FROM library_ownership WHERE library_id=?', (library_id,)).fetchone():
+                raise KnowledgeError('owned_library_path', '已分配归属的库不能直接更改 Git 关联，请在分配前完成关联', 409)
             repo = self.get(db, rid)
             if not repo['release_path']:
                 raise KnowledgeError('repository_not_ready', '请先成功同步仓库', 409)
