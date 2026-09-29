@@ -32,14 +32,15 @@ export function query(values: Record<string, string | number | undefined | null>
 export class Api {
   private controllers = new Set<AbortController>();
   private disposed = false;
-  constructor(private token: string, private unauthorized: () => void) {}
+  constructor(private token: string, private unauthorized: () => void, private prefix = '/admin/api') {}
+  portal<T>(path: string, method = 'GET', body?: unknown): Promise<T> { return this.request(path, method, body, '/portal/api'); }
   dispose() { this.disposed = true; this.token = ''; this.controllers.forEach(c => c.abort()); this.controllers.clear(); }
-  async request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  async request<T>(path: string, method = 'GET', body?: unknown, prefix = this.prefix): Promise<T> {
     if (this.disposed) throw new DOMException('Session ended', 'AbortError');
     const controller = new AbortController(); this.controllers.add(controller);
     try {
       const binary = body instanceof Blob;
-      const response = await fetch('/admin/api' + path, {
+      const response = await fetch(prefix + path, {
         method, signal: controller.signal, cache: 'no-store',
         headers: { Authorization: 'Bearer ' + this.token, ...(body === undefined ? {} : { 'Content-Type': binary ? 'application/zip' : 'application/json' }) },
         body: body === undefined ? undefined : binary ? body : JSON.stringify(body),
@@ -47,7 +48,7 @@ export class Api {
       const data = await response.json().catch(() => null);
       if (this.disposed) throw new DOMException('Session ended', 'AbortError');
       if (!response.ok) {
-        if (response.status === 401) { this.unauthorized(); throw new ApiError('会话已失效，请重新登录。', 401); }
+        if (response.status === 401) { this.unauthorized(); throw new ApiError(path === '/login' ? (data?.message || '账号或密码无效。') : '会话已失效，请重新登录。', 401); }
         const details = Array.isArray(data?.detail) ? data.detail.map((d: { loc?: string[]; msg: string }) => `${d.loc?.slice(1).join('.') || '输入'}：${d.msg}`).join('；') : '';
         throw new ApiError(messages[data?.error] || data?.message || details || `请求失败（${response.status}）`, response.status);
       }

@@ -1,4 +1,5 @@
-import type { ThemeConfig } from 'antd';
+import type { GlobalToken, ThemeConfig } from 'antd';
+import type { CSSProperties } from 'react';
 export const adminTheme: ThemeConfig = {
   token: {
     colorPrimary: '#167367', colorPrimaryBg: '#eaf4f1', colorInfo: '#167367', colorSuccess: '#2f7a53',
@@ -23,3 +24,8 @@ export const adminTheme: ThemeConfig = {
     Typography: { titleMarginTop: 0, titleMarginBottom: 0 },
   },
 };
+
+// Portaled editors and previews need the same tokens as the workspace canvas.
+export function themeVariables(token: GlobalToken): CSSProperties {
+  return { '--app-font': token.fontFamily, '--app-font-size': `${token.fontSize}px`, '--app-text': token.colorText, '--app-bg': token.colorBgLayout, '--app-surface': token.colorBgContainer, '--app-border': token.colorBorderSecondary, '--app-primary': token.colorPrimary, '--app-selected': token.colorPrimaryBg, '--app-muted': token.colorTextSecondary, '--app-radius': `${token.borderRadius}px`, '--app-gap': `${token.marginLG}px` } as CSSProperties;
+}

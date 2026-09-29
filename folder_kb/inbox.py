@@ -118,13 +118,13 @@ class Inbox:
         self.store = registry.store
 
     def authorize(self, db, token, library_id):
-        """Replace this seam with the shared identity/permission service later."""
+        from .collaboration import owned_key_allowed
         key = self.registry._authenticate(token, db)
         row = db.execute(
             'SELECT 1 FROM inbox_grants g JOIN libraries l ON l.id=g.library_id '
             'WHERE g.key_id=? AND g.library_id=? AND l.enabled=1',
             (key['id'], library_id)).fetchone()
-        if not row:
+        if not row or not owned_key_allowed(db, key['id'], library_id, submit=True):
             raise KnowledgeError('inbox_forbidden', 'Material submission is not granted for this library', 403)
         return key
 

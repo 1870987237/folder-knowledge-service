@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from collections import deque
 from dataclasses import dataclass
@@ -190,11 +191,11 @@ class KnowledgeFolder:
                         rel = p.relative_to(self.root).as_posix()
                         self._path(rel)
                         if stat.S_ISDIR(st.st_mode):
-                            entries.append({'path': rel, 'type': 'directory'})
+                            entries.append({'path': rel, 'type': 'directory', 'modified_at': datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat()})
                             if recursive:
                                 children.append(p)
                         elif stat.S_ISREG(st.st_mode) and st.st_nlink == 1 and self._readable(p):
-                            entries.append({'path': rel, 'type': 'file', 'bytes': st.st_size, 'version': file_version(st)})
+                            entries.append({'path': rel, 'type': 'file', 'bytes': st.st_size, 'modified_at': datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(), 'version': file_version(st)})
                     stack.extend(sorted(children, reverse=True))
             except (OSError, KnowledgeError):
                 partial = True

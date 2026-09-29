@@ -76,13 +76,13 @@ class AccessGuard:
         host = headers.get(b'host', b'').decode('latin-1').lower()
         origin = headers.get(b'origin')
         path = scope['path']
-        nonce = secrets.token_urlsafe(24) if path in ('/admin', '/admin/') else None
+        nonce = secrets.token_urlsafe(24) if path in ('/admin', '/admin/', '/workspace', '/workspace/') else None
         if nonce:
             scope.setdefault('state', {})['csp_nonce'] = nonce
         origin_value = origin.decode('latin-1') if origin else ''
         try:
             parsed_origin = urlsplit(origin_value)
-            same_origin_admin = (path.startswith('/admin/') and origin_value and
+            same_origin_admin = (path.startswith(('/admin/', '/portal/')) and origin_value and
                                  parsed_origin.scheme in ('http', 'https') and parsed_origin.netloc.lower() == host)
         except ValueError:
             same_origin_admin = False
@@ -93,11 +93,23 @@ class AccessGuard:
             error = JSONResponse({'error': 'invalid_origin'}, 403)
         elif self.registry:
             authorization = headers.get(b'authorization', b'')
-            public = path in ('/healthz', '/admin', '/admin/') or path.startswith('/admin/assets/')
+            public = path in ('/healthz', '/admin', '/admin/', '/workspace', '/workspace/',
+                              '/portal/api/login', '/portal/api/register') or path.startswith('/admin/assets/')
             if not public:
                 if path.startswith('/admin/api/') or path in ('/docs', '/openapi.json', '/redoc'):
                     if not hmac.compare_digest(authorization, ('Bearer ' + self.settings.admin_token).encode()):
                         error = JSONResponse({'error': 'admin_unauthorized'}, 401)
+                elif path.startswith('/portal/api/'):
+                    token = authorization[7:].decode('utf-8', errors='replace') if authorization.startswith(b'Bearer ') else ''
+                    try:
+                        if hmac.compare_digest(authorization, ('Bearer ' + self.settings.admin_token).encode()):
+                            identity = {'id': 'platform', 'username': '平台管理员', 'platform': True}
+                        else:
+                            from .collaboration import Collaboration
+                            identity = await anyio.to_thread.run_sync(Collaboration(self.registry).authenticate, token)
+                        scope.setdefault('state', {})['human'] = identity
+                    except KnowledgeError as exc:
+                        error = JSONResponse({'error': exc.code, 'message': exc.message}, exc.status)
                 else:
                     token = authorization[7:].decode('utf-8', errors='replace') if authorization.startswith(b'Bearer ') else ''
                     try:
@@ -123,7 +135,8 @@ class AccessGuard:
                          (path.startswith('/admin/api/libraries/') and path.endswith('/template')))
         update_body = (path.startswith(('/admin/api/models', '/admin/api/update-jobs')) or
                        path.endswith(('/update-policy', '/update-jobs')))
-        if (inbox_body or template_body or update_body) and scope['method'] in ('POST', 'PUT'):
+        human_body = path.startswith(('/portal/api/', '/admin/api/accounts')) or path.endswith('/ownership')
+        if (inbox_body or template_body or update_body or human_body) and scope['method'] in ('POST', 'PUT'):
             # Bound streamed bodies as well as Content-Length before JSON parsing.
             body = bytearray()
             while True:
@@ -131,7 +144,8 @@ class AccessGuard:
                 if message['type'] == 'http.disconnect':
                     return
                 chunk = message.get('body', b'')
-                if len(body) + len(chunk) > 65536:
+                limit = 2 * 1024 * 1024 if human_body and '/drafts' in path else 65536
+                if len(body) + len(chunk) > limit:
                     code = 'material_too_large' if inbox_body else 'request_too_large'
                     return await JSONResponse({'error': code}, 413)(scope, receive, send)
                 body.extend(chunk)
@@ -350,6 +364,8 @@ class RepositoryBinding(BaseModel):
 
 
 def add_admin_routes(app: FastAPI, registry: Registry):
+    from .collaboration import add_collaboration_routes
+    add_collaboration_routes(app, registry)
     from .repositories import RepositoryCatalog
     from .templates import add_template_routes
     add_template_routes(app, registry)
@@ -361,6 +377,8 @@ def add_admin_routes(app: FastAPI, registry: Registry):
 
     @app.get('/admin', include_in_schema=False)
     @app.get('/admin/', include_in_schema=False)
+    @app.get('/workspace', include_in_schema=False)
+    @app.get('/workspace/', include_in_schema=False)
     def admin_page(request: Request):
         return HTMLResponse((assets / 'index.html').read_text(encoding='utf-8')
                             .replace('__CSP_NONCE__', request.state.csp_nonce))

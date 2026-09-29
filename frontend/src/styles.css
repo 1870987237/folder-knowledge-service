@@ -70,3 +70,117 @@ body { margin: 0; }
 @media (max-width: 1200px) { .app-content { padding: 28px 24px; } .inbox-layout { grid-template-columns: 300px minmax(0, 1fr); } .inbox-detail { padding: 20px; } }
 @media (max-width: 991px) { .app-sidebar:not(.ant-layout-sider-collapsed) { position: fixed; inset: 0 auto 0 0; z-index: 100; box-shadow: 8px 0 24px #0001; } .mobile-menu { position: relative; z-index: 101; } .app-sidebar:not(.ant-layout-sider-collapsed) + .app-content .mobile-menu { margin-left: 232px; } }
 @media (max-width: 760px) { .app-content { padding: 20px 16px; } .page-header { align-items: flex-start; margin-bottom: 20px; } .page-header .ant-typography { font-size: 23px; } .inbox-layout { grid-template-columns: 1fr; } .inbox-list { max-height: 330px; } .toolbar > .ant-input-search, .toolbar > .ant-select { width: 100%; } .stat-panel { padding: 16px; } .inbox-detail { min-height: 250px; } .login-panel { padding: 28px; } }
+.full-width { width: 100%; }
+.organization-select { min-width: 220px; }
+.knowledge-layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: var(--app-gap); align-items: start; }
+.knowledge-navigation .ant-btn-link { max-width: 230px; overflow: hidden; text-overflow: ellipsis; display: inline-block; }
+.knowledge-content { min-height: 560px; }
+.document-source { font-family: ui-monospace, Consolas, monospace; line-height: 1.7; }
+.explorer-breadcrumb { margin: -10px 0 16px; }
+.workspace-browser .page-header .ant-typography-secondary { font-size: 14px; }
+.explorer-breadcrumb .ant-btn { padding: 0; height: auto; }
+.explorer-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.explorer-toolbar .ant-input-search { width: 260px; }
+.toolbar-spacer { flex: 1; }
+.file-explorer .ant-table-tbody > tr > td { padding: 11px 16px; cursor: default; }
+.file-explorer .ant-table-thead > tr > th { padding: 10px 16px; }
+.file-explorer .explorer-selected > td { background: var(--app-selected) !important; }
+.file-explorer tr:focus-visible { outline: 2px solid var(--app-primary); outline-offset: -2px; }
+.explorer-name { display: flex; align-items: center; gap: 12px; }
+.explorer-name .anticon { color: var(--app-primary); font-size: 21px; }
+.explorer-selection { padding: 8px 16px; border-top: 1px solid var(--app-border); }
+.document-sheet { padding: 28px 36px; min-height: 480px; }
+.editor-mode { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.visual-editor .milkdown {
+  --crepe-font-title: var(--app-font); --crepe-font-default: var(--app-font);
+  --crepe-font-code: Consolas, monospace; --crepe-base-font-size: var(--app-font-size);
+  --crepe-color-background: var(--app-surface); --crepe-color-on-background: var(--app-text);
+  --crepe-color-primary: var(--app-primary); --crepe-color-surface: var(--app-bg);
+  --crepe-color-surface-low: var(--app-bg); --crepe-color-outline: var(--app-border);
+  --crepe-color-selected: var(--app-selected);
+}
+/* One typography contract for rendered documents and the editable document. */
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) {
+  max-width: 1036px; margin: 0 auto; padding: 12px 0;
+  font-family: var(--app-font); font-size: var(--app-font-size); color: var(--app-text);
+  line-height: 1.8; overflow-wrap: anywhere;
+}
+.visual-editor .milkdown .ProseMirror { min-height: 400px; caret-color: var(--app-text); }
+.visual-editor .milkdown .ProseMirror:focus { outline: none; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(h1, h2, h3, h4, h5, h6) { font-family: inherit; font-weight: 700; line-height: 1.8; padding: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h1 { font-size: 2em; margin: .67em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h2 { font-size: 1.5em; margin: .83em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h3 { font-size: 1.17em; margin: 1em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h4 { font-size: 1em; margin: 1.33em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h5 { font-size: .83em; margin: 1.67em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h6 { font-size: .67em; margin: 2.33em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) > :first-child { margin-top: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) p { font-size: 1em; line-height: inherit; padding: 0; margin: 1em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(ul, ol) { margin: 1em 0; padding-left: 40px; }
+.visual-editor .milkdown .ProseMirror :is(ul, ol) { padding-left: 6px; }
+.visual-editor .milkdown .ProseMirror .milkdown-list-item-block p { margin: 0; }
+.visual-editor .milkdown .ProseMirror .label-wrapper,
+.visual-editor .milkdown .ProseMirror .label-wrapper .label { height: 1.8em; padding: 0; line-height: 1.8; color: inherit; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) pre { padding: 16px; background: var(--app-bg); overflow-x: auto; border-radius: var(--app-radius); }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) table { border-collapse: collapse; }
+.markdown-document table { display: block; overflow-x: auto; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(th, td) { padding: 8px 12px; border: 1px solid var(--app-border); }
+.visual-editor .milkdown .ProseMirror :is(th, td) p { margin: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) blockquote { margin: 1em 0; padding: 0 0 0 16px; border-left: 3px solid var(--app-border); color: var(--app-muted); }
+.visual-editor .milkdown .ProseMirror blockquote::before { display: none; }
+.visual-editor .milkdown .ProseMirror img { display: none; }
+@media (max-width: 760px) { .document-sheet { padding: 16px; } .explorer-toolbar .ant-input-search { width: 100%; } }
+@media (max-width: 900px) { .knowledge-layout { grid-template-columns: 1fr; } .knowledge-content { min-height: 320px; } }
+
+/* The human workspace keeps navigation in one rail and gives the rest to content. */
+/* Keep the page shell stationary; each pane owns its scrolling. */
+html:has(.portal-layout), body:has(.portal-layout) { height: 100%; overflow: hidden; }
+.portal-layout { height: 100dvh; min-height: 0; overflow: hidden; }
+.portal-layout .app-sidebar { position: static; box-shadow: none; }
+.portal-layout .app-sidebar .ant-layout-sider-children { padding: 8px; height: 100dvh; overflow: hidden; }
+.portal-layout .app-sidebar .ant-menu { min-height: 0; max-width: 100%; overflow-x: hidden; overflow-y: auto; }
+.portal-layout .brand { height: 44px; padding: 0 8px; justify-content: space-between; gap: 4px; font-size: 15px; flex-shrink: 0; }
+.portal-layout .ant-layout-sider-collapsed .brand { justify-content: center; padding: 0; }
+.portal-layout .ant-menu-inline-collapsed { width: 100%; }
+.portal-layout .ant-menu-inline-collapsed > .ant-menu-item { padding-inline: 0; margin-inline: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.portal-layout .sidebar-footer { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 12px 0 0; }
+.portal-layout .ant-layout-sider-collapsed .sidebar-footer { justify-content: center; }
+.portal-layout .app-content { height: 100%; min-height: 0; padding: 0; background: var(--app-surface); overflow: auto; overscroll-behavior: contain; }
+.portal-layout .page-container { max-width: none; }
+.workspace-topbar { position: sticky; top: 0; z-index: 10; min-height: 52px; padding: 10px 20px; border-bottom: 1px solid var(--app-border); background: var(--app-surface); display: flex; align-items: center; gap: 8px; }
+.workspace-topbar .explorer-breadcrumb { flex: 1; min-width: 80px; margin: 0; overflow: auto; scrollbar-width: thin; }
+.workspace-topbar .explorer-breadcrumb ol { flex-wrap: nowrap; align-items: center; white-space: nowrap; }
+.workspace-topbar .explorer-breadcrumb li:last-child { overflow: hidden; text-overflow: ellipsis; }
+.workspace-location { font-weight: 500; flex: 1; }
+.workspace-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.workspace-editor-tools:empty { display: none; }
+.portal-layout .page-container > .file-explorer { margin: 16px 20px; }
+.workspace-panels > .ant-tabs-content-holder { padding: 16px 20px; }
+.portal-layout .file-explorer { border: 0; border-radius: 0; }
+.portal-layout .file-explorer .ant-table-tbody > tr > td { padding: 7px 12px; height: 42px; }
+.portal-layout .file-explorer .ant-table-thead > tr > th { padding: 8px 12px; }
+.portal-layout .explorer-name { gap: 10px; }
+.portal-layout .explorer-name .anticon { font-size: 18px; }
+.portal-layout .explorer-name > .ant-btn { margin-left: auto; height: 24px; }
+.portal-layout .document-sheet { border: 0; border-radius: 0; padding: 8px 24px; min-height: calc(100dvh - 100px); overflow: visible; }
+.portal-layout .document-sheet .visual-editor .milkdown .ProseMirror { padding: 12px 0; min-height: calc(100dvh - 130px); max-width: 1036px; }
+.portal-layout .document-sheet .markdown-document { max-width: 1036px; padding: 12px 0; }
+.portal-layout .document-sheet .ProseMirror > :first-child, .portal-layout .document-sheet .markdown-document > :first-child { margin-top: 0; }
+.portal-layout .page-container > .page-header { padding: 14px 20px; margin: 0; }
+.portal-layout .page-header .ant-typography { font-size: 16px; }
+@media (max-width: 760px) {
+  .workspace-topbar { padding: 8px 12px; flex-wrap: wrap; }
+  .workspace-topbar .explorer-breadcrumb { min-width: 120px; }
+  .workspace-actions { gap: 4px; }
+  .workspace-panels > .ant-tabs-content-holder { padding: 12px; }
+  .portal-layout .page-container > .file-explorer { margin: 12px; }
+  .portal-layout .document-sheet { padding: 4px 24px; }
+  .portal-layout .document-sheet .visual-editor .milkdown .ProseMirror { padding: 12px 0; }
+}
+
+.document-format-tools { display: flex; align-items: center; gap: 8px; }
+.block-format-symbol { display: inline-flex; width: 24px; justify-content: center; font-weight: 600; }
+
+.workspace-key-list { padding: 16px 20px; }
+/* Avoid autosize's body-level measurement textarea under the strict CSP. */
+.document-source { min-height: 360px; max-height: 70dvh; resize: vertical; overflow: auto; }

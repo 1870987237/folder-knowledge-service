@@ -1,0 +1,11 @@
+# Optional writable native-document area; other knowledge mounts stay read-only.
+# mkdir -p "$KB_SOURCE_DIR/document-releases" before starting.
+# docker compose -f compose.yaml -f compose.workspace.yaml up -d --build
+services:
+  knowledge:
+    volumes:
+      - type: bind
+        source: ${KB_SOURCE_DIR:?Set KB_SOURCE_DIR}/document-releases
+        target: /knowledge/document-releases
+        bind:
+          create_host_path: false
