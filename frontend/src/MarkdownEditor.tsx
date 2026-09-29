@@ -4,6 +4,7 @@ import { Alert, Button, Dropdown, Input, Segmented, Spin, theme } from 'antd';
 import { DownOutlined } from '@ant-design/icons';
 import { visualMarkdownReason, sameMarkdown } from './markdownSafety';
 import { themeVariables } from './theme';
+import type { ActiveBlock } from './blockHandleMenu';
 import type { Crepe } from '@milkdown/crepe';
 
 // The owner supplies a new key when switching documents or reloading a revision.
@@ -14,22 +15,32 @@ export function MarkdownEditor({ value, onChange, disabled = false, plain = fals
   const [mode, setMode] = useState(plain || visualMarkdownReason(value) ? '源码' : '正文');
   const [reason, setReason] = useState(plain ? '' : visualMarkdownReason(value));
   const [loading, setLoading] = useState(false);
+  const [blockMenu, setBlockMenu] = useState<{ x: number; y: number } | null>(null);
   const [format, setFormat] = useState('paragraph');
   const [formats, setFormats] = useState<Array<{ key: string; label: string; symbol: string }>>([]);
   const applyFormat = useRef<((key: string) => boolean) | undefined>(undefined);
   const root = useRef<HTMLDivElement>(null), editor = useRef<Crepe | undefined>(undefined);
   const latest = useRef(value), change = useRef(onChange), locked = useRef(disabled);
   latest.current = value; change.current = onChange; locked.current = disabled;
-  useEffect(() => { editor.current?.setReadonly(disabled); }, [disabled]);
+  useEffect(() => { editor.current?.setReadonly(disabled); if (disabled) setBlockMenu(null); }, [disabled]);
+  useEffect(() => {
+    if (!blockMenu) return;
+    const close = () => setBlockMenu(null);
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const scroll = (e: Event) => { if (!(e.target instanceof Element) || !e.target.closest('.ant-dropdown')) close(); };
+    window.addEventListener('resize', close); document.addEventListener('scroll', scroll, true); document.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('resize', close); document.removeEventListener('scroll', scroll, true); document.removeEventListener('keydown', escape); };
+  }, [blockMenu]);
   useEffect(() => {
     if (mode !== '正文' || !root.current) return;
     const host = root.current; let cancelled = false; let created = false; let instance: Crepe | undefined;
-    setLoading(true);
+    let activeBlock: ActiveBlock | undefined; let unbindHandle: (() => void) | undefined;
+    setBlockMenu(null); setLoading(true);
     void (async () => {
       try {
-        const [{ Crepe }, { $prose }, { Plugin }, { EditorView }, { editorViewCtx }, blockFormatting] = await Promise.all([
+        const [{ Crepe }, { $prose }, { Plugin }, { EditorView }, { editorViewCtx }, blockFormatting, { bindBlockHandleMenu }] = await Promise.all([
           import('@milkdown/crepe'), import('@milkdown/kit/utils'), import('@milkdown/kit/prose/state'),
-          import('@codemirror/view'), import('@milkdown/kit/core'), import('./blockFormats'),
+          import('@codemirror/view'), import('@milkdown/kit/core'), import('./blockFormats'), import('./blockHandleMenu'),
           import('@milkdown/crepe/theme/common/style.css'), import('@milkdown/crepe/theme/frame.css'),
         ]);
         if (cancelled) return;
@@ -39,6 +50,10 @@ export function MarkdownEditor({ value, onChange, disabled = false, plain = fals
           [Crepe.Feature.ImageBlock]: false, [Crepe.Feature.Latex]: false,
           [Crepe.Feature.AI]: false, [Crepe.Feature.TopBar]: false,
         }, featureConfigs: {
+          [Crepe.Feature.BlockEdit]: { blockHandle: { getOffset: () => 8, getPosition: ({ active }) => {
+            activeBlock = { from: active.$pos.pos, to: active.$pos.pos + active.node.nodeSize };
+            return active.el.getBoundingClientRect();
+          } } },
           // Native caret stays aligned during nested scrolling, zoom and Chinese input.
           [Crepe.Feature.Cursor]: { virtual: false },
           [Crepe.Feature.CodeMirror]: { theme: EditorView.theme({}, { dark: false }), extensions: [EditorView.cspNonce.of(document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content || '')], copyText: '复制', searchPlaceholder: '搜索语言', noResultText: '无匹配语言' },
@@ -73,19 +88,25 @@ export function MarkdownEditor({ value, onChange, disabled = false, plain = fals
         editor.current = instance; instance.setReadonly(locked.current); ready = true;
         const view = instance.editor.ctx.get(editorViewCtx);
         setFormat(blockFormatting.currentBlockFormat(view.state));
+        unbindHandle = bindBlockHandleMenu(host, view, () => activeBlock, setBlockMenu);
         applyFormat.current = key => !locked.current && blockFormatting.applyBlockFormat(view, key);
         host.querySelector('[contenteditable]')?.setAttribute('aria-label', '文档正文');
       } catch { if (!cancelled) { setReason('正文编辑器未能加载，可继续使用源码编辑。'); setMode('源码'); } }
       finally { if (!cancelled) setLoading(false); }
     })();
-    return () => { cancelled = true; editor.current = undefined; applyFormat.current = undefined; if (created && instance) void instance.destroy().catch(() => {}); };
+    return () => { cancelled = true; unbindHandle?.(); editor.current = undefined; applyFormat.current = undefined; if (created && instance) void instance.destroy().catch(() => {}); };
   }, [mode]);
+  const formatItems = formats.map(item => ({ key: item.key, label: item.label, icon: <span className="block-format-symbol">{item.symbol}</span> }));
+  const chooseFormat = (key: string) => {
+    setBlockMenu(null);
+    if (!applyFormat.current?.(key)) setReason('当前选区不能转换为此格式，请将光标放在一个段落内。'); else setReason('');
+  };
   const modeControl = <div className="document-format-tools">
     {mode === '正文' && <Dropdown trigger={['click']} disabled={disabled || loading} menu={{
       selectedKeys: [format],
-      items: formats.map(item => ({ key: item.key, label: item.label, icon: <span className="block-format-symbol">{item.symbol}</span> })),
-      onClick: ({ key }) => { if (!applyFormat.current?.(key)) setReason('当前选区不能转换为此格式，请将光标放在一个段落内。'); else setReason(''); },
-    }}><Button size="small" type="text" aria-label="段落格式" onMouseDown={e => e.preventDefault()} disabled={disabled || loading}>
+      items: formatItems,
+      onClick: ({ key }) => chooseFormat(key),
+    }}><Button size="small" type="text" className="block-format-trigger" aria-label="段落格式" onMouseDown={e => e.preventDefault()} disabled={disabled || loading}>
       {formats.find(item => item.key === format)?.label || '段落格式'} <DownOutlined />
     </Button></Dropdown>}
     <Segmented size="small" value={mode} disabled={disabled} options={['正文', '源码']} onChange={v => {
@@ -95,6 +116,9 @@ export function MarkdownEditor({ value, onChange, disabled = false, plain = fals
     }} /></div>;
   return <div className="markdown-editor" style={themeVariables(token)}>
     {!plain && (toolbarContainer ? createPortal(modeControl, toolbarContainer) : <div className="editor-mode">{modeControl}</div>)}
+    {blockMenu && mode === '正文' && !disabled && createPortal(<Dropdown open autoFocus trigger={['click']} placement="bottomLeft" onOpenChange={open => { if (!open) setBlockMenu(null); }} menu={{ selectedKeys: [format], items: formatItems, onClick: ({ key }) => chooseFormat(key) }}>
+      <span className="block-menu-anchor" style={{ left: blockMenu.x, top: blockMenu.y }} />
+    </Dropdown>, document.body)}
     {reason && <Alert type="info" title={reason} className="block-gap" />}
     {mode === '源码' ? <Input.TextArea aria-label="文档源码" className="document-source" value={value} disabled={disabled} onChange={e => onChange(e.target.value)} rows={18} /> : <Spin spinning={loading}><div ref={root} className="visual-editor" /></Spin>}
   </div>;
