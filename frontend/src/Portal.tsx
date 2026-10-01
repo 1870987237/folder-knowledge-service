@@ -3,6 +3,7 @@ import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Me
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { KeyPolicy, LibraryAgentSettings } from './KeyPolicy';
 import { Api, errorMessage, query } from './api';
 import { PageHeader, date } from './components';
 import { Organizations, type Identity } from './pages/People';
@@ -63,6 +64,7 @@ function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; ide
 
 function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api: Api; identity: Identity; library: Library; back: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const { modal, message } = App.useApp();
+  const [agentSettings, setAgentSettings] = useState(false);
   const [editorTools, setEditorTools] = useState<HTMLSpanElement | null>(null), [searchOpen, setSearchOpen] = useState(false);
   const [tab, setTab] = useState('documents'), [directory, setDirectory] = useState<DirectoryPage>(), [path, setPath] = useState('.');
   const [doc, setDoc] = useState<Doc>(), [text, setText] = useState(''), [editorRevision, setEditorRevision] = useState(0);
@@ -110,12 +112,14 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
   function openEntry(id: string) { const entry = directory?.entries.find(r => r.path === id); if (entry?.type === 'directory') void browse(id); else void open(id); }
   function switchView(t: string) { navigate(() => { setText(doc?.content || ''); setEditorRevision(v => v + 1); setTab(t); if (t === 'drafts') void loadDrafts(); if (t === 'documents' && !directory) void browse(path); }); }
   return <div className="workspace-browser">
+    <Modal title="Agent 接入" open={agentSettings} footer={null} onCancel={() => setAgentSettings(false)} destroyOnHidden><LibraryAgentSettings api={api} id={library.id} /></Modal>
     <div className="workspace-topbar">
       <Tooltip title={doc && tab === 'documents' ? '返回列表' : '上一级'}><Button size="small" type="text" aria-label={doc && tab === 'documents' ? '返回列表' : '上一级'} icon={<ArrowLeftOutlined />} disabled={busy} onClick={() => navigate(() => {
         if (tab !== 'documents') switchView('documents'); else if (doc) { setDoc(undefined); } else if (path === '.') back(); else void browse(path.split('/').slice(0, -1).join('/') || '.');
       })} /></Tooltip>
       <Breadcrumb className="explorer-breadcrumb" items={crumbs} />
       <div className="workspace-actions">
+        {library.role >= 4 && <Button size="small" type="text" onClick={() => setAgentSettings(true)}>Agent 接入</Button>}
         <span ref={setEditorTools} className="workspace-editor-tools" />
         {tab === 'documents' && !doc && <><Popover trigger="click" open={searchOpen} onOpenChange={setSearchOpen} content={<Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear onSearch={q => { setSearchOpen(false); void find(q); }} />}><Button size="small" type="text" aria-label="搜索" icon={<SearchOutlined />} /></Popover><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} disabled={busy} onClick={() => { void browse(path); }} /></Tooltip>{canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}</>}
         {tab === 'documents' && doc && canEdit && <>{text !== doc.content && <Button size="small" disabled={busy} onClick={() => navigate(() => { setText(doc.content); setEditorRevision(v => v + 1); })}>撤销修改</Button>}<Button size="small" type="primary" loading={busy} disabled={text === doc.content} onClick={async () => {
@@ -161,6 +165,7 @@ function LibraryMembers({ api, library }: { api: Api; library: Library }) {
 }
 
 function UserKeys({ api, libraries }: { api: Api; libraries: Library[] }) {
+  const [editing, setEditing] = useState<string>();
   const [keys, setKeys] = useState<{ id: string; agent_name: string; revoked_at?: string }[]>([]), [token, setToken] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [create, setCreate] = useState(false), [creating, setCreating] = useState(false), [createError, setCreateError] = useState('');
   const [form] = Form.useForm(); const { modal } = App.useApp();
@@ -172,8 +177,9 @@ function UserKeys({ api, libraries }: { api: Api; libraries: Library[] }) {
       <Button size="small" type="primary" onClick={() => { setCreateError(''); setCreate(true); }}>添加 Key</Button>
     </div></div>
     <div className="workspace-key-list">{error && <Alert className="block-gap" type="error" title={error} />}
-      <Table size="small" loading={busy} pagination={{ hideOnSinglePage: true }} rowKey="id" dataSource={keys} columns={[{ title: '名称', dataIndex: 'agent_name' }, { title: '状态', render: (_, r) => r.revoked_at ? '已撤销' : '有效' }, { title: '操作', render: (_, r) => !r.revoked_at && <Button type="link" danger onClick={() => modal.confirm({ title: '撤销此 Key？', onOk: async () => { try { await api.request(`/keys/${r.id}/revoke`, 'POST'); await load(); } catch (e) { setError(errorMessage(e)); throw e; } } })}>撤销</Button> }]} />
+      <Table size="small" loading={busy} pagination={{ hideOnSinglePage: true }} rowKey="id" dataSource={keys} columns={[{ title: '名称', dataIndex: 'agent_name' }, { title: '状态', render: (_, r) => r.revoked_at ? '已撤销' : '有效' }, { title: '操作', render: (_, r) => !r.revoked_at && <Space><Button type="link" onClick={() => setEditing(r.id)}>权限设置</Button><Button type="link" danger onClick={() => modal.confirm({ title: '撤销此 Key？', onOk: async () => { try { await api.request(`/keys/${r.id}/revoke`, 'POST'); await load(); } catch (e) { setError(errorMessage(e)); throw e; } } })}>撤销</Button></Space> }]} />
     </div>
+    <Modal title="权限设置" open={!!editing} onCancel={() => setEditing(undefined)} footer={null} width={880} destroyOnHidden>{editing && <KeyPolicy api={api} id={editing} libraries={libraries} done={() => { setEditing(undefined); void load(); }} />}</Modal>
     <Modal title="添加 Agent Key" open={create} destroyOnHidden onCancel={() => setCreate(false)} onOk={() => form.submit()} okText="创建 Key" confirmLoading={creating} cancelButtonProps={{ disabled: creating }} closable={!creating} maskClosable={!creating} keyboard={!creating}>
       <Form form={form} clearOnDestroy layout="vertical" onFinish={async v => {
         setCreating(true); setCreateError('');

@@ -154,7 +154,7 @@ def test_idempotency_concurrency_restart_backup_and_outage(env, tmp_path):
     target = backup(settings.state_dir, tmp_path / 'backup.sqlite3')
     with sqlite3.connect(target) as db:
         assert db.execute('SELECT count(*) FROM inbox_items').fetchone()[0] == 2
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 7
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 8
     # Inbox references a stable library ID and still accepts reports during directory outages.
     path = app.state.registry.pool.root / 'alpha'
     (path / 'README.md').unlink()
@@ -246,11 +246,13 @@ def test_real_mcp_material_contract(env):
                     async with ClientSession(read, write) as session:
                         await session.initialize()
                         tools = {t.name: t for t in (await session.list_tools()).tools}
-                        assert tools['submit_material'].annotations.readOnlyHint is False
-                        assert tools['get_submission'].annotations.readOnlyHint is True
+                        assert 'submit_material' not in tools and 'get_submission' not in tools
                         denied = await session.call_tool('submit_material', {'material': envelope()})
                         assert denied.isError
                         grant(app, key)
+                        tools = {t.name: t for t in (await session.list_tools()).tools}
+                        assert tools['submit_material'].annotations.readOnlyHint is False
+                        assert tools['get_submission'].annotations.readOnlyHint is True
                         result = await session.call_tool('submit_material', {'material': envelope()})
                         assert not result.isError, result
                         data = result.structuredContent

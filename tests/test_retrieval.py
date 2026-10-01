@@ -85,8 +85,8 @@ def test_stale_sources_are_not_returned(env, tmp_path, change):
     elif change == 'remount': app.state.registry.save_library('alpha','alpha','beta',True)
     else: c.delete('/admin/api/libraries/alpha/plugin', headers=auth())
     result = c.get('/api/v1/search', headers=auth(key['token']), params={'library_id':'alpha','query':'密钥'})
-    assert result.status_code == 409, result.text
-    assert result.json()['error'] in ('index_stale','index_not_configured')
+    assert result.status_code == (403 if change == 'unbind' else 409), result.text
+    assert result.json()['error'] in ('index_stale','capability_forbidden')
     if change != 'unbind':
         assert service.state('alpha')['status'] == 'stale'
         assert service.build('alpha')['status'] == 'ready'

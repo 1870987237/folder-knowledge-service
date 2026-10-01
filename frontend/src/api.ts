@@ -1,4 +1,9 @@
 const messages: Record<string, string> = {
+  capability_forbidden: '此 Key 未获得该知识库的这项操作权限，或所有者权限已变化。',
+  policy_changed: '权限已被修改，请重新打开权限设置后再保存。',
+  direct_write_disabled: '请先在知识库的「Agent 接入」开启直接写入。',
+  direct_write_unsupported: '只有独立的平台文档库支持直接写入；Git 库或带更新程序的插件库不支持。',
+  request_conflict: '此 request_id 已用于其他写入，请为新内容使用新 ID。',
   not_found: '路径或资源不存在，请检查输入。',
   workspace_view_mismatch: '工作根与检索子目录组合后，必须与知识库挂载目录一致。',
   workspace_binding_conflict: '同一工作范围的知识库需使用相同模板、配置及排除规则。',

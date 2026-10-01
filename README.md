@@ -97,12 +97,12 @@ flowchart LR
 | 概览 | 已启用知识库、有效 Key、累计调用、失败数、连接地址和最近活动 |
 | 知识库 | 从挂载范围内选择目录，添加或编辑映射、启停、只读浏览文件、模板绑定与工作范围配置 |
 | Git 仓库 | 登记远端仓库或接管已有目录、关联知识库、手动/定时同步、查看发布版本和同步记录 |
-| Agent 与密钥 | 生成 Key、指定可访问的知识库、设置到期时间、编辑访问及提交授权、撤销、查看最近访问 |
+| Agent 与密钥 | 生成 Key、指定可访问的知识库、设置到期时间、配置逐库读取、Grep、Search、写入方式及 instructions、撤销、查看最近访问 |
 | 收件箱 | 筛选材料、查看来源场景、领取/释放、回填处理结果 |
 | 插件 | 安装固定版本、查看更新能力/索引定义/Agent 指引、管理绑定 |
 | 访问活动 | 当前执行请求，按 Key、知识库、时间与结果筛选记录，支持历史分页 |
 
-目录配置及 Key 变更无需重启，后续请求立即使用最新授权。正在执行的请求允许完成。更换某个知识库的目录，会同时影响已授权给它的 Key；停用知识库不删除原文件。
+目录配置及 Key 变更无需重启，后续请求立即使用最新授权。读操作在返回前复核权限；写操作在发布事务内校验权限。更换某个知识库的目录，会同时影响已授权给它的 Key；停用知识库不删除原文件。
 
 添加或编辑知识库时，点击“选择目录”打开文件夹浏览器：单击名称选中，双击进入子目录，也可点击“打开”；顶部路径可逐级返回，底部确认所选路径。支持筛选已加载的文件夹及加载更多，取消不会改动原表单。
 
@@ -110,7 +110,7 @@ flowchart LR
 
 `list_libraries` 保留已授权且启用的异常知识库，并返回 `availability.status` 和 `availability.message`。状态为 `available`、`missing`、`permission_denied`、`not_directory`、`unsafe_path` 或 `io_error`。访问异常库时 REST 返回 `503`、`error: library_unavailable` 和 `reason`，MCP 返回带原因的工具错误；其他库仍可访问。正常库内缺失单个文件仍返回 `404`，不视为整个库故障。可用性是当次检查结果，不是持续在线保证。
 
-已有 Key 可在“Agent 与密钥 → 权限设置”中增减知识库，保存后后续请求立即使用新授权，无需更换客户端 Key；正在执行的请求允许完成。不勾选任何知识库可暂时清空访问权限，之后可重新授权。编辑不会更改有效期或恢复已过期 Key；已撤销 Key 不可编辑。管理 API 为 `PUT /admin/api/keys/{key_id}/grants`，请求体为 `{"library_ids":["team-guide"]}`，需要管理员令牌。
+已有 Key 可在“Agent 与密钥 → 权限设置”中增减知识库，保存后后续请求立即使用新授权，无需更换客户端 Key；读操作在返回前复核权限；写操作在发布事务内校验权限。不勾选任何知识库可暂时清空访问权限，之后可重新授权。编辑不会更改有效期或恢复已过期 Key；已撤销 Key 不可编辑。管理 API 为 `PUT /admin/api/keys/{key_id}/grants`，请求体为 `{"library_ids":["team-guide"]}`，需要管理员令牌。
 
 每个 Key 的完整值仅在创建时返回一次，文件中只保存哈希。管理员令牌只在浏览器页面内存中使用，刷新或退出后重新登录，不写入浏览器存储。Agent Key 不能访问管理 API，管理员令牌也不能用作 Agent Key。
 
@@ -242,7 +242,7 @@ curl http://127.0.0.1:8790/healthz
 
 固定挂载范围内新增子目录后，可直接在页面注册。超出挂载范围的新目录需要修改 `KB_SOURCE_DIR` 或部署挂载并重新创建容器，不允许页面任意读取服务器文件系统。
 
-容器以 UID/GID `10001:10001` 运行。`knowledge` 容器的知识挂载保持只读；`git-sync` 容器可写发布目录和私有缓存，不对外开放端口。二者根文件系统均只读，不自动创建错误的源目录。Agent 的 MCP/REST 接口没有文件写入或命令执行能力。
+容器以 UID/GID `10001:10001` 运行。`knowledge` 容器的知识挂载保持只读；`git-sync` 容器可写发布目录和私有缓存，不对外开放端口。二者根文件系统均只读，不自动创建错误的源目录。Agent 默认只读，不提供命令执行能力。原生文档库可显式授权 write_file；其 document-releases 子目录需单独挂载可写卷，外部知识及 Git 发布目录仍只读。
 
 推荐由已有 HTTPS 反向代理转发到 `127.0.0.1:8790`，保留 `Host` 和 `Authorization`，将实际域名列入 `KB_ALLOWED_HOSTS`。管理页面与管理 API 同源访问；不开放跨站管理请求。这版使用一个管理员令牌和多个 Agent Key，未实现 OAuth、管理员账号体系或多租户隔离。
 
@@ -328,12 +328,13 @@ REST 与 MCP 使用相同参数名、相同文件访问实现，返回相同数�
 
 传入读取游标时，以游标中记录的行范围和行内位置继续；REST 使用同名查询参数。搜索续页保留原 `query/path/file_glob/regex_mode/ignore_case/context`，传入 `cursor`，不再传 `offset`。游标绑定请求范围并签名，当前进程重启后失效；文件版本或搜索文件清单变化时返回 `version_changed`，需要重新开始。每次仍重新校验 Key 授权。
 
-维护者或经验提炼管线通过独立发布流程更新知识。消费 Agent 默认只有读取权限；获单独授权的 Agent 可向收件箱提交材料，不能直接写知识文件。处理结论与正式知识发布相互独立。
+维护者或经验提炼管线通过独立发布流程更新知识。消费 Agent 默认只有读取权限；获单独授权的 Agent 可向收件箱提交材料；原生文档库另可授权直接写入，见下方说明。处理结论与正式知识发布相互独立。
 
 ## 配置、审计与备份
 
 ```text
-/knowledge/                  # 原始知识目录池，只读
+/knowledge/                  # 目录池，外部知识保持只读
+  document-releases/         # 原生文档库历史快照；启用文档编辑时独立可写挂载
   git-releases/              # 同步进程写入；HTTP/MCP 容器仍只读
     <repository-id>/<commit>-<release-id>/
 /service-data/               # KB_STATE_DIR，独立可写数据卷
@@ -406,3 +407,14 @@ python -m pytest -q
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。
 
 权限窗口通过 `GET/PUT /admin/api/keys/{key_id}/permissions` 读取与保存，PUT 请求体为 `{"library_ids":["team-guide"],"submit_library_ids":["team-guide"]}`。两类权限在一个 SQLite 事务中更新，失败不会只保存一部分。原 `/grants` 和 `/inbox-grants` 接口继续可用。
+
+
+### 按 Key 配置工具与写入
+
+在「Agent 与密钥 → 权限设置」中，为每个库选择读取、Grep、Search 和写入方式，并填写 Agent 使用说明（instructions）。个人工作区也提供同样的配置入口。MCP 工具列表按有效权限取并集；同一个工具通过 library_id 访问不同库，调用时再次鉴权。授权变化后请让 Agent 刷新工具或重新连接。
+
+- **Search**：库需绑定检索插件并构建索引；当前提供 SQLite FTS5/BM25 全文检索。
+- **提交收件箱**：沿用 submit_material / get_submission，不直接修改正式知识。
+- **直接写入**：知识库管理者先在「Agent 接入」开启，再给 Key 授权；仅限独立的平台原生文档库，Key 所有者需具备发布权限。write_file 可创建/替换最多 256 KiB 的 UTF-8 Markdown/txt 文件，替换需带 read_file 返回的 expected_version，request_id 用于幂等重试。
+
+写入保留历史并立即发布，索引需随后重建。Git 库和带更新程序的插件库继续使用原更新流程。详细接口及兼容行为见[多知识库授权与 MCP 接口](docs/key-capabilities-and-retrieval.md)。

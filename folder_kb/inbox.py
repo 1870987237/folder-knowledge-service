@@ -126,6 +126,9 @@ class Inbox:
             (key['id'], library_id)).fetchone()
         if not row or not owned_key_allowed(db, key['id'], library_id, submit=True):
             raise KnowledgeError('inbox_forbidden', 'Material submission is not granted for this library', 403)
+        from .capabilities import Capabilities
+        library = db.execute('SELECT * FROM libraries WHERE id=?', (library_id,)).fetchone()
+        Capabilities(self.registry).require(db, key, library, 'submit_material')
         return key
 
     def grants(self, key_id, library_ids=None):
@@ -141,6 +144,9 @@ class Inbox:
                 db.execute('DELETE FROM inbox_grants WHERE key_id=?', (key_id,))
                 db.executemany('INSERT INTO inbox_grants VALUES (?,?)',
                                [(key_id, lid) for lid in sorted(set(library_ids))])
+                from .capabilities import bump
+                db.execute('UPDATE key_capabilities SET direct_enabled=0 WHERE key_id=?', (key_id,))
+                bump(db, key_id)
                 self.store.event(db, {'kind': 'admin', 'action': 'inbox_grants_update',
                                       'key_id': key_id, 'library_ids': library_ids, 'status': 'ok'})
             return {'key_id': key_id, 'submit_library_ids': [r[0] for r in db.execute(
@@ -173,6 +179,9 @@ class Inbox:
                 self.store.event(db, {'kind': 'admin', 'action': 'inbox_grants_update', 'key_id': key_id,
                                       'library_ids': submissions, 'status': 'ok'})
                 key['library_ids'] = reads
+                from .capabilities import bump
+                db.execute('UPDATE key_capabilities SET direct_enabled=0 WHERE key_id=?', (key_id,))
+                bump(db, key_id)
             return {'key_id': key_id, 'library_ids': key['library_ids'], 'submit_library_ids': [r[0] for r in db.execute(
                 'SELECT library_id FROM inbox_grants WHERE key_id=? ORDER BY library_id', (key_id,))]}
 

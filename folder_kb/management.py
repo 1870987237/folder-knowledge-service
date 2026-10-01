@@ -205,6 +205,8 @@ class Registry:
                            [(kid, lid) for lid in set(previous) - set(key['library_ids'])])
             db.executemany('INSERT OR IGNORE INTO key_libraries VALUES (?,?)',
                            [(kid, lid) for lid in key['library_ids']])
+            from .capabilities import bump
+            bump(db, kid)
             self.store.event(db, {'kind': 'admin', 'action': 'key_grants_update', 'key_id': kid,
                                  'previous_library_ids': previous, 'library_ids': key['library_ids'], 'status': 'ok'})
             return self.public_key(key)
@@ -256,12 +258,14 @@ class Registry:
             return key, selected
 
     def visible_libraries(self, token: str):
-        with self.store.transaction() as db:
-            key = self._authenticate(token, db)
-            rows = [self.store.library(row) for row in db.execute(
-                'SELECT l.* FROM libraries l JOIN key_libraries g ON l.id=g.library_id '
-                'WHERE g.key_id=? AND l.enabled=1 ORDER BY l.rowid', (key['id'],))]
-        return [{'id': row['id'], 'name': row['name'], 'availability': self.availability(row)} for row in rows if row['id'] in key['library_ids']]
+        from .capabilities import Capabilities
+        from .retrieval import Retrieval
+        _, _, libraries = Capabilities(self).discovery(token)
+        for library in libraries:
+            _, row = self.resolve(token, library['id'])
+            library['availability'] = self.availability(row)
+            library['index'] = Retrieval(self).state(library['id'])
+        return libraries
 
     def run(self, token: str, library_id: str | None, tool: str, kwargs: dict, transport: str):
         identity = self.authenticate(token)
@@ -277,12 +281,18 @@ class Registry:
                 result = {'libraries': self.visible_libraries(token)}
             else:
                 _, selected = self.resolve(token, library_id)
+                from .capabilities import Capabilities
+                effective = Capabilities(self).authorize(token, selected['id'], tool)
                 event['library_id'] = selected['id']
                 with self.active_mutex:
                     self.active[request_id] = dict(event)
                 result = self.access_library(selected, tool, kwargs)
-                if tool == 'search':
-                    self.resolve(token, selected['id'])
+                if tool == 'info':
+                    result['capabilities'] = effective
+                    result['read_only'] = effective['write_policy'] != 'direct'
+                    retrieval = ' / '.join(t for t in ('grep', 'search') if effective[t])
+                    result['workflow'] = 'list_directory / glob → ' + (retrieval + ' → ' if retrieval else '') + 'read_file; cite paths and lines, continue with next_cursor'
+                Capabilities(self).authorize(token, selected['id'], tool)
                 result = dict(result, library_id=selected['id'])
             event['status'] = 'partial' if result.get('partial') else 'ok'
             return result

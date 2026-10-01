@@ -5,6 +5,7 @@ import { FolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { useSession } from '../context';
 import { AsyncForm, Availability, FileBrowser, idRules, NameCell, PageHeader, PathInput, required, Surface } from '../components';
 import { UpdateSettings } from './Updates';
+import { LibraryAgentSettings } from '../KeyPolicy';
 import { RetrievalSettings } from './Retrieval';
 import { TemplateBinding } from './Templates';
 import type { Library } from '../types';
@@ -34,6 +35,7 @@ export function LibrariesPage() {
       { key: 'template', label: '插件与工作范围', children: <TemplateBinding key={library.id} library={library} /> },
       { key: 'retrieval', label: '检索索引', children: <RetrievalSettings key={library.id} library={library} /> },
       { key: 'updates', label: '更新设置', children: <UpdateSettings key={library.id} library={library} /> },
+      { key: 'agent', label: 'Agent 接入', children: <LibraryAgentSettings api={api} id={library.id} /> },
       { key: 'settings', label: '基本设置', children: <LibraryForm key={library.id} library={library} done={() => setSelected(undefined)} /> },
     ]} /></>}</Drawer>
   </>;
