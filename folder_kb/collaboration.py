@@ -120,7 +120,9 @@ def user_role(db, user_id, library_id):
     grant = db.execute('SELECT role FROM library_members WHERE library_id=? AND user_id=?', (library_id, user_id)).fetchone()
     from .governance import metadata
     default = 1 if metadata(db, library_id)['organization_access'] == 'org_read' else 0
-    return max(ROLES.get(grant[0], 0) if grant else 0, default)
+    from .organization_directory import inherited_role
+    return max(ROLES.get(grant[0], 0) if grant else 0, default,
+               inherited_role(db, user_id, library_id, scope['organization_id']))
 
 
 def owned_key_allowed(db, key_id, library_id, submit=False):
@@ -511,6 +513,8 @@ def add_collaboration_routes(app, registry):
                     "SELECT count(*) FROM organization_members m JOIN users u ON u.id=m.user_id WHERE organization_id=? AND role='admin' AND u.status='active'", (oid,)).fetchone()[0] <= 1:
                 fail('last_admin', '请先设置另一位组织管理员', 409)
             if value.role == 'remove':
+                from .organization_directory import remove_member
+                remove_member(db, oid, user[0])
                 db.execute('DELETE FROM organization_members WHERE organization_id=? AND user_id=?', (oid, user[0]))
                 db.execute('DELETE FROM library_members WHERE user_id=? AND library_id IN (SELECT library_id FROM library_ownership WHERE organization_id=?)', (user[0], oid))
             else:

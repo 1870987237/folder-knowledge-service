@@ -93,6 +93,7 @@ class Governance:
                 bump(db, kid)
             db.execute('DELETE FROM key_libraries WHERE library_id=?', (lid,))
             db.execute('DELETE FROM library_members WHERE library_id=?', (lid,))
+            db.execute('DELETE FROM library_unit_grants WHERE library_id=?', (lid,))
             db.execute('UPDATE library_agent_settings SET direct_enabled=0 WHERE library_id=?', (lid,))
             policy = db.execute('SELECT definition FROM update_policies WHERE library_id=?', (lid,)).fetchone()
             if policy:

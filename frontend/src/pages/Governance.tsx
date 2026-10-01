@@ -32,12 +32,12 @@ export function GovernanceTable({ api, organizations, reload }: { api: Api; orga
 }
 
 type Sharing = { organization_access: 'restricted' | 'org_read'; revision: number };
-export function SharingSettings({ api, id }: { api: Client; id: string }) {
+export function SharingSettings({ api, id, refreshKey, onChanged }: { api: Client; id: string; refreshKey?: number; onChanged?: () => void }) {
   const [data, setData] = useState<Sharing>(), [choice, setChoice] = useState<Sharing['organization_access']>('restricted'), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const { message, modal } = App.useApp();
   async function load() { setError(''); try { const value = await api.request<Sharing>(`/libraries/${id}/sharing`); setData(value); setChoice(value.organization_access); } catch (e) { setError(errorMessage(e)); } }
-  useEffect(() => { void load(); }, [api, id]);
-  async function save() { if (!data) return; setBusy(true); setError(''); try { const value = await api.request<Sharing>(`/libraries/${id}/sharing`, 'PUT', { organization_access: choice, expected_revision: data.revision }); setData(value); message.success('共享模式已更新'); } catch (e) { setError(errorMessage(e)); throw e; } finally { setBusy(false); } }
+  useEffect(() => { void load(); }, [api, id, refreshKey]);
+  async function save() { if (!data) return; setBusy(true); setError(''); try { const value = await api.request<Sharing>(`/libraries/${id}/sharing`, 'PUT', { organization_access: choice, expected_revision: data.revision }); setData(value); onChanged?.(); message.success('共享模式已更新'); } catch (e) { setError(errorMessage(e)); throw e; } finally { setBusy(false); } }
   return <Space orientation="vertical" className="full-width" size="small">
     {error && <LoadError error={error} retry={load} />}
     <Space wrap><Typography.Text>共享模式</Typography.Text><Select style={{ width: 196 }} aria-label="知识库共享模式" disabled={!data || busy} value={choice} onChange={setChoice} options={[{ value: 'restricted', label: '指定成员可访问' }, { value: 'org_read', label: '组织全员可读' }]} />

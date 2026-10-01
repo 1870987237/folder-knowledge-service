@@ -3,6 +3,7 @@ import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Me
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { UnitGrants } from './pages/Directory';
 import { SharingSettings } from './pages/Governance';
 import { KeyPolicy, LibraryAgentSettings } from './KeyPolicy';
 import { Api, errorMessage, query } from './api';
@@ -159,11 +160,13 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
 }
 
 function LibraryMembers({ api, library }: { api: Api; library: Library }) {
+  const [policyVersion, setPolicyVersion] = useState(0);
+  const refreshPolicy = () => setPolicyVersion(v => v + 1);
   const [members, setMembers] = useState<{ id: string; username: string; role: string }[]>([]), [candidates, setCandidates] = useState<{ id: string; username: string }[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [form] = Form.useForm();
   async function load() { setBusy(true); try { const [a, b] = await Promise.all([api.request<typeof members>(`/libraries/${library.id}/members`), api.request<typeof candidates>(`/libraries/${library.id}/candidates`)]); setMembers(a); setCandidates(b); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [library.id]);
-  return <Card><SharingSettings api={api} id={library.id} />{error && <Alert type="error" title={error} />}<Form form={form} layout="inline" initialValues={{ role: 'reader' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/libraries/${library.id}/members`, 'PUT', v); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="user_id" rules={[{ required: true }]}><Select className="organization-select" aria-label="组织成员" placeholder="组织成员" options={candidates.map(m => ({ value: m.id, label: m.username }))} /></Form.Item><Form.Item name="role"><Select className="role-select" aria-label="知识库角色" options={[{ value: 'reader', label: '读者' }, { value: 'editor', label: '编辑者' }, { value: 'publisher', label: '发布者' }, { value: 'manager', label: '管理者' }, { value: 'remove', label: '取消授权' }]} /></Form.Item><Button htmlType="submit" loading={busy}>保存权限</Button></Form><Table rowKey="id" dataSource={members} columns={[{ title: '成员', dataIndex: 'username' }, { title: '授权', dataIndex: 'role' }, { title: '操作', render: (_, r) => <Button type="link" onClick={() => form.setFieldsValue({ user_id: r.id, role: r.role })}>设置</Button> }]} /></Card>;
+  return <Card><SharingSettings api={api} id={library.id} refreshKey={policyVersion} onChanged={refreshPolicy} /><Tabs destroyOnHidden items={[{ key: 'people', label: '个人授权', children: <>{error && <Alert type="error" title={error} />}<Form form={form} layout="inline" initialValues={{ role: 'reader' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/libraries/${library.id}/members`, 'PUT', v); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="user_id" rules={[{ required: true }]}><Select className="organization-select" aria-label="组织成员" placeholder="组织成员" options={candidates.map(m => ({ value: m.id, label: m.username }))} /></Form.Item><Form.Item name="role"><Select className="role-select" aria-label="知识库角色" options={[{ value: 'reader', label: '读者' }, { value: 'editor', label: '编辑者' }, { value: 'publisher', label: '发布者' }, { value: 'manager', label: '管理者' }, { value: 'remove', label: '取消授权' }]} /></Form.Item><Button htmlType="submit" loading={busy}>保存权限</Button></Form><Table rowKey="id" dataSource={members} columns={[{ title: '成员', dataIndex: 'username' }, { title: '授权', dataIndex: 'role' }, { title: '操作', render: (_, r) => <Button type="link" onClick={() => form.setFieldsValue({ user_id: r.id, role: r.role })}>设置</Button> }]} /></> }, { key: 'units', label: '部门与用户组', children: <UnitGrants api={api} lid={library.id} refreshKey={policyVersion} onChanged={refreshPolicy} /> }]} /></Card>;
 }
 
 function UserKeys({ api, libraries }: { api: Api; libraries: Library[] }) {

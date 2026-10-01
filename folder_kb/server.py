@@ -430,6 +430,8 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     add_governance_routes(app, registry)
     from .collaboration import add_collaboration_routes
     add_collaboration_routes(app, registry)
+    from .organization_directory import add_directory_routes
+    add_directory_routes(app, registry)
     from .repositories import RepositoryCatalog
     from .templates import add_template_routes
     add_template_routes(app, registry)
