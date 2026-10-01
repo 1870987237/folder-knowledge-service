@@ -138,7 +138,7 @@ class AccessGuard:
         update_body = (path.startswith(('/admin/api/models', '/admin/api/update-jobs')) or
                        path.endswith(('/update-policy', '/update-jobs')))
         human_body = path.startswith(('/portal/api/', '/admin/api/accounts')) or path.endswith('/ownership')
-        policy_body = path.endswith(('/policy', '/agent-settings'))
+        policy_body = path.endswith(('/policy', '/agent-settings', '/governance'))
         write_body = path == '/api/v1/write'
         if (inbox_body or template_body or update_body or human_body or policy_body or write_body) and scope['method'] in ('POST', 'PUT'):
             # Bound streamed bodies as well as Content-Length before JSON parsing.
@@ -426,6 +426,8 @@ class RepositoryBinding(BaseModel):
 
 
 def add_admin_routes(app: FastAPI, registry: Registry):
+    from .governance import add_governance_routes
+    add_governance_routes(app, registry)
     from .collaboration import add_collaboration_routes
     add_collaboration_routes(app, registry)
     from .repositories import RepositoryCatalog

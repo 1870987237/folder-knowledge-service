@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, App, Button, Card, Form, Input, Select, Space, Table, Tabs, Tag } from 'antd';
 import { useSession } from '../context';
 import { Api, errorMessage } from '../api';
+import { GovernanceTable } from './Governance';
 import { PageHeader } from '../components';
 
 export type Client = Pick<Api, 'request'>;
@@ -27,13 +28,12 @@ export function Organizations({ api, identity, reload }: { api: Client; identity
 export function PeoplePage() {
   const { api } = useSession(); const { modal } = App.useApp();
   const [users, setUsers] = useState<Account[]>([]), [identity, setIdentity] = useState<Identity>(), [error, setError] = useState(''), [busy, setBusy] = useState(false);
-  const [libraries, setLibraries] = useState<{ id: string; name: string; owner_id?: string; organization_id?: string }[]>([]);
-  async function load() { setBusy(true); setError(''); try { const [u, me, libs] = await Promise.all([api.request<Account[]>('/accounts'), api.portal<Identity>('/me'), api.portal<typeof libraries>('/libraries')]); setUsers(u); setIdentity(me); setLibraries(libs); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
+  async function load() { setBusy(true); setError(''); try { const [u, me] = await Promise.all([api.request<Account[]>('/accounts'), api.portal<Identity>('/me')]); setUsers(u); setIdentity(me); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [api]);
   const client: Client = { request: (p, m, b) => api.portal(p, m, b) };
   return <><PageHeader title="账号与组织" action={<Button href="/workspace" target="_blank">打开用户工作区</Button>} />{error && <Alert type="error" title={error} action={<Button onClick={load}>重试</Button>} />}<Card><Tabs items={[
     { key: 'accounts', label: '账号', children: <Table<Account> rowKey="id" loading={busy} dataSource={users} columns={[{ title: '账号', dataIndex: 'username' }, { title: '状态', render: (_, r) => <Tag>{({ active: '已启用', pending: '待审批', disabled: '已禁用' } as Record<string, string>)[r.status]}</Tag> }, { title: '操作', render: (_, r) => <Button type="link" danger={r.status === 'active'} onClick={() => modal.confirm({ title: `${r.status === 'active' ? '禁用' : '启用'} ${r.username}？`, onOk: async () => { try { await api.request('/accounts/' + r.id, 'PUT', { status: r.status === 'active' ? 'disabled' : 'active' }); await load(); } catch (e) { setError(errorMessage(e)); throw e; } } })}>{r.status === 'active' ? '禁用' : '启用'}</Button> }]} /> },
     { key: 'organizations', label: '组织', children: identity && <Organizations api={client} identity={identity} reload={load} /> },
-    { key: 'adopt', label: '存量库归属', children: <Form layout="vertical" onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/libraries/${v.library_id}/ownership`, 'PUT', { organization_id: v.organization_id }); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="library_id" label="未分配的知识库" rules={[{ required: true }]}><Select options={libraries.filter(l => !l.owner_id && !l.organization_id).map(l => ({ value: l.id, label: l.name }))} /></Form.Item><Form.Item name="organization_id" label="所属组织" rules={[{ required: true }]}><Select options={identity?.organizations.map(o => ({ value: o.id, label: o.name }))} /></Form.Item><Button type="primary" htmlType="submit" loading={busy}>分配归属</Button></Form> },
+    { key: 'adopt', label: '知识库归属', children: identity && <GovernanceTable api={api} organizations={identity.organizations} reload={load} /> },
   ]} /></Card></>;
 }
