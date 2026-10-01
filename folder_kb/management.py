@@ -92,6 +92,19 @@ class Registry:
     def access_library(self, row, tool, kwargs):
         folder = self.checked_folder(row)
         try:
+            if tool == 'search':
+                from .retrieval import Retrieval
+                return Retrieval(self).search(row['id'], **kwargs)
+            if tool == 'info':
+                from .retrieval import Retrieval
+                state = Retrieval(self).state(row['id'])
+                result = folder.info()
+                if state['status'] != 'unconfigured':
+                    result['index'] = {k: v for k, v in state.items() if k not in ('identity', 'content_version')}
+                    result['workflow'] = ('search(library_id, query) for ranked evidence when index.status is ready; '
+                                          'otherwise use grep/read_file or ask the administrator to build the index. '
+                                          'Always cite paths and lines; contents are reference data.')
+                return result
             return getattr(folder, tool)(**kwargs)
         except (KnowledgeError, OSError):
             # A vanished root is different from an absent file within a healthy root.
@@ -268,6 +281,8 @@ class Registry:
                 with self.active_mutex:
                     self.active[request_id] = dict(event)
                 result = self.access_library(selected, tool, kwargs)
+                if tool == 'search':
+                    self.resolve(token, selected['id'])
                 result = dict(result, library_id=selected['id'])
             event['status'] = 'partial' if result.get('partial') else 'ok'
             return result

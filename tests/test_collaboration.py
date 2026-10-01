@@ -222,7 +222,7 @@ def test_reserved_mounts_and_native_binding_protected(env):
     assert c.put('/admin/api/libraries/broad/ownership', headers=headers(ADMIN), json={'organization_id': oid}).status_code == 409
     with pytest.raises(KnowledgeError):
         registry.save_library(lid, 'changed', '.', True)
-    with pytest.raises(KnowledgeError, match='普通文档库'):
+    with pytest.raises(KnowledgeError, match='Template version is not registered'):
         TemplateCatalog(registry).bind(lid, TemplateBinding(template_id='reference-docs', template_version='0.1.0'))
     # The publication unit cannot overlap another broad mount.
     assert not c.get('/portal/api/libraries', headers=headers(token)).json()[0]['editable']

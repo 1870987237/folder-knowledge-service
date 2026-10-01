@@ -34,20 +34,22 @@ export function UpdateSettings({ library }: { library: Library }) {
   const binding = useResource<{ binding: Binding | null }>(`/libraries/${library.id}/template`);
   const models = useResource<{ models: Model[] }>('/models');
   const [form] = Form.useForm<PolicyForm>();
+  const [capabilities, setCapabilities] = useState<string[]>();
+  const canUpdate = capabilities?.includes('update');
   const [digest, setDigest] = useState<string>(), [error, setError] = useState('');
-  useEffect(() => { let alive = true; setDigest(undefined); const b = binding.data?.binding;
-    if (b) void api.request<Template>(`/templates/${b.template_id}/versions/${b.template_version}`).then(t => { if (alive) { setDigest(t.package_sha256 || undefined); setError(''); } }).catch(e => { if (alive) setError(errorMessage(e)); });
+  useEffect(() => { let alive = true; setDigest(undefined); setCapabilities(undefined); setError(''); const b = binding.data?.binding;
+    if (b) void api.request<Template>(`/templates/${b.template_id}/versions/${b.template_version}`).then(t => { if (alive) { setDigest(t.package_sha256 || undefined); setCapabilities(t.definition.capabilities); setError(''); } }).catch(e => { if (alive) setError(errorMessage(e)); });
     return () => { alive = false; };
   }, [api, binding.data]);
   useEffect(() => { if (resource.data) form.setFieldsValue({ ...resource.data, mapping: JSON.stringify(resource.data.model_environment, null, 2), approved: !!digest && resource.data.approved_package_sha256 === digest }); }, [resource.data, digest, form]);
   async function run(operation: string) { try { await api.request(`/libraries/${library.id}/update-jobs`, 'POST', { operation }); refresh(); message.success('已加入更新队列，可前往更新任务查看'); } catch (e) { message.error(errorMessage(e)); throw e; } }
-  if (resource.loading || binding.loading || models.loading) return <Spin />;
+  if (resource.loading || binding.loading || models.loading || (binding.data?.binding && !capabilities && !error)) return <Spin />;
   return <><LoadError error={resource.error || binding.error || models.error || error} retry={() => { resource.refresh(); binding.refresh(); models.refresh(); }} />
-    {!binding.data?.binding ? <Empty description="请先绑定模板" /> : <AsyncForm form={form} submitText="保存更新设置" submit={async values => {
+    {!binding.data?.binding ? <Empty description="请先绑定插件" /> : !canUpdate ? <Alert type="info" title="当前插件未提供增量更新能力。" /> : <AsyncForm form={form} submitText="保存更新设置" submit={async values => {
       await api.request(`/libraries/${library.id}/update-policy`, 'PUT', { enabled: values.enabled, auto_trigger: values.auto_trigger, model_connection_id: values.model_connection_id || null, model_environment: parseObject(values.mapping), max_batch_size: values.max_batch_size, approved_package_sha256: values.approved ? digest : null }); refresh(); message.success('更新设置已保存');
-    }}><Form.Item name="enabled" label="启用更新程序" valuePropName="checked"><Switch /></Form.Item><Form.Item name="auto_trigger" label="新材料自动触发" valuePropName="checked"><Switch /></Form.Item><Form.Item name="model_connection_id" label="模型连接"><Select allowClear placeholder="不使用大模型" options={models.data?.models.map(m => ({ value: m.id, label: m.name, disabled: !m.enabled }))} /></Form.Item><Form.Item name="max_batch_size" label="每批材料上限"><InputNumber min={1} max={100} /></Form.Item><Form.Item name="mapping" label="模板环境变量映射" rules={required}><Input.TextArea rows={5} className="json-input" /></Form.Item><Typography.Paragraph type="secondary">变量名按模板要求填写，值为 base_url、model 或 api_key。候选均需人工审核后发布。</Typography.Paragraph><Form.Item name="approved" valuePropName="checked"><Checkbox disabled={!digest}>已审阅并信任当前模板程序包</Checkbox></Form.Item><Typography.Text code>{digest || '程序包未就绪'}</Typography.Text>
+    }}><Form.Item name="enabled" label="启用更新程序" valuePropName="checked"><Switch /></Form.Item><Form.Item name="auto_trigger" label="新材料自动触发" valuePropName="checked"><Switch /></Form.Item><Form.Item name="model_connection_id" label="模型连接"><Select allowClear placeholder="不使用大模型" options={models.data?.models.map(m => ({ value: m.id, label: m.name, disabled: !m.enabled }))} /></Form.Item><Form.Item name="max_batch_size" label="每批材料上限"><InputNumber min={1} max={100} /></Form.Item><Form.Item name="mapping" label="插件环境变量映射" rules={required}><Input.TextArea rows={5} className="json-input" /></Form.Item><Typography.Paragraph type="secondary">变量名按插件要求填写，值为 base_url、model 或 api_key。候选均需人工审核后发布。</Typography.Paragraph><Form.Item name="approved" valuePropName="checked"><Checkbox disabled={!digest}>已审阅并信任当前插件程序包</Checkbox></Form.Item><Typography.Text code>{digest || '程序包未就绪'}</Typography.Text>
     </AsyncForm>}
-    <Space className="block-gap"><Button disabled={!resource.data?.enabled} onClick={() => { void run('update').catch(() => {}); }}>处理待办材料</Button><Button disabled={!resource.data?.enabled} onClick={() => modal.confirm({ title: '生成初始化候选？', content: '用于首次创建知识库，仍需审核后发布。已有知识库请使用增量更新。', onOk: () => run('initialize') })}>初始化知识库</Button></Space>
+    <Space className="block-gap"><Button disabled={!canUpdate || !resource.data?.enabled} onClick={() => { void run('update').catch(() => {}); }}>处理待办材料</Button><Button disabled={!canUpdate || !capabilities?.includes('initialize') || !resource.data?.enabled} onClick={() => modal.confirm({ title: '生成初始化候选？', content: '用于首次创建知识库，仍需审核后发布。已有知识库请使用增量更新。', onOk: () => run('initialize') })}>初始化知识库</Button></Space>
   </>;
 }
 

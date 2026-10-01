@@ -78,7 +78,7 @@ class PackageSource(StrictModel):
 
 
 class Runtime(StrictModel):
-    type: Literal['container', 'trusted-python-demo']
+    type: Literal['container', 'trusted-python-demo', 'declarative']
     image: str | None = Field(default=None, max_length=256)
     timeout_seconds: int = Field(default=900, ge=1, le=3600)
     memory_mb: int = Field(default=512, ge=64, le=8192)
@@ -104,6 +104,34 @@ class OutputSpec(StrictModel):
         return values
 
 
+class IndexDefinition(StrictModel):
+    mode: Literal['fulltext', 'semantic', 'hybrid'] = 'hybrid'
+    splitter: Literal['document', 'markdown_sections', 'custom'] = 'markdown_sections'
+    include: list[str] = Field(default_factory=lambda: ['**/*.md', '**/*.txt'], min_length=1, max_length=32)
+    exclude: list[str] = Field(default_factory=list, max_length=32)
+    metadata_fields: list[str] = Field(default_factory=list, max_length=32)
+    entrypoint: list[str] | None = None
+
+    @model_validator(mode='after')
+    def contract(self):
+        for pattern in self.include + self.exclude:
+            if (not pattern or len(pattern) > 240 or PurePosixPath(pattern).is_absolute()
+                    or any(p in ('', '.', '..') for p in pattern.split('/'))
+                    or any(c in pattern for c in '\\:\x00') or any(ord(c) < 32 for c in pattern)):
+                raise ValueError('Index patterns must stay relative to the knowledge directory')
+        if (self.splitter == 'custom') != (self.entrypoint is not None):
+            raise ValueError('Only custom indexing requires an entrypoint')
+        if any(not name.isidentifier() or len(name) > 64 for name in self.metadata_fields):
+            raise ValueError('Invalid metadata field name')
+        return self
+
+
+class PluginFeatures(StrictModel):
+    manifest_version: Literal['1.0'] = '1.0'
+    instructions: str = Field(default='', max_length=8000)
+    indexing: IndexDefinition | None = None
+
+
 class TemplateRegistration(StrictModel):
     id: str = Field(pattern=ID_PATTERN)
     version: str = Field(pattern=VERSION_PATTERN)
@@ -112,12 +140,13 @@ class TemplateRegistration(StrictModel):
     description: str = Field(default='', max_length=2000)
     maintainer: str = Field(min_length=1, max_length=100)
     source: PackageSource
-    capabilities: list[Literal['initialize', 'update']] = Field(min_length=1, max_length=2)
+    capabilities: list[Literal['initialize', 'update']] = Field(max_length=2)
     entrypoints: dict[str, list[str]]
     runtime: Runtime
     config_schema: dict = Field(default_factory=lambda: {'type': 'object', 'additionalProperties': False})
     required_secrets: list[str] = Field(default_factory=list, max_length=16)
     output: OutputSpec = Field(default_factory=OutputSpec)
+    plugin: PluginFeatures | None = None
 
     @model_validator(mode='after')
     def contract(self):
@@ -127,7 +156,14 @@ class TemplateRegistration(StrictModel):
             raise ValueError('Output directory must match the protocol version')
         if len(set(self.capabilities)) != len(self.capabilities) or set(self.entrypoints) != set(self.capabilities):
             raise ValueError("Capabilities and entrypoints must match exactly")
-        for command in self.entrypoints.values():
+        if not self.capabilities and not (self.plugin and (self.plugin.instructions.strip() or self.plugin.indexing)):
+            raise ValueError('Declare at least one plugin capability')
+        commands = list(self.entrypoints.values())
+        if self.plugin and self.plugin.indexing and self.plugin.indexing.entrypoint is not None:
+            commands.append(self.plugin.indexing.entrypoint)
+        if commands and self.runtime.type == 'declarative':
+            raise ValueError('Executable capabilities require a program runtime')
+        for command in commands:
             # v1 Python package convention; no shell expressions or arbitrary interpreter path.
             if len(command) < 2 or len(command) > 16 or command[0] != 'python':
                 raise ValueError("Entrypoints must be argv arrays beginning with python and a package-relative script")
@@ -195,7 +231,10 @@ class TemplateCatalog:
         return path
 
     def register(self, value: TemplateRegistration):
-        payload = json.dumps(value.model_dump(), ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+        metadata = value.model_dump()
+        if value.plugin is None:
+            metadata.pop('plugin')  # Preserve legacy registration equality and worker contracts.
+        payload = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
         with self.store.transaction(write=True) as db:
             row = db.execute('SELECT * FROM template_versions WHERE id=? AND version=?', (value.id, value.version)).fetchone()
             if row is not None:
@@ -287,7 +326,11 @@ class TemplateCatalog:
             package = stage / 'package'
             package.mkdir()
             self.extract(archive, package)
-            for command in definition['entrypoints'].values():
+            commands = list(definition['entrypoints'].values())
+            index = (definition.get('plugin') or {}).get('indexing')
+            if index and index.get('entrypoint'):
+                commands.append(index['entrypoint'])
+            for command in commands:
                 if not (package / command[1]).is_file():
                     raise KnowledgeError('missing_template_entrypoint', 'An entrypoint script is absent from the package', 400)
             digest = tree_digest(package)
@@ -319,8 +362,6 @@ class TemplateCatalog:
 
     def bind(self, library_id, value: TemplateBinding):
         with self.store.transaction(write=True) as db:
-            if db.execute('SELECT 1 FROM library_ownership WHERE library_id=? AND native=1', (library_id,)).fetchone():
-                raise KnowledgeError('native_library_managed', '普通文档库由草稿发布流程管理，不能绑定模板', 409)
             library = db.execute('SELECT * FROM libraries WHERE id=?', (library_id,)).fetchone()
             if library is None:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
@@ -328,12 +369,16 @@ class TemplateCatalog:
             if not row['package_sha256']:
                 raise KnowledgeError('template_not_installed', 'Install the template before binding', 409)
             definition = json.loads(row['metadata_json'])
-            if 'update' not in definition['capabilities']:
+            updates = bool(set(definition['capabilities']) & {'initialize', 'update'})
+            native = db.execute('SELECT 1 FROM library_ownership WHERE library_id=? AND native=1', (library_id,)).fetchone()
+            if native and (updates or value.workspace is not None):
+                raise KnowledgeError('native_library_managed', '原生文档库只允许绑定检索定义或使用指引，不能运行更新程序或扩大工作范围', 409)
+            if 'update' not in definition['capabilities'] and not definition.get('plugin'):
                 raise KnowledgeError('template_cannot_update', 'Knowledge binding requires update capability', 409)
             if value.workspace is not None and definition['protocol_version'] != '1.1':
                 raise KnowledgeError('workspace_protocol_required', 'Explicit workspaces require template protocol 1.1', 409)
             scope = resolve_workspace(self.registry, db, library, value.workspace)
-            scope_json = scope['spec'].model_dump_json()
+            scope_json = None if native else scope['spec'].model_dump_json()
             for other in db.execute('SELECT * FROM library_templates WHERE workspace_key=? AND library_id<>?',
                                     (scope['workspace_key'], library_id)):
                 old_scope = WorkspaceSpec.model_validate_json(other['workspace_json'])
@@ -361,7 +406,7 @@ class TemplateCatalog:
                 template_version=excluded.template_version,config_json=excluded.config_json,
                 workspace_json=excluded.workspace_json,workspace_key=excluded.workspace_key""",
                 (library_id, value.template_id, value.template_version, json.dumps(value.config, ensure_ascii=False),
-                 scope_json, scope['workspace_key']))
+                 scope_json, None if native else scope['workspace_key']))
             self.event(db, 'template_bind', value.template_id, value.template_version, library_id)
         return self.binding(library_id)
 

@@ -225,8 +225,12 @@ class Collaboration:
         scope = db.execute('SELECT native FROM library_ownership WHERE library_id=?', (lid,)).fetchone()
         if not scope or not scope[0] or not root.startswith('document-releases/'):
             return False
-        if db.execute('SELECT 1 FROM library_templates WHERE library_id=?', (lid,)).fetchone():
-            return False
+        binding = db.execute('SELECT t.metadata_json FROM library_templates b JOIN template_versions t '
+                             'ON t.id=b.template_id AND t.version=b.template_version WHERE b.library_id=?', (lid,)).fetchone()
+        if binding:
+            definition = json.loads(binding['metadata_json'])
+            if definition.get('capabilities') or not definition.get('plugin'):
+                return False
         if db.execute('SELECT 1 FROM repository_libraries WHERE library_id=?', (lid,)).fetchone():
             return False
         # A native library must remain an independent publication unit.
