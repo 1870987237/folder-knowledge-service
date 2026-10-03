@@ -118,7 +118,11 @@ def user_role(db, user_id, library_id):
     if member['role'] == 'admin':
         return 4
     grant = db.execute('SELECT role FROM library_members WHERE library_id=? AND user_id=?', (library_id, user_id)).fetchone()
-    return ROLES.get(grant[0], 0) if grant else 0
+    from .governance import metadata
+    default = 1 if metadata(db, library_id)['organization_access'] == 'org_read' else 0
+    from .organization_directory import inherited_role
+    return max(ROLES.get(grant[0], 0) if grant else 0, default,
+               inherited_role(db, user_id, library_id, scope['organization_id']))
 
 
 def owned_key_allowed(db, key_id, library_id, submit=False):
@@ -225,8 +229,12 @@ class Collaboration:
         scope = db.execute('SELECT native FROM library_ownership WHERE library_id=?', (lid,)).fetchone()
         if not scope or not scope[0] or not root.startswith('document-releases/'):
             return False
-        if db.execute('SELECT 1 FROM library_templates WHERE library_id=?', (lid,)).fetchone():
-            return False
+        binding = db.execute('SELECT t.metadata_json FROM library_templates b JOIN template_versions t '
+                             'ON t.id=b.template_id AND t.version=b.template_version WHERE b.library_id=?', (lid,)).fetchone()
+        if binding:
+            definition = json.loads(binding['metadata_json'])
+            if definition.get('capabilities') or not definition.get('plugin'):
+                return False
         if db.execute('SELECT 1 FROM repository_libraries WHERE library_id=?', (lid,)).fetchone():
             return False
         # A native library must remain an independent publication unit.
@@ -505,6 +513,8 @@ def add_collaboration_routes(app, registry):
                     "SELECT count(*) FROM organization_members m JOIN users u ON u.id=m.user_id WHERE organization_id=? AND role='admin' AND u.status='active'", (oid,)).fetchone()[0] <= 1:
                 fail('last_admin', '请先设置另一位组织管理员', 409)
             if value.role == 'remove':
+                from .organization_directory import remove_member
+                remove_member(db, oid, user[0])
                 db.execute('DELETE FROM organization_members WHERE organization_id=? AND user_id=?', (oid, user[0]))
                 db.execute('DELETE FROM library_members WHERE user_id=? AND library_id IN (SELECT library_id FROM library_ownership WHERE organization_id=?)', (user[0], oid))
             else:
@@ -514,23 +524,10 @@ def add_collaboration_routes(app, registry):
 
     @app.put('/admin/api/libraries/{lid}/ownership')
     def ownership(lid: str, value: Scope):
-        with service.store.transaction(write=True) as db:
-            a = {'id': 'platform', 'platform': True}
-            library, _ = service.check(db, a, lid)
-            service.org_check(db, a, value.organization_id)
-            target = registry.checked_folder(library).root
-            documents = registry.pool.root / 'document-releases'
-            if target == registry.pool.root or target.is_relative_to(documents) or documents.is_relative_to(target):
-                fail('reserved_document_scope', '不能把挂载根或平台文档发布目录分配给组织', 409)
-            for other in db.execute('SELECT l.* FROM libraries l JOIN library_ownership o ON o.library_id=l.id WHERE l.id<>?', (lid,)):
-                existing = registry.checked_folder(other).root
-                if target.is_relative_to(existing) or existing.is_relative_to(target):
-                    fail('overlapping_scope', '此目录与已分配知识库重叠', 409)
-            # Do not transfer private/native libraries through this adoption endpoint.
-            if db.execute('SELECT 1 FROM library_ownership WHERE library_id=?', (lid,)).fetchone():
-                fail('already_owned', '此库已有归属，首版不支持跨组织转移', 409)
-            db.execute('INSERT INTO library_ownership VALUES (?,NULL,?,0)', (lid, value.organization_id))
-            service.event(db, a, 'library_adopt', lid)
+        from .governance import Governance, Transfer
+        governance = Governance(registry)
+        state = governance.get(lid)
+        governance.transfer(lid, Transfer(organization_id=value.organization_id, expected_revision=state['revision']), initial_only=True)
         return {'ok': True}
 
     @app.get('/portal/api/libraries')

@@ -27,12 +27,16 @@ export interface Repository {
   libraries: { library_id: string; name: string; subpath: string }[]; job?: RepositoryJob;
 }
 export interface RepoList { repositories: Repository[]; worker_online: boolean }
+export interface PluginFeatures {
+  manifest_version: string; instructions: string;
+  indexing?: { mode: string; splitter: string; include: string[]; exclude: string[]; metadata_fields: string[]; entrypoint?: string[] | null } | null;
+}
 export interface TemplateDefinition {
   id: string; version: string; name: string; description: string; maintainer: string;
   protocol_version: string; capabilities: string[]; required_secrets: string[];
-  config_schema: Record<string, unknown>; runtime: Record<string, unknown>;
+  config_schema: Record<string, unknown>; runtime: Record<string, unknown>; plugin?: PluginFeatures | null;
 }
-export interface Template { definition: TemplateDefinition; status: string; package_sha256?: string }
+export interface Template { definition: TemplateDefinition; status: string; package_sha256?: string; libraries?: { id: string; name: string }[]; legacy_template?: boolean }
 export interface Workspace {
   type: 'local' | 'git'; root_path?: string; repository_id?: string;
   workspace_subpath?: string; knowledge_subpath: string; exclude_paths: string[];
@@ -58,3 +62,5 @@ export interface FilePage {
   lines: { line: number; column?: number; text: string; line_complete?: boolean }[];
   next_cursor: string | null; version: string;
 }
+
+export interface PluginBindingValue { plugin_id: string; plugin_version: string; config: Record<string, unknown>; workspace?: Workspace | null }

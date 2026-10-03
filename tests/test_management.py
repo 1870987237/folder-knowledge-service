@@ -99,7 +99,7 @@ def test_dynamic_scoping_disable_change_and_revoke(managed):
     add_library(client, 'alpha'); add_library(client, 'beta')
     key = add_key(client, ['alpha'])
     headers = authorization(key['token'])
-    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == [{'id': 'alpha', 'name': 'alpha', 'availability': {'status': 'available', 'message': '正常'}}]
+    assert [{k: r[k] for k in ('id', 'name', 'availability')} for r in client.get('/api/v1/libraries', headers=headers).json()['libraries']] == [{'id': 'alpha', 'name': 'alpha', 'availability': {'status': 'available', 'message': '正常'}}]
     assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md'}).json()['lines'][0]['text'].startswith('alpha')
     assert client.get('/api/v1/read', headers=headers, params={'library_id': 'beta', 'path': 'README.md'}).status_code == 403
     assert client.get('/api/v1/read', headers=headers, params={'path': '../beta/README.md'}).status_code == 403
@@ -109,7 +109,7 @@ def test_dynamic_scoping_disable_change_and_revoke(managed):
     client.put('/admin/api/libraries/alpha', headers=authorization(ADMIN),
                json={'id': 'alpha', 'name': 'alpha', 'path': 'replacement', 'enabled': False})
     assert client.get('/api/v1/read', headers=headers, params={'path': 'README.md', 'library_id': 'alpha'}).status_code == 403
-    assert client.get('/api/v1/libraries', headers=headers).json()['libraries'] == []
+    assert [{k: r[k] for k in ('id', 'name', 'availability')} for r in client.get('/api/v1/libraries', headers=headers).json()['libraries']] == []
     assert client.post('/admin/api/keys/'+key['key']['id']+'/revoke', headers=authorization(ADMIN)).status_code == 200
     assert client.get('/api/v1/libraries', headers=headers).status_code == 401
 
@@ -372,7 +372,7 @@ def test_real_mcp_identity_isolation_and_live_revocation(managed):
                         assert 'list_libraries' in {t.name for t in tools.tools}
                         listed = await session.call_tool('list_libraries', {})
                         assert not listed.isError
-                        assert listed.structuredContent['libraries'] == [{'id':library,'name':library,'availability':{'status':'available','message':'正常'}}]
+                        assert [{k: r[k] for k in ('id', 'name', 'availability')} for r in listed.structuredContent['libraries']] == [{'id':library,'name':library,'availability':{'status':'available','message':'正常'}}]
                         result = await session.call_tool('read_file', {'path':'README.md'})
                         assert not result.isError
                         assert result.structuredContent['lines'][0]['text'] == library+' private knowledge'

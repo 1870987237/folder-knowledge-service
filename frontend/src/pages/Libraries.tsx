@@ -5,6 +5,8 @@ import { FolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { useSession } from '../context';
 import { AsyncForm, Availability, FileBrowser, idRules, NameCell, PageHeader, PathInput, required, Surface } from '../components';
 import { UpdateSettings } from './Updates';
+import { LibraryAgentSettings } from '../KeyPolicy';
+import { RetrievalSettings } from './Retrieval';
 import { TemplateBinding } from './Templates';
 import type { Library } from '../types';
 
@@ -25,13 +27,15 @@ export function LibrariesPage() {
       { title: '知识库', width: 250, render: (_, row) => <NameCell name={<Button type="link" className="name-link" icon={<FolderOutlined />} onClick={() => { setSelected(row.id); setTab('files'); }}>{row.name}</Button>} id={row.id} /> },
       { title: '检索目录', render: (_, row) => <div className="name-cell"><Typography.Text className="path-text">{row.path}</Typography.Text><span>{row.repository && <Tag>Git 托管</Tag>}</span></div> },
       { title: '状态', width: 110, render: (_, row) => <Availability library={row} /> },
-      { title: '操作', width: 250, render: (_, row) => <Space><Button type="link" onClick={() => { setSelected(row.id); setTab('template'); }}>模板配置</Button><Button type="link" onClick={() => { setSelected(row.id); setTab('settings'); }}>设置</Button><Button type="text" onClick={() => modal.confirm({ title: row.enabled ? '停用此知识库？' : '启用此知识库？', content: row.enabled ? '后续访问与材料提交将被阻止，知识文件会保留。' : undefined, onOk: async () => { try { await api.request('/libraries/' + row.id, 'PUT', { id: row.id, name: row.name, path: row.path, enabled: !row.enabled }); refresh(); message.success('状态已更新'); } catch (e) { message.error(errorMessage(e)); throw e; } } })}>{row.enabled ? '停用' : '启用'}</Button></Space> },
+      { title: '操作', width: 250, render: (_, row) => <Space><Button type="link" onClick={() => { setSelected(row.id); setTab('template'); }}>插件配置</Button><Button type="link" onClick={() => { setSelected(row.id); setTab('settings'); }}>设置</Button><Button type="text" onClick={() => modal.confirm({ title: row.enabled ? '停用此知识库？' : '启用此知识库？', content: row.enabled ? '后续访问与材料提交将被阻止，知识文件会保留。' : undefined, onOk: async () => { try { await api.request('/libraries/' + row.id, 'PUT', { id: row.id, name: row.name, path: row.path, enabled: !row.enabled }); refresh(); message.success('状态已更新'); } catch (e) { message.error(errorMessage(e)); throw e; } } })}>{row.enabled ? '停用' : '启用'}</Button></Space> },
     ]} /></Surface>
     <Modal title="添加知识库" open={creating} onCancel={() => setCreating(false)} footer={null} destroyOnHidden><LibraryForm done={() => setCreating(false)} /></Modal>
     <Drawer closable={{ placement: 'end' }} title={library?.name || '知识库详情'} open={!!library} onClose={() => setSelected(undefined)} size={800} destroyOnHidden>{library && <><div className="drawer-meta"><Typography.Text code>{library.id}</Typography.Text><Availability library={library} /></div><Tabs activeKey={tab} onChange={setTab} destroyOnHidden items={[
       { key: 'files', label: '知识文件', children: <FileBrowser key={library.id + library.path} library={library} /> },
-      { key: 'template', label: '模板与工作范围', children: <TemplateBinding key={library.id} library={library} /> },
+      { key: 'template', label: '插件与工作范围', children: <TemplateBinding key={library.id} library={library} /> },
+      { key: 'retrieval', label: '检索索引', children: <RetrievalSettings key={library.id} library={library} /> },
       { key: 'updates', label: '更新设置', children: <UpdateSettings key={library.id} library={library} /> },
+      { key: 'agent', label: 'Agent 接入', children: <LibraryAgentSettings api={api} id={library.id} /> },
       { key: 'settings', label: '基本设置', children: <LibraryForm key={library.id} library={library} done={() => setSelected(undefined)} /> },
     ]} /></>}</Drawer>
   </>;

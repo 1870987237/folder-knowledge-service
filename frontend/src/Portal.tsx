@@ -3,6 +3,9 @@ import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Me
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { UnitGrants } from './pages/Directory';
+import { SharingSettings } from './pages/Governance';
+import { KeyPolicy, LibraryAgentSettings } from './KeyPolicy';
 import { Api, errorMessage, query } from './api';
 import { PageHeader, date } from './components';
 import { Organizations, type Identity } from './pages/People';
@@ -51,11 +54,11 @@ function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; ide
   async function load() { setBusy(true); setError(''); try { const [ls, me] = await Promise.all([api.request<Library[]>('/libraries'), api.request<Identity>('/me')]); setLibraries(ls); setIdentity(me); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [api]);
   return <Layout className="app-layout portal-layout"><Layout.Sider theme="light" width={190} breakpoint="lg" collapsedWidth={56} collapsed={collapsed} onBreakpoint={setCollapsed} className="app-sidebar"><div className="brand">{!collapsed && <Typography.Text strong>Folder KB</Typography.Text>}<Tooltip title={collapsed ? '展开侧栏' : '收起侧栏'}><Button type="text" size="small" aria-label={collapsed ? '展开侧栏' : '收起侧栏'} icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(v => !v)} /></Tooltip></div>
-    <Menu selectedKeys={[page]} onClick={({ key }) => navigate(() => { setPage(key); setLibrary(undefined); void load(); })} items={[{ key: 'libraries', label: '知识库', icon: <FolderOutlined /> }, { key: 'organizations', label: '组织成员', icon: <TeamOutlined /> }, { key: 'keys', label: '我的 Agent Key', icon: <KeyOutlined /> }]} />
+    <Menu selectedKeys={[page]} onClick={({ key }) => navigate(() => { setPage(key); setLibrary(undefined); void load(); })} items={[{ key: 'libraries', label: '知识库', icon: <FolderOutlined /> }, { key: 'organizations', label: '组织管理', icon: <TeamOutlined /> }, { key: 'keys', label: '我的 Agent Key', icon: <KeyOutlined /> }]} />
     <div className="sidebar-footer">{!collapsed && <Typography.Text ellipsis>{identity.username}</Typography.Text>}<Tooltip title="退出"><Button type="text" aria-label="退出" icon={<LogoutOutlined />} onClick={() => navigate(() => { void api.request('/logout', 'POST').then(logout).catch(e => setError(errorMessage(e))); })}>{!collapsed && '退出'}</Button></Tooltip></div>
   </Layout.Sider><Layout.Content className="app-content"><div className="page-container">{error && <Alert type="error" title={error} action={<Button onClick={load}>重试</Button>} />}
     {page === 'libraries' && (library ? <KnowledgeEditor key={library.id} api={api} identity={identity} library={library} onDirtyChange={setDirty} back={() => { setLibrary(undefined); void load(); }} /> : <><div className="workspace-topbar"><span className="workspace-location">知识库</span><div className="workspace-actions"><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} onClick={load} loading={busy} /></Tooltip><Button size="small" type="primary" onClick={() => { form.resetFields(); setCreate(true); }}>创建知识库</Button></div></div><FileExplorer loading={busy} items={libraries.map(r => ({ id: r.id, name: r.name, folder: true, modified: r.updated_at, kind: r.owner_id ? '个人知识库' : '组织知识库' }))} onOpen={id => setLibrary(libraries.find(r => r.id === id))} /></>)}
-    {page === 'organizations' && <><PageHeader title="组织成员" /><Card><Organizations api={api} identity={identity} reload={load} /></Card></>}
+    {page === 'organizations' && <div className="organization-workspace"><div className="workspace-topbar"><span className="workspace-location">组织管理</span></div><Organizations api={api} identity={identity} reload={load} /></div>}
     {page === 'keys' && <UserKeys api={api} libraries={libraries} />}
     <Modal title="创建知识库" open={create} footer={null} onCancel={() => setCreate(false)}><Form form={form} layout="vertical" initialValues={{ organization_id: '' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request('/libraries', 'POST', { ...v, organization_id: v.organization_id || null }); setCreate(false); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}><Input maxLength={80} /></Form.Item><Form.Item name="organization_id" label="归属"><Select options={[{ value: '', label: '个人私有' }, ...identity.organizations.filter(o => o.role === 'admin').map(o => ({ value: o.id, label: o.name }))]} /></Form.Item>{error && <Alert type="error" title={error} />}<Button type="primary" htmlType="submit" loading={busy}>创建</Button></Form></Modal>
   </div></Layout.Content></Layout>;
@@ -63,6 +66,7 @@ function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; ide
 
 function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api: Api; identity: Identity; library: Library; back: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const { modal, message } = App.useApp();
+  const [agentSettings, setAgentSettings] = useState(false);
   const [editorTools, setEditorTools] = useState<HTMLSpanElement | null>(null), [searchOpen, setSearchOpen] = useState(false);
   const [tab, setTab] = useState('documents'), [directory, setDirectory] = useState<DirectoryPage>(), [path, setPath] = useState('.');
   const [doc, setDoc] = useState<Doc>(), [text, setText] = useState(''), [editorRevision, setEditorRevision] = useState(0);
@@ -110,12 +114,15 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
   function openEntry(id: string) { const entry = directory?.entries.find(r => r.path === id); if (entry?.type === 'directory') void browse(id); else void open(id); }
   function switchView(t: string) { navigate(() => { setText(doc?.content || ''); setEditorRevision(v => v + 1); setTab(t); if (t === 'drafts') void loadDrafts(); if (t === 'documents' && !directory) void browse(path); }); }
   return <div className="workspace-browser">
+    <Modal title="Agent 接入" open={agentSettings} footer={null} onCancel={() => setAgentSettings(false)} destroyOnHidden><LibraryAgentSettings api={api} id={library.id} /></Modal>
     <div className="workspace-topbar">
       <Tooltip title={doc && tab === 'documents' ? '返回列表' : '上一级'}><Button size="small" type="text" aria-label={doc && tab === 'documents' ? '返回列表' : '上一级'} icon={<ArrowLeftOutlined />} disabled={busy} onClick={() => navigate(() => {
         if (tab !== 'documents') switchView('documents'); else if (doc) { setDoc(undefined); } else if (path === '.') back(); else void browse(path.split('/').slice(0, -1).join('/') || '.');
       })} /></Tooltip>
       <Breadcrumb className="explorer-breadcrumb" items={crumbs} />
       <div className="workspace-actions">
+        {library.role >= 4 && <Button size="small" type="text" onClick={() => setAgentSettings(true)}>Agent 接入</Button>}
+        {library.role >= 4 && library.organization_id && <Button size="small" type="text" onClick={() => switchView('members')}>成员权限</Button>}
         <span ref={setEditorTools} className="workspace-editor-tools" />
         {tab === 'documents' && !doc && <><Popover trigger="click" open={searchOpen} onOpenChange={setSearchOpen} content={<Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear onSearch={q => { setSearchOpen(false); void find(q); }} />}><Button size="small" type="text" aria-label="搜索" icon={<SearchOutlined />} /></Popover><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} disabled={busy} onClick={() => { void browse(path); }} /></Tooltip>{canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}</>}
         {tab === 'documents' && doc && canEdit && <>{text !== doc.content && <Button size="small" disabled={busy} onClick={() => navigate(() => { setText(doc.content); setEditorRevision(v => v + 1); })}>撤销修改</Button>}<Button size="small" type="primary" loading={busy} disabled={text === doc.content} onClick={async () => {
@@ -153,14 +160,17 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
 }
 
 function LibraryMembers({ api, library }: { api: Api; library: Library }) {
+  const [policyVersion, setPolicyVersion] = useState(0);
+  const refreshPolicy = () => setPolicyVersion(v => v + 1);
   const [members, setMembers] = useState<{ id: string; username: string; role: string }[]>([]), [candidates, setCandidates] = useState<{ id: string; username: string }[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [form] = Form.useForm();
   async function load() { setBusy(true); try { const [a, b] = await Promise.all([api.request<typeof members>(`/libraries/${library.id}/members`), api.request<typeof candidates>(`/libraries/${library.id}/candidates`)]); setMembers(a); setCandidates(b); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [library.id]);
-  return <Card>{error && <Alert type="error" title={error} />}<Form form={form} layout="inline" initialValues={{ role: 'reader' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/libraries/${library.id}/members`, 'PUT', v); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="user_id" rules={[{ required: true }]}><Select className="organization-select" aria-label="组织成员" placeholder="组织成员" options={candidates.map(m => ({ value: m.id, label: m.username }))} /></Form.Item><Form.Item name="role"><Select className="role-select" aria-label="知识库角色" options={[{ value: 'reader', label: '读者' }, { value: 'editor', label: '编辑者' }, { value: 'publisher', label: '发布者' }, { value: 'manager', label: '管理者' }, { value: 'remove', label: '取消授权' }]} /></Form.Item><Button htmlType="submit" loading={busy}>保存权限</Button></Form><Table rowKey="id" dataSource={members} columns={[{ title: '成员', dataIndex: 'username' }, { title: '授权', dataIndex: 'role' }, { title: '操作', render: (_, r) => <Button type="link" onClick={() => form.setFieldsValue({ user_id: r.id, role: r.role })}>设置</Button> }]} /></Card>;
+  return <Card><SharingSettings api={api} id={library.id} refreshKey={policyVersion} onChanged={refreshPolicy} /><Tabs destroyOnHidden items={[{ key: 'people', label: '个人授权', children: <>{error && <Alert type="error" title={error} />}<Form form={form} layout="inline" initialValues={{ role: 'reader' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/libraries/${library.id}/members`, 'PUT', v); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="user_id" rules={[{ required: true }]}><Select className="organization-select" aria-label="组织成员" placeholder="组织成员" options={candidates.map(m => ({ value: m.id, label: m.username }))} /></Form.Item><Form.Item name="role"><Select className="role-select" aria-label="知识库角色" options={[{ value: 'reader', label: '读者' }, { value: 'editor', label: '编辑者' }, { value: 'publisher', label: '发布者' }, { value: 'manager', label: '管理者' }, { value: 'remove', label: '取消授权' }]} /></Form.Item><Button htmlType="submit" loading={busy}>保存权限</Button></Form><Table rowKey="id" dataSource={members} columns={[{ title: '成员', dataIndex: 'username' }, { title: '授权', dataIndex: 'role' }, { title: '操作', render: (_, r) => <Button type="link" onClick={() => form.setFieldsValue({ user_id: r.id, role: r.role })}>设置</Button> }]} /></> }, { key: 'units', label: '部门与用户组', children: <UnitGrants api={api} lid={library.id} refreshKey={policyVersion} onChanged={refreshPolicy} /> }]} /></Card>;
 }
 
 function UserKeys({ api, libraries }: { api: Api; libraries: Library[] }) {
+  const [editing, setEditing] = useState<string>();
   const [keys, setKeys] = useState<{ id: string; agent_name: string; revoked_at?: string }[]>([]), [token, setToken] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [create, setCreate] = useState(false), [creating, setCreating] = useState(false), [createError, setCreateError] = useState('');
   const [form] = Form.useForm(); const { modal } = App.useApp();
@@ -172,8 +182,9 @@ function UserKeys({ api, libraries }: { api: Api; libraries: Library[] }) {
       <Button size="small" type="primary" onClick={() => { setCreateError(''); setCreate(true); }}>添加 Key</Button>
     </div></div>
     <div className="workspace-key-list">{error && <Alert className="block-gap" type="error" title={error} />}
-      <Table size="small" loading={busy} pagination={{ hideOnSinglePage: true }} rowKey="id" dataSource={keys} columns={[{ title: '名称', dataIndex: 'agent_name' }, { title: '状态', render: (_, r) => r.revoked_at ? '已撤销' : '有效' }, { title: '操作', render: (_, r) => !r.revoked_at && <Button type="link" danger onClick={() => modal.confirm({ title: '撤销此 Key？', onOk: async () => { try { await api.request(`/keys/${r.id}/revoke`, 'POST'); await load(); } catch (e) { setError(errorMessage(e)); throw e; } } })}>撤销</Button> }]} />
+      <Table size="small" loading={busy} pagination={{ hideOnSinglePage: true }} rowKey="id" dataSource={keys} columns={[{ title: '名称', dataIndex: 'agent_name' }, { title: '状态', render: (_, r) => r.revoked_at ? '已撤销' : '有效' }, { title: '操作', render: (_, r) => !r.revoked_at && <Space><Button type="link" onClick={() => setEditing(r.id)}>权限设置</Button><Button type="link" danger onClick={() => modal.confirm({ title: '撤销此 Key？', onOk: async () => { try { await api.request(`/keys/${r.id}/revoke`, 'POST'); await load(); } catch (e) { setError(errorMessage(e)); throw e; } } })}>撤销</Button></Space> }]} />
     </div>
+    <Modal title="权限设置" open={!!editing} onCancel={() => setEditing(undefined)} footer={null} width={880} destroyOnHidden>{editing && <KeyPolicy api={api} id={editing} libraries={libraries} done={() => { setEditing(undefined); void load(); }} />}</Modal>
     <Modal title="添加 Agent Key" open={create} destroyOnHidden onCancel={() => setCreate(false)} onOk={() => form.submit()} okText="创建 Key" confirmLoading={creating} cancelButtonProps={{ disabled: creating }} closable={!creating} maskClosable={!creating} keyboard={!creating}>
       <Form form={form} clearOnDestroy layout="vertical" onFinish={async v => {
         setCreating(true); setCreateError('');

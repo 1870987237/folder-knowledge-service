@@ -115,6 +115,8 @@ class Updates:
             if not binding:
                 raise KnowledgeError('template_required', 'Bind an installed template first', 409)
             template = self.catalog.get(binding['template_id'], binding['template_version'])
+            if 'update' not in template['definition']['capabilities']:
+                raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
             if policy.approved_package_sha256 != template['package_sha256']:
                 raise KnowledgeError('package_approval_required', 'Approve the installed package digest before enabling execution', 409)
             if template['definition']['protocol_version'] != '1.1':
@@ -135,6 +137,8 @@ class Updates:
             raise KnowledgeError('updates_disabled', 'Enabled library, binding and update policy required', 409)
         policy = json.loads(policy[0])
         template = self.catalog.public(self.catalog.require(db, binding['template_id'], binding['template_version']))
+        if 'update' not in template['definition']['capabilities']:
+            raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
         if template['package_sha256'] != policy['approved_package_sha256']:
             raise KnowledgeError('package_approval_required', 'Template package approval is stale', 409)
         spec = WorkspaceSpec.model_validate_json(binding['workspace_json']) if binding['workspace_json'] else None
