@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Menu, Modal, Popover, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
+import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Modal, Popover, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { NavigationSider, NavigationMenu } from './Navigation';
 import { UnitGrants } from './pages/Directory';
 import { SharingSettings } from './pages/Governance';
 import { KeyPolicy, LibraryAgentSettings } from './KeyPolicy';
@@ -53,10 +54,10 @@ function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; ide
   function navigate(fn: () => void) { if (dirty) modal.confirm({ title: '放弃未保存的修改？', onOk: fn }); else fn(); }
   async function load() { setBusy(true); setError(''); try { const [ls, me] = await Promise.all([api.request<Library[]>('/libraries'), api.request<Identity>('/me')]); setLibraries(ls); setIdentity(me); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [api]);
-  return <Layout className="app-layout portal-layout"><Layout.Sider theme="light" width={190} breakpoint="lg" collapsedWidth={56} collapsed={collapsed} onBreakpoint={setCollapsed} className="app-sidebar"><div className="brand">{!collapsed && <Typography.Text strong>Folder KB</Typography.Text>}<Tooltip title={collapsed ? '展开侧栏' : '收起侧栏'}><Button type="text" size="small" aria-label={collapsed ? '展开侧栏' : '收起侧栏'} icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(v => !v)} /></Tooltip></div>
-    <Menu selectedKeys={[page]} onClick={({ key }) => navigate(() => { setPage(key); setLibrary(undefined); void load(); })} items={[{ key: 'libraries', label: '知识库', icon: <FolderOutlined /> }, { key: 'organizations', label: '组织管理', icon: <TeamOutlined /> }, { key: 'keys', label: '我的 Agent Key', icon: <KeyOutlined /> }]} />
-    <div className="sidebar-footer">{!collapsed && <Typography.Text ellipsis>{identity.username}</Typography.Text>}<Tooltip title="退出"><Button type="text" aria-label="退出" icon={<LogoutOutlined />} onClick={() => navigate(() => { void api.request('/logout', 'POST').then(logout).catch(e => setError(errorMessage(e))); })}>{!collapsed && '退出'}</Button></Tooltip></div>
-  </Layout.Sider><Layout.Content className="app-content"><div className="page-container">{error && <Alert type="error" title={error} action={<Button onClick={load}>重试</Button>} />}
+  return <Layout className="app-layout portal-layout"><NavigationSider theme="light" width={190} breakpoint="lg" collapsedWidth={56} collapsed={collapsed} onBreakpoint={setCollapsed} className="app-sidebar"><div className={`brand${collapsed ? " rail-centered" : ""}`}>{!collapsed && <Typography.Text strong>Folder KB</Typography.Text>}<Tooltip title={collapsed ? '展开侧栏' : '收起侧栏'}><Button type="text" size="small" aria-label={collapsed ? '展开侧栏' : '收起侧栏'} icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />} onClick={() => setCollapsed(v => !v)} /></Tooltip></div>
+    <NavigationMenu selectedKeys={[page]} onClick={({ key }) => navigate(() => { setPage(key); setLibrary(undefined); void load(); })} items={[{ key: 'libraries', label: '知识库', icon: <FolderOutlined /> }, { key: 'organizations', label: '组织管理', icon: <TeamOutlined /> }, { key: 'keys', label: '我的 Agent Key', icon: <KeyOutlined /> }]} />
+    <div className={`sidebar-footer${collapsed ? " rail-centered" : ""}`}>{!collapsed && <Typography.Text ellipsis>{identity.username}</Typography.Text>}<Tooltip title="退出"><Button type="text" aria-label="退出" icon={<LogoutOutlined />} onClick={() => navigate(() => { void api.request('/logout', 'POST').then(logout).catch(e => setError(errorMessage(e))); })}>{!collapsed && '退出'}</Button></Tooltip></div>
+  </NavigationSider><Layout.Content className="app-content"><div className={`page-container${page === "organizations" ? " full-height" : ""}`}>{error && <Alert type="error" title={error} action={<Button onClick={load}>重试</Button>} />}
     {page === 'libraries' && (library ? <KnowledgeEditor key={library.id} api={api} identity={identity} library={library} onDirtyChange={setDirty} back={() => { setLibrary(undefined); void load(); }} /> : <><div className="workspace-topbar"><span className="workspace-location">知识库</span><div className="workspace-actions"><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} onClick={load} loading={busy} /></Tooltip><Button size="small" type="primary" onClick={() => { form.resetFields(); setCreate(true); }}>创建知识库</Button></div></div><FileExplorer loading={busy} items={libraries.map(r => ({ id: r.id, name: r.name, folder: true, modified: r.updated_at, kind: r.owner_id ? '个人知识库' : '组织知识库' }))} onOpen={id => setLibrary(libraries.find(r => r.id === id))} /></>)}
     {page === 'organizations' && <div className="organization-workspace"><div className="workspace-topbar"><span className="workspace-location">组织管理</span></div><Organizations api={api} identity={identity} reload={load} /></div>}
     {page === 'keys' && <UserKeys api={api} libraries={libraries} />}
@@ -107,9 +108,9 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
     catch (e) { if (gen === generation.current) setError(errorMessage(e)); } finally { if (gen === generation.current) setBusy(false); }
   }
   useEffect(() => { void browse(); return () => { generation.current++; }; }, [library.id]);
-  const crumbs = [{ title: <Button type="link" onClick={() => navigate(back)}>知识库</Button> },
-    { title: <Button type="link" onClick={() => navigate(() => { void browse(); })}>{library.name}</Button> },
-    ...(path === '.' ? [] : path.split('/').map((part, i, parts) => ({ title: <Button type="link" onClick={() => navigate(() => { void browse(parts.slice(0, i + 1).join('/')); })}>{part}</Button> }))),
+  const crumbs = [{ title: <Button type="link" size="small" onClick={() => navigate(back)}>知识库</Button> },
+    { title: <Button type="link" size="small" onClick={() => navigate(() => { void browse(); })}>{library.name}</Button> },
+    ...(path === '.' ? [] : path.split('/').map((part, i, parts) => ({ title: <Button type="link" size="small" onClick={() => navigate(() => { void browse(parts.slice(0, i + 1).join('/')); })}>{part}</Button> }))),
     ...(doc && tab === 'documents' ? [{ title: doc.path.split('/').pop() }] : [])];
   function openEntry(id: string) { const entry = directory?.entries.find(r => r.path === id); if (entry?.type === 'directory') void browse(id); else void open(id); }
   function switchView(t: string) { navigate(() => { setText(doc?.content || ''); setEditorRevision(v => v + 1); setTab(t); if (t === 'drafts') void loadDrafts(); if (t === 'documents' && !directory) void browse(path); }); }
@@ -132,9 +133,9 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
       </div>
     </div>
     {error && <Alert className="block-gap" type="error" title={error} closable onClose={() => setError('')} />}
-    <Tabs destroyOnHidden className="workspace-panels" activeKey={tab} renderTabBar={() => <></>} items={[
+    <Tabs destroyOnHidden classNames={{ body: "workspace-panels" }} activeKey={tab} renderTabBar={() => <></>} items={[
       { key: 'documents', label: '文档', children: doc ? <>
-        <div className="document-sheet surface">{canEdit ? <MarkdownEditor toolbarContainer={editorTools} key={doc.path + doc.version + editorRevision} value={text} onChange={setText} disabled={busy} plain={!/\.md$/i.test(doc.path)} /> : <DocumentPreview content={doc.content} />}</div>
+        <div className="document-sheet">{canEdit ? <MarkdownEditor toolbarContainer={editorTools} key={doc.path + doc.version + editorRevision} value={text} onChange={setText} disabled={busy} plain={!/\.md$/i.test(doc.path)} /> : <DocumentPreview content={doc.content} />}</div>
       </> : <>
         {search ? <><Table rowKey={r => `${r.path}:${r.line}`} loading={busy} pagination={false} size="small" dataSource={search.matches} columns={[{ title: '文档', render: (_, r) => <Button type="link" onClick={() => { void open(r.path); }}>{r.path}:{r.line}</Button> }, { title: '内容', dataIndex: 'text' }]} />
           <Space className="block-gap"><Button onClick={() => setSearch(undefined)}>返回目录</Button>{search.partial && <Typography.Text type="secondary">扫描未完成</Typography.Text>}{search.next_cursor && <Button onClick={() => { void find(searchTerm, search.next_cursor); }}>下一页</Button>}</Space></> : <>

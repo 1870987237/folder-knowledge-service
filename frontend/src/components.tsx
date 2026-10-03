@@ -13,7 +13,7 @@ export function keyState(key: AgentKey): [string, string] {
   return key.revoked_at ? ['已撤销', 'default'] : key.expires_at && Date.parse(key.expires_at) <= Date.now() ? ['已过期', 'warning'] : ['有效', 'success'];
 }
 export function PageHeader({ title, action }: { title: string; action?: ReactNode }) {
-  return <div className="page-header"><Typography.Title level={2}>{title}</Typography.Title><Space wrap>{action}</Space></div>;
+  return <div className="page-header"><Typography.Title level={4}>{title}</Typography.Title><Space wrap>{action}</Space></div>;
 }
 export function LoadError({ error, retry }: { error?: string; retry?: () => void }) {
   return error ? <Alert type="error" showIcon title={error} action={retry && <Button size="small" onClick={retry}>重试</Button>} className="load-error" /> : null;

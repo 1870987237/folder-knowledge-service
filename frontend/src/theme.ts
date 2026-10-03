@@ -20,9 +20,9 @@ export const adminTheme: ThemeConfig = {
   },
   components: {
     Layout: { siderBg: '#ffffff', bodyBg: '#f5f7f8' },
-    Menu: { itemHeight: 42, itemSelectedBg: '#eaf4f1', itemSelectedColor: '#14695e' },
+    Menu: { collapsedWidth: 56, itemSelectedBg: '#eaf4f1', itemSelectedColor: '#14695e' },
     Select: { optionSelectedBg: '#eaf4f1', optionSelectedColor: '#14695e' },
-    Table: { headerBg: '#fafbfc', cellPaddingBlock: 16 },
+    Table: { headerBg: '#fafbfc' },
     Typography: { titleMarginTop: 0, titleMarginBottom: 0 },
   },
 };

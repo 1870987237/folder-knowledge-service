@@ -8,6 +8,7 @@ import { AdminApp } from './App';
 import { PortalApp } from './Portal';
 import { adminTheme, themeVariables } from './theme';
 import './styles.css';
+import './editor.css';
 
 dayjs.locale('zh-cn');
 const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;

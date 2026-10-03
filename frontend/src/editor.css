@@ -1,0 +1,50 @@
+/* Markdown rendering and Milkdown adaptation; no application controls. */
+.visual-editor .milkdown {
+  --crepe-font-title: var(--app-font); --crepe-font-default: var(--app-font);
+  --crepe-font-code: Consolas, monospace; --crepe-base-font-size: var(--app-font-size);
+  --crepe-color-background: var(--app-surface); --crepe-color-on-background: var(--app-text);
+  --crepe-color-primary: var(--app-primary); --crepe-color-surface: var(--app-bg);
+  --crepe-color-surface-low: var(--app-bg); --crepe-color-outline: var(--app-border);
+  --crepe-color-selected: var(--app-selected);
+}
+/* One typography contract for rendered documents and the editable document. */
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) {
+  max-width: 1036px; margin: 0 auto; padding: 12px 0;
+  font-family: var(--app-font); font-size: var(--app-font-size); color: var(--app-text);
+  line-height: 1.8; overflow-wrap: anywhere;
+}
+.visual-editor .milkdown .ProseMirror { min-height: calc(100dvh - 150px); caret-color: var(--app-text); }
+.visual-editor .milkdown .ProseMirror:focus { outline: none; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(h1, h2, h3, h4, h5, h6) { font-family: inherit; font-weight: 700; line-height: 1.8; padding: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h1 { font-size: 2em; margin: .67em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h2 { font-size: 1.5em; margin: .83em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h3 { font-size: 1.17em; margin: 1em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h4 { font-size: 1em; margin: 1.33em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h5 { font-size: .83em; margin: 1.67em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) h6 { font-size: .67em; margin: 2.33em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) > :first-child { margin-top: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) p { font-size: 1em; line-height: inherit; padding: 0; margin: 1em 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(ul, ol) { margin: 1em 0; padding-left: 40px; }
+.visual-editor .milkdown .ProseMirror :is(ul, ol) { padding-left: 6px; }
+.visual-editor .milkdown .ProseMirror .milkdown-list-item-block p { margin: 0; }
+.visual-editor .milkdown .ProseMirror .label-wrapper,
+.visual-editor .milkdown .ProseMirror .label-wrapper .label { height: 1.8em; padding: 0; line-height: 1.8; color: inherit; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) pre { padding: 16px; background: var(--app-bg); overflow-x: auto; border-radius: var(--app-radius); }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) table { border-collapse: collapse; }
+.markdown-document table { display: block; overflow-x: auto; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) :is(th, td) { padding: 8px 12px; border: 1px solid var(--app-border); }
+.visual-editor .milkdown .ProseMirror :is(th, td) p { margin: 0; }
+:is(.markdown-document, .visual-editor .milkdown .ProseMirror) blockquote { margin: 1em 0; padding: 0 0 0 16px; border-left: 3px solid var(--app-border); color: var(--app-muted); }
+.visual-editor .milkdown .ProseMirror blockquote::before { display: none; }
+.visual-editor .milkdown .ProseMirror img { display: none; }
+
+/* Crepe-specific fixes: preserve handle hit targets and align with the document. */
+.visual-editor .milkdown .milkdown-block-handle .operation-item { width: 24px; height: 24px; padding: 2px; box-sizing: border-box; }
+.visual-editor .milkdown .milkdown-block-handle .operation-item svg { fill: var(--app-muted); }
+.document-sheet { padding: 8px 24px 8px 64px; }
+.document-source { font-family: Consolas, monospace; line-height: 1.7; min-height: 360px; max-height: 70dvh; resize: vertical; overflow: auto; }
+.editor-mode { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.document-format-tools { display: flex; align-items: center; gap: 8px; }
+.block-format-symbol { display: inline-flex; width: 24px; justify-content: center; font-weight: 600; }
+.block-menu-anchor { position: fixed; width: 1px; height: 1px; pointer-events: none; }
+.block-format-trigger { width: 120px; justify-content: space-between; }
