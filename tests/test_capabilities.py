@@ -144,7 +144,7 @@ def test_concurrent_writes_one_version_wins_and_rollback(env, monkeypatch):
     assert 'version_changed' in results
     _, row = r.resolve(key['token'], lid)
     import folder_kb.file_writes as module
-    def fail_copy(*args): raise OSError('storage full')
+    def fail_copy(*args, **kwargs): raise OSError('storage full')
     monkeypatch.setattr(module,'copy_workspace',fail_copy)
     response = c.post('/api/v1/write', headers=headers(key['token']), json={'path':'x.md','content':'x','operation':'create','request_id':'fail'})
     assert response.status_code == 503
@@ -184,11 +184,26 @@ def test_real_mcp_scoped_instructions_tools_and_live_changes(env):
                     async with ClientSession(read,output) as session:
                         init = await session.initialize()
                         assert own in init.instructions and foreign not in init.instructions
-                        names = {t.name for t in (await session.list_tools()).tools}
+                        tool_list = (await session.list_tools()).tools
+                        names = {t.name for t in tool_list}
                         assert ('write_file' in names) == write
+                        assert ('apply_changes' in names) == write
+                        assert ('file_manifest' in names) == write
                         assert ('grep' in names) != write
                         if write:
                             response = await session.call_tool('write_file',{'path':'memory.md','content':'memory','operation':'create','request_id':'mcp-1'})
+                            assert not response.isError, response
+                            schema = next(t for t in tool_list if t.name == 'apply_changes').inputSchema
+                            assert schema['properties']['request_id']['pattern'] == r'^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+                            response = await session.call_tool('file_manifest', {})
+                            assert not response.isError, response
+                            import json
+                            manifest = json.loads(response.content[0].text)
+                            response = await session.call_tool('apply_changes', {
+                                'request_id': 'mcp-batch', 'expected_library_version': manifest['library_version'],
+                                'changes': [{'operation': 'mkdir', 'path': 'notes'},
+                                            {'operation': 'create', 'path': 'notes/a.md', 'content': 'note'},
+                                            {'operation': 'delete', 'path': 'memory.md'}]})
                             assert not response.isError, response
                             Capabilities(r).policy(kid, Policy(permissions=[]))
                             assert {t.name for t in (await session.list_tools()).tools} == {'list_libraries'}

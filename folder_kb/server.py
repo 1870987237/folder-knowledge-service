@@ -25,7 +25,7 @@ from .core import KnowledgeError, KnowledgeFolder
 from .management import Registry
 from .inbox import Inbox, Material, add_inbox_routes
 from .capabilities import Capabilities, request_instructions, add_capability_routes
-from .file_writes import FileWrite, FileWrites, add_write_routes
+from .file_writes import FileWrite, FileWrites, FileChanges, Change, RequestId, add_write_routes
 
 
 @dataclass(frozen=True)
@@ -139,7 +139,7 @@ class AccessGuard:
                        path.endswith(('/update-policy', '/update-jobs')))
         human_body = path.startswith(('/portal/api/', '/admin/api/accounts')) or path.endswith('/ownership')
         policy_body = path.endswith(('/policy', '/agent-settings', '/governance'))
-        write_body = path == '/api/v1/write'
+        write_body = path in ('/api/v1/write', '/api/v1/files/changes')
         if (inbox_body or template_body or update_body or human_body or policy_body or write_body) and scope['method'] in ('POST', 'PUT'):
             # Bound streamed bodies as well as Content-Length before JSON parsing.
             body = bytearray()
@@ -287,16 +287,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
                                              idempotentHint=True, openWorldHint=False))
         async def write_file(ctx: Context, path: str, content: str, operation: Literal['create', 'replace'],
-                             request_id: str, library_id: str | None = None, expected_version: str | None = None) -> dict[str, Any]:
+                             request_id: RequestId, library_id: str | None = None, expected_version: str | None = None,
+                             create_parents: bool = False) -> dict[str, Any]:
             """Publish a UTF-8 .md/.txt file in a directly writable native library. create requires absence;
-            replace requires expected_version from read_file. Reuse request_id only for identical retries.
-            Parent folder must exist. Max 256 KiB. History is retained; indexes require rebuilding.
+            replace requires expected_version from read_file or file_manifest. For create, create_parents=true
+            creates missing directories. Max 256 KiB. request_id: ASCII [A-Za-z0-9][A-Za-z0-9._:-]*,
+            1..128 chars; use UUIDs, not filenames; reuse only for identical retries.
+            Use apply_changes for batch imports (one snapshot). Indexes require rebuilding.
             """
             write = FileWrite(path=path, content=content, operation=operation, request_id=request_id,
-                              library_id=library_id, expected_version=expected_version)
+                              library_id=library_id, expected_version=expected_version, create_parents=create_parents)
             try:
                 return await anyio.to_thread.run_sync(partial(FileWrites(registry).write,
                     bearer(ctx.request_context.request.headers), write, 'mcp'))
+            except KnowledgeError as exc:
+                raise ValueError(f'{exc.code}: {exc.message}') from None
+
+        @mcp.tool(annotations=annotations)
+        async def file_manifest(ctx: Context, library_id: str | None = None, path: str = '.',
+                                offset: int = 0, limit: int = 100,
+                                expected_library_version: str | None = None) -> dict[str, Any]:
+            """List native Markdown/txt file versions and SHA-256 without document bodies, recursively.
+            Returns library_version for atomic batch CAS. limit 1..200, offset 0..2000.
+            Pass expected_library_version when paging; restart if it changes. No server paths.
+            """
+            if not 0 <= offset <= 2000 or not 1 <= limit <= 200:
+                raise ValueError('invalid_pagination: offset 0..2000, limit 1..200')
+            try:
+                return await anyio.to_thread.run_sync(partial(FileWrites(registry).manifest,
+                    bearer(ctx.request_context.request.headers), library_id, path, offset, limit, expected_library_version))
+            except KnowledgeError as exc:
+                raise ValueError(f'{exc.code}: {exc.message}') from None
+
+        @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True,
+                                             idempotentHint=True, openWorldHint=False))
+        async def apply_changes(ctx: Context, changes: list[Change], request_id: RequestId,
+                                library_id: str | None = None,
+                                expected_library_version: str | None = None) -> dict[str, Any]:
+            """Atomically apply 1..100 ordered mkdir/create/replace/delete operations in ONE publication.
+            Max 1 MiB total UTF-8 content, 256 KiB per .md/.txt file. create/mkdir support create_parents.
+            replace/delete require each file's expected_version OR expected_library_version from file_manifest.
+            Directory deletion always requires expected_library_version; nonempty dirs also require recursive=true.
+            No duplicate paths or operations beneath a deleted directory. No root/hidden/absolute paths.
+            All succeed or none publish. request_id: ASCII [A-Za-z0-9][A-Za-z0-9._:-]*, 1..128 chars;
+            use UUIDs and reuse only for identical retries. Publication invalidates previous file versions/indexes.
+            """
+            batch = FileChanges(changes=changes, request_id=request_id, library_id=library_id,
+                                expected_library_version=expected_library_version)
+            try:
+                return await anyio.to_thread.run_sync(partial(FileWrites(registry).apply,
+                    bearer(ctx.request_context.request.headers), batch, 'mcp'))
             except KnowledgeError as exc:
                 raise ValueError(f'{exc.code}: {exc.message}') from None
 
