@@ -44,15 +44,17 @@ def main():
                     return json.load(response)
 
             def wait_ready():
+                last_error = None
                 for _ in range(60):
                     try:
                         request('/healthz');return
-                    except (urllib.error.URLError, OSError):
+                    except (urllib.error.URLError, OSError) as exc:
+                        last_error = exc
                         time.sleep(.5)
                 logs = subprocess.run(['docker', 'logs', '--tail', '100', name],
                                       capture_output=True, text=True)
                 print((logs.stdout + logs.stderr).replace(token, '[redacted]'), flush=True)
-                raise RuntimeError('Container did not become healthy')
+                raise RuntimeError(f'Container did not become healthy at {base}: {last_error}')
 
             wait_ready()
             assert docker('exec', name, 'id', '-u') == '10001'
@@ -64,6 +66,9 @@ def main():
                    "from pathlib import Path\nimport errno\ntry:\n Path('/knowledge/write-must-fail.txt').write_text('x')\nexcept OSError as e:\n assert e.errno == errno.EROFS\nelse:\n raise AssertionError('Knowledge mount is writable')")
             assert not (root/'write-must-fail.txt').exists()
             docker('restart', name)
+            # The ephemeral host port can be reassigned when Docker restarts it.
+            port = docker('port', name, '8790').rsplit(':', 1)[1]
+            base = 'http://127.0.0.1:'+port
             wait_ready()
             assert request('/api/v1/read?path=README.md', credential=key['token'])['library_id']=='manual'
             docker('exec', name, 'python', '-m', 'folder_kb.backup',
