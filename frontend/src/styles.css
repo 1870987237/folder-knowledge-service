@@ -221,6 +221,18 @@ html:has(.portal-layout), body:has(.portal-layout) { height: 100%; overflow: hid
 .document-source { min-height: 360px; max-height: 70dvh; resize: vertical; overflow: auto; }
 
 .block-menu-anchor { position: fixed; width: 1px; height: 1px; pointer-events: none; }
+.admin-organization-layout { height: 100dvh; min-height: 0; overflow: hidden; }
+html:has(.admin-organization-layout), body:has(.admin-organization-layout) { height: 100%; overflow: hidden; }
+.admin-organization-layout .app-sidebar .ant-layout-sider-children { height: 100dvh; min-height: 0; overflow: hidden; }
+.admin-organization-layout .app-sidebar .brand, .admin-organization-layout .sidebar-footer { flex-shrink: 0; }
+.admin-organization-layout .app-sidebar .ant-menu { flex: 1; min-height: 0; overflow: auto; }
+.admin-organization-layout > .app-content { padding: 16px 20px 0; background: var(--app-surface); display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+.admin-organization-layout .page-container { width: 100%; max-width: none; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.admin-organizations-page, .admin-organizations-page > .organizations-page, .admin-organizations-page .organization-manager { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.admin-organizations-page .organization-directory-layout { flex: 1; min-height: 0; overflow: hidden; }
+.admin-organizations-page .organization-group-content { flex: 1; min-height: 0; }
+.admin-organization-layout .mobile-menu { flex-shrink: 0; align-self: flex-start; margin-bottom: 8px; }
+@media (max-width: 760px) { .admin-organization-layout > .app-content { padding: 12px 12px 0; } }
 .portal-layout .document-sheet { padding-inline-start: 64px; }
 .visual-editor .milkdown .milkdown-block-handle .operation-item { width: 24px; height: 24px; padding: 2px; box-sizing: border-box; }
 .visual-editor .milkdown .milkdown-block-handle .operation-item svg { fill: var(--app-muted); }

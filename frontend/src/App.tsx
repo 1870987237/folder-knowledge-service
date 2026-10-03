@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, App as AntApp, Button, Form, Input, Layout, Menu, Spin, Typography } from 'antd';
-import { ApiOutlined, AppstoreOutlined, DashboardOutlined, DatabaseOutlined, FolderOutlined, HistoryOutlined, InboxOutlined, KeyOutlined, LogoutOutlined, MenuOutlined, BranchesOutlined } from '@ant-design/icons';
+import { ApiOutlined, AppstoreOutlined, DashboardOutlined, DatabaseOutlined, FolderOutlined, HistoryOutlined, InboxOutlined, KeyOutlined, LogoutOutlined, MenuOutlined, BranchesOutlined, TeamOutlined, UserOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { Api, errorMessage } from './api';
 import { SessionContext, type Claim } from './context';
 import type { Overview } from './types';
@@ -13,10 +13,10 @@ import { ActivityPage } from './pages/Activity';
 import { OverviewPage } from './pages/Overview';
 
 import { ModelsPage, UpdatesPage } from './pages/Updates';
-import { PeoplePage } from './pages/People';
+import { AccountsPage, OrganizationsPage, OwnershipPage } from './pages/People';
 
-const knownPages = ['people', 'models', 'updates', 'overview', 'libraries', 'inbox', 'plugins', 'templates', 'repositories', 'keys', 'activity'];
-function initialPage() { const raw = location.hash.slice(1); const key = raw === 'templates' ? 'plugins' : raw; return knownPages.includes(key) ? key : 'overview'; }
+const knownPages = ['accounts', 'organizations', 'ownership', 'models', 'updates', 'overview', 'libraries', 'inbox', 'plugins', 'templates', 'repositories', 'keys', 'activity'];
+function initialPage() { const raw = location.hash.slice(1); const key = raw === 'templates' ? 'plugins' : raw === 'people' ? 'organizations' : raw; return knownPages.includes(key) ? key : 'overview'; }
 export function AdminApp() {
   const [session, setSession] = useState<{ api: Api; overview: Overview }>();
   const [loginError, setLoginError] = useState(''), [busy, setBusy] = useState(false);
@@ -48,12 +48,12 @@ function Workspace({ client, initial, logout }: { client: Api; initial: Overview
     return () => { alive = false; window.clearInterval(timer); };
   }, [client, revision]);
   useEffect(() => () => { claims.current.clear(); }, []);
-  const content = ({ people: <PeoplePage />, models: <ModelsPage />, updates: <UpdatesPage />, overview: <OverviewPage navigate={navigate} />, libraries: <LibrariesPage />, inbox: <InboxPage />, plugins: <TemplatesPage />, repositories: <RepositoriesPage />, keys: <KeysPage />, activity: <ActivityPage /> } as Record<string, React.ReactNode>)[page];
-  return <SessionContext.Provider value={{ api: client, overview, refresh, revision, claims: claims.current }}><Layout className="app-layout"><Layout.Sider theme="light" width={232} breakpoint="lg" collapsedWidth={0} collapsed={collapsed} trigger={null} onBreakpoint={broken => { setMobile(broken); setCollapsed(broken); }} className="app-sidebar">
+  const content = ({ accounts: <AccountsPage />, organizations: <OrganizationsPage />, ownership: <OwnershipPage />, models: <ModelsPage />, updates: <UpdatesPage />, overview: <OverviewPage navigate={navigate} />, libraries: <LibrariesPage />, inbox: <InboxPage />, plugins: <TemplatesPage />, repositories: <RepositoriesPage />, keys: <KeysPage />, activity: <ActivityPage /> } as Record<string, React.ReactNode>)[page];
+  return <SessionContext.Provider value={{ api: client, overview, refresh, revision, claims: claims.current }}><Layout className={`app-layout${page === 'organizations' ? ' admin-organization-layout' : ''}`}><Layout.Sider theme="light" width={232} breakpoint="lg" collapsedWidth={0} collapsed={collapsed} trigger={null} onBreakpoint={broken => { setMobile(broken); setCollapsed(broken); }} className="app-sidebar">
     <div className="brand"><span className="brand-mark"><FolderOutlined /></span><Typography.Text strong>Folder KB</Typography.Text></div>
     <Menu mode="inline" selectedKeys={[page]} onClick={({ key }) => navigate(key)} items={[
       { key: 'overview', icon: <DashboardOutlined />, label: '服务概览' },
-      { key: 'people', icon: <AppstoreOutlined />, label: '账号与组织' },
+      { type: 'group', label: '组织与权限', children: [{ key: 'accounts', icon: <UserOutlined />, label: '账号管理' }, { key: 'organizations', icon: <TeamOutlined />, label: '组织管理' }, { key: 'ownership', icon: <ApartmentOutlined />, label: '知识库归属' }] },
       { type: 'group', label: '知识工作区', children: [{ key: 'libraries', icon: <DatabaseOutlined />, label: '知识库' }, { key: 'inbox', icon: <InboxOutlined />, label: '增量收件箱' }, { key: 'updates', icon: <HistoryOutlined />, label: '更新任务' }, { key: 'plugins', icon: <AppstoreOutlined />, label: '插件' }] },
       { type: 'group', label: '服务管理', children: [{ key: 'models', icon: <ApiOutlined />, label: '模型连接' }, { key: 'repositories', icon: <BranchesOutlined />, label: 'Git 仓库' }, { key: 'keys', icon: <KeyOutlined />, label: 'Agent 与密钥' }, { key: 'activity', icon: <HistoryOutlined />, label: '访问活动' }] },
     ]} /><div className="sidebar-footer"><Button type="text" icon={<LogoutOutlined />} onClick={logout}>退出登录</Button></div>
