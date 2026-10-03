@@ -13,10 +13,11 @@ export function FileExplorer({ items, loading, onOpen }: { items: ExplorerItem[]
 
       onRow={r => ({ style: { background: selected === r.id ? token.controlItemBgActive : undefined }, tabIndex: 0, 'aria-label': r.name, 'aria-selected': selected === r.id,
         onClick: () => setSelected(r.id), onDoubleClick: () => !loading && onOpen(r.id),
-        onKeyDown: e => { if (e.key === 'Enter' && !loading) onOpen(r.id); if (e.key === ' ') { e.preventDefault(); setSelected(r.id); } },
+        onKeyDown: e => { if (e.target !== e.currentTarget) return; if (e.key === 'Enter' && !loading) onOpen(r.id); if (e.key === ' ') { e.preventDefault(); setSelected(r.id); } },
       })}
       columns={[
-        { title: '名称', key: 'name', render: (_, r) => <span className="explorer-name">{r.folder ? <FolderOutlined /> : <FileTextOutlined />}<span>{r.name}</span>{selected === r.id && <Button className="explorer-open" size="small" type="text" disabled={loading} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onOpen(r.id); }}>打开</Button>}</span> },
+        // Reserve the action's space so selection never changes row or column geometry.
+        { title: '名称', key: 'name', render: (_, r) => <span className="explorer-name">{r.folder ? <FolderOutlined /> : <FileTextOutlined />}<span>{r.name}</span><Button className="explorer-open" style={{ visibility: selected === r.id ? 'visible' : 'hidden' }} size="small" type="text" disabled={loading} onDoubleClick={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); onOpen(r.id); }}>打开</Button></span> },
         { title: '修改日期', width: 190, render: (_, r) => r.modified ? date(r.modified) : '—' },
         { title: '类型', width: 125, render: (_, r) => r.kind || (r.folder ? '文件夹' : /\.md$/i.test(r.name) ? 'Markdown' : '文本文件') },
         { title: '大小', width: 95, render: (_, r) => r.bytes == null ? '—' : r.bytes < 1024 ? `${r.bytes} B` : `${(r.bytes / 1024).toFixed(1)} KB` },
