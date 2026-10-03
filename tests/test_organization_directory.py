@@ -148,3 +148,41 @@ def test_depth_and_v9_migration(env):
         assert db.execute('PRAGMA user_version').fetchone()[0]==10
         assert db.execute('SELECT count(*) FROM organization_units').fetchone()[0]==0
     assert read(c,a,lid)==200 and read(c,u,lid)==403
+
+
+def test_member_profile_atomic_scoping_and_live_permissions(env):
+    c,r=env; a,b,u,oa,ob,lid=setup(c); uid=user_id(c,u)
+    team=create(c,a,oa,'团队',members=[user_id(c,a)])
+    group=create(c,a,oa,'协作','group')
+    foreign=create(c,b,ob,'外部')
+    path=f'/portal/api/organizations/{oa}/members/{uid}/profile'
+    initial=c.get(path,headers=headers(a)).json()
+    change={'role':'member','unit_ids':[team,group],'expected_role':initial['role'],'expected_unit_ids':initial['unit_ids']}
+    for token in (u,b):
+        assert c.get(path,headers=headers(token)).status_code==403
+        assert c.put(path,headers=headers(token),json=change).status_code==403
+    assert c.put(path,headers=headers(a),json={**change,'role':'admin','unit_ids':[foreign]}).status_code==400
+    assert c.get(path,headers=headers(a)).json()==initial
+    grant(c,a,lid,group,'editor')
+    assert c.put(path,headers=headers(a),json=change).status_code==200
+    assert read(c,u,lid)==200
+    rows=c.get(f'/portal/api/organizations/{oa}/units',headers=headers(a)).json()
+    assert set(next(x for x in rows if x['id']==team)['member_ids'])=={uid,user_id(c,a)}
+    assert next(x for x in rows if x['id']==group)['revision']==2
+    assert edit(c,a,oa,group,'过期表单').status_code==409
+    assert c.put(path,headers=headers(a),json=change).status_code==409
+    assert c.put(path,headers=headers(a),json={**change,'expected_unit_ids':[team,group],'unit_ids':[]}).status_code==200
+    assert read(c,u,lid)==403
+
+
+def test_member_profile_last_admin_and_removed_member_do_not_partially_save(env):
+    c,r=env; a,b,u,oa,ob,lid=setup(c)
+    team=create(c,a,oa,'团队')
+    path=f'/portal/api/organizations/{oa}/members/{user_id(c,a)}/profile'
+    change={'role':'member','unit_ids':[team],'expected_role':'admin','expected_unit_ids':[]}
+    assert c.put(path,headers=headers(a),json=change).json()['error']=='last_admin'
+    assert c.get(path,headers=headers(a)).json()['unit_ids']==[]
+    memberpath=f'/portal/api/organizations/{oa}/members/{user_id(c,u)}/profile'
+    c.put(f'/portal/api/organizations/{oa}/members',headers=headers(a),json={'username':'member','role':'remove'})
+    assert c.get(memberpath,headers=headers(a)).status_code==404
+    assert c.put(memberpath,headers=headers(a),json={**change,'expected_role':'member'}).status_code==404

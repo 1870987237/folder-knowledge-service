@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Card, Form, Input, Select, Space, Table, Tabs, Tag } from 'antd';
+import { Alert, App, Button, Card, Form, Input, Select, Empty, Modal, Table, Tabs, Tag } from 'antd';
 import { useSession } from '../context';
 import { Api, errorMessage } from '../api';
-import { OrganizationDirectory } from './Directory';
+import { OrganizationMembers } from './OrganizationMembers';
 import { GovernanceTable } from './Governance';
 import { PageHeader } from '../components';
 
@@ -13,17 +13,20 @@ type Member = { id: string; username: string; role: string };
 type Account = Member & { status: string; created_at: string };
 
 export function Organizations({ api, identity, reload }: { api: Client; identity: Identity; reload: () => void }) {
-  const [oid, setOid] = useState(''), [members, setMembers] = useState<Member[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false);
-  const [form] = Form.useForm(); const { modal } = App.useApp();
+  const [selected, setSelected] = useState(''), [creating, setCreating] = useState(false), [saving, setSaving] = useState(false), [error, setError] = useState('');
+  const [form] = Form.useForm();
   const orgs = identity.organizations.filter(o => o.role === 'admin');
-  async function load(id: string) { setOid(id); setBusy(true); setError(''); try { setMembers(await api.request<Member[]>(`/organizations/${id}/members`)); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
-  return <Space orientation="vertical" className="full-width" size="large">
-    {error && <Alert type="error" title={error} />}
-    {identity.platform && <Form layout="inline" onFinish={async (v: { name: string }) => { setBusy(true); setError(''); try { await api.request('/organizations', 'POST', v); reload(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="name" rules={[{ required: true, whitespace: true }]}><Input aria-label="组织名称" placeholder="新组织名称" maxLength={80} /></Form.Item><Button htmlType="submit" loading={busy}>创建组织</Button></Form>}
-    <Select className="organization-select" aria-label="选择组织" placeholder="选择管理的组织" value={oid || undefined} options={orgs.map(o => ({ label: o.name, value: o.id }))} onChange={id => { void load(id); form.resetFields(); }} />
-    {oid && <Tabs key={oid} destroyOnHidden items={[{ key: 'members', label: '组织成员', children: <><Form form={form} layout="inline" initialValues={{ role: 'member' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request(`/organizations/${oid}/members`, 'PUT', v); await load(oid); form.resetFields(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="username" rules={[{ required: true }]}><Input placeholder="已启用的账号" aria-label="成员账号" /></Form.Item><Form.Item name="role"><Select className="role-select" aria-label="组织角色" options={[{ value: 'member', label: '成员' }, { value: 'admin', label: '管理员' }]} /></Form.Item><Button htmlType="submit" loading={busy}>保存成员</Button></Form>
-    <Table<Member> rowKey="id" dataSource={members} loading={busy} columns={[{ title: '账号', dataIndex: 'username' }, { title: '角色', render: (_, r) => r.role === 'admin' ? '组织管理员' : '成员' }, { title: '操作', render: (_, r) => <Space><Button type="link" onClick={() => form.setFieldsValue(r)}>设置角色</Button><Button type="link" danger onClick={() => modal.confirm({ title: `移出 ${r.username}？`, content: '该账号及其 Agent Key 将失去此组织的权限。', onOk: async () => { try { await api.request(`/organizations/${oid}/members`, 'PUT', { username: r.username, role: 'remove' }); await load(oid); } catch (e) { setError(errorMessage(e)); throw e; } } })}>移出</Button></Space> }]} /></> }, { key: 'directory', label: '部门与用户组', children: <OrganizationDirectory key={oid} api={api} oid={oid} /> }]} />}
-  </Space>;
+  const oid = orgs.some(o => o.id === selected) ? selected : orgs[0]?.id;
+  return <div className="organizations-page">
+    <div className="organization-toolbar"><Select className="organization-select" aria-label="选择组织" placeholder="选择管理的组织" value={oid} options={orgs.map(o => ({ label: o.name, value: o.id }))} onChange={setSelected} />
+      {identity.platform && <Button onClick={() => { form.resetFields(); setError(''); setCreating(true); }}>新建组织</Button>}
+    </div>
+    {oid ? <OrganizationMembers key={oid} api={api} oid={oid} onChanged={reload} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可管理的组织" />}
+    <Modal title="新建组织" open={creating} okText="创建" onCancel={() => setCreating(false)} onOk={() => form.submit()} confirmLoading={saving} closable={!saving} maskClosable={false} cancelButtonProps={{ disabled: saving }}>
+      {error && <Alert type="error" title={error} className="block-gap" />}
+      <Form form={form} layout="vertical" onFinish={async v => { setSaving(true); setError(''); try { const result = await api.request<{ id: string }>('/organizations', 'POST', v); setSelected(result.id); setCreating(false); reload(); } catch (e) { setError(errorMessage(e)); } finally { setSaving(false); } }}><Form.Item name="name" label="组织名称" rules={[{ required: true, whitespace: true }]}><Input maxLength={80} /></Form.Item></Form>
+    </Modal>
+  </div>;
 }
 
 export function PeoplePage() {

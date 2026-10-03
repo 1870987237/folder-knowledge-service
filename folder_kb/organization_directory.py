@@ -69,6 +69,13 @@ class UnitGrant(Input):
     expected_revision: int = Field(ge=0)
 
 
+class MemberProfile(Input):
+    role: Literal['member', 'admin']
+    unit_ids: list[str] = Field(default_factory=list, max_length=2000)
+    expected_role: Literal['member', 'admin']
+    expected_unit_ids: list[str] = Field(default_factory=list, max_length=2000)
+
+
 class Directory:
     def __init__(self, registry):
         self.collab = Collaboration(registry)
@@ -85,6 +92,43 @@ class Directory:
             for r in db.execute('SELECT unit_id,user_id FROM unit_members WHERE organization_id=?', (oid,)):
                 members.setdefault(r[0], []).append(r[1])
             return [dict(u, member_ids=members.get(u['id'], [])) for u in units]
+
+    def member(self, actor, oid, uid, value=None):
+        with self.store.transaction(write=value is not None) as db:
+            self.collab.org_check(db, actor, oid)
+            row = db.execute('SELECT u.id,u.username,u.status,m.role FROM organization_members m '
+                             'JOIN users u ON u.id=m.user_id WHERE m.organization_id=? AND m.user_id=?',
+                             (oid, uid)).fetchone()
+            if not row:
+                fail('unknown_member', '成员已移出组织，请刷新列表', 404)
+            current = {r[0] for r in db.execute('SELECT unit_id FROM unit_members WHERE organization_id=? AND user_id=?', (oid, uid))}
+            if value:
+                if row['role'] != value.expected_role or current != set(value.expected_unit_ids):
+                    fail('member_changed', '成员资料已变化，请重新加载后修改', 409)
+                wanted = set(value.unit_ids)
+                available = {u['id'] for u in self.units(db, oid)}
+                if not wanted <= available:
+                    fail('invalid_unit', '只能选择本组织现有的部门或用户组', 400)
+                for unit_id in wanted - current:
+                    if db.execute('SELECT count(*) FROM unit_members WHERE unit_id=?', (unit_id,)).fetchone()[0] >= 1000:
+                        fail('unit_member_limit', '每个部门或用户组最多 1000 名成员', 409)
+                if row['status'] != 'active':
+                    fail('inactive_member', '账号尚未启用，不能调整成员资料', 409)
+                if row['role'] == 'admin' and value.role != 'admin' and db.execute(
+                        "SELECT count(*) FROM organization_members m JOIN users u ON u.id=m.user_id "
+                        "WHERE organization_id=? AND role='admin' AND u.status='active'", (oid,)).fetchone()[0] <= 1:
+                    fail('last_admin', '请先设置另一位组织管理员', 409)
+                # Only touch this user's memberships; other members' edits remain intact.
+                for unit_id in current - wanted:
+                    db.execute('DELETE FROM unit_members WHERE unit_id=? AND user_id=?', (unit_id, uid))
+                for unit_id in wanted - current:
+                    db.execute('INSERT INTO unit_members VALUES (?,?,?)', (unit_id, oid, uid))
+                for unit_id in current ^ wanted:
+                    db.execute('UPDATE organization_units SET revision=revision+1 WHERE id=?', (unit_id,))
+                db.execute('UPDATE organization_members SET role=? WHERE organization_id=? AND user_id=?', (value.role, oid, uid))
+                self.collab.event(db, actor, 'organization_member_profile', oid + ':' + uid)
+                return dict(row, role=value.role, unit_ids=sorted(wanted))
+            return dict(row, unit_ids=sorted(current))
 
     def save(self, actor, oid, value, unit_id=None):
         with self.store.transaction(write=True) as db:
@@ -175,6 +219,14 @@ class Directory:
 
 def add_directory_routes(app, registry):
     service = Directory(registry)
+
+    @app.get('/portal/api/organizations/{oid}/members/{uid}/profile')
+    def member_profile(oid: str, uid: str, request: Request):
+        return service.member(request.state.human, oid, uid)
+
+    @app.put('/portal/api/organizations/{oid}/members/{uid}/profile')
+    def edit_member_profile(oid: str, uid: str, value: MemberProfile, request: Request):
+        return service.member(request.state.human, oid, uid, value)
 
     @app.get('/portal/api/organizations/{oid}/units')
     def units(oid: str, request: Request):

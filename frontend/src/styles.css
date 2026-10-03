@@ -26,6 +26,38 @@ body { margin: 0; }
 .block-gap { margin-top: 16px; margin-bottom: 16px; }
 .load-error { margin-bottom: 16px; }
 .full-width { width: 100%; }
+.organizations-page { display: flex; flex-direction: column; min-height: 0; }
+.organization-toolbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; flex-shrink: 0; }
+.organization-manager { min-height: 0; display: flex; flex-direction: column; }
+.organization-manager > .ant-tabs { flex-shrink: 0; }
+.organization-manager > .ant-tabs .ant-tabs-nav { margin-bottom: 0; }
+.organization-directory-layout { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 380px; }
+.organization-tree { padding: 12px 12px 12px 0; border-right: 1px solid var(--app-border); overflow: auto; min-height: 0; }
+.organization-tree > .ant-btn { justify-content: flex-start; gap: 8px; margin-bottom: 4px; }
+.organization-tree > .ant-btn span + span { margin-left: auto; }
+.organization-tree-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px 8px 6px; }
+.organization-tree .ant-tree-node-content-wrapper { min-width: 0; }
+.organization-tree-label { display: flex; align-items: center; min-width: 0; }
+.organization-tree-label > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.organization-tree-label .ant-btn { flex-shrink: 0; }
+.organization-members-content, .organization-group-content { min-width: 0; padding: 12px 0 0 16px; overflow: auto; }
+.organization-group-content { padding-left: 0; }
+.organization-filters, .organization-group-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.organization-filters > .ant-input-affix-wrapper { width: 240px; max-width: 100%; }
+.organization-member-table .ant-table-cell .ant-typography { max-width: 100%; }
+.organization-name.ant-btn { padding-inline: 0; max-width: 100%; height: auto; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.portal-layout .page-container:has(> .organization-workspace) { height: 100%; }
+.organization-workspace { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.organization-workspace > .organizations-page { flex: 1; padding: 12px 20px 0; overflow: hidden; }
+.organization-workspace .organization-manager { flex: 1; overflow: hidden; }
+.organization-workspace .organization-directory-layout { flex: 1; min-height: 0; overflow: hidden; }
+.organization-workspace .organization-group-content { flex: 1; }
+@media (max-width: 760px) {
+  .organization-directory-layout { grid-template-columns: 160px minmax(0, 1fr); }
+  .organization-workspace > .organizations-page { padding: 10px 12px 0; }
+  .organization-members-content { padding-left: 10px; }
+  .organization-filters > .ant-input-affix-wrapper { width: 100%; }
+}
 .form-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 24px; }
 .drawer-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .folder-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
