@@ -49,6 +49,9 @@ def main():
                         request('/healthz');return
                     except (urllib.error.URLError, OSError):
                         time.sleep(.5)
+                logs = subprocess.run(['docker', 'logs', '--tail', '100', name],
+                                      capture_output=True, text=True)
+                print((logs.stdout + logs.stderr).replace(token, '[redacted]'), flush=True)
                 raise RuntimeError('Container did not become healthy')
 
             wait_ready()
