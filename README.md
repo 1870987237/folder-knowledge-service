@@ -404,6 +404,8 @@ python -m pytest -q
 
 前端源代码位于 `frontend/`，构建自动写入 `folder_kb/web/`；生成文件不提交 Git。Docker 镜像与 CI 已包含前端构建步骤。单独安装 Python 包不会自动运行 npm。
 
+工具与索引的任务效果使用[通用 Agent Benchmark](benchmarks/agent/README.md)评测：让 OMP 自主完成自然语言读写任务，独立核验答案和文件结果，对比 grep、Search 及混合配置，并记录调用成功率、错误恢复、耗时和 tokens。
+
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。
 
 权限窗口通过 `GET/PUT /admin/api/keys/{key_id}/permissions` 读取与保存，PUT 请求体为 `{"library_ids":["team-guide"],"submit_library_ids":["team-guide"]}`。两类权限在一个 SQLite 事务中更新，失败不会只保存一部分。原 `/grants` 和 `/inbox-grants` 接口继续可用。

@@ -65,7 +65,7 @@ class Probe:
 
 
 class Suite:
-    def __init__(self, output):
+    def __init__(self, output, app_wrapper=None):
         self.output = output.resolve()
         self.run_root = self.output / ('fixture-' + uuid.uuid4().hex)
         pool = self.run_root / 'knowledge'
@@ -92,7 +92,7 @@ class Suite:
         self.sock.bind(('127.0.0.1', 0))
         self.port = self.sock.getsockname()[1]
         self.url = f'http://127.0.0.1:{self.port}'
-        self.server = uvicorn.Server(uvicorn.Config(self.app, log_level='critical', access_log=False,
+        self.server = uvicorn.Server(uvicorn.Config(app_wrapper(self.app) if app_wrapper else self.app, log_level='critical', access_log=False,
                                                    limit_concurrency=32, timeout_keep_alive=10))
         self.thread = threading.Thread(target=self.server.run, kwargs={'sockets': [self.sock]}, daemon=True)
         self.thread.start()
