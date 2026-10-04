@@ -93,7 +93,22 @@ python -m benchmarks.agent.runner --output data/other-index --variants search hy
 | W05 | 整理交接记录到新目录 | 原位置消失，新位置内容完整 |
 | W06 | 用只读 Key 请求修改 | 明确拒绝，无文件变化 |
 
-24 篇小型文档全部由 `tasks.py` 构造。读任务要求结构化事实字段以便确定性判分，但不规定工具和路径查找策略；引用必须指向正确资料。
+测试数据独立放在 [`../datasets/basic/`](../datasets/basic/README.md)：
+
+```text
+benchmarks/
+├── agent/                     # 执行、数据加载、评分和报告代码
+└── datasets/basic/
+    ├── knowledge/             # 24 篇真实 Markdown 文件组成的初始测试库
+    ├── tasks.csv              # 12 个任务：id、kind、prompt、write_policy
+    └── expectations.json      # 独立验收规则，按任务编号关联
+```
+
+`tasks.py` 仅负责读取和校验文件，不再内嵌知识正文和任务定义。可直接修改知识文件，用 Excel 编辑 CSV，新增任务时补充同编号验收规则。仅 `knowledge/` 被复制到每次任务的测试库；任务表与标准答案不挂载，测试修改也不回写源文件。
+
+复制一份数据目录即可建立其他测试集，通过 `--dataset benchmarks/datasets/my-suite` 选择。重评分也支持 `--dataset`，应指向原测试集。详见[数据维护说明](../datasets/basic/README.md)。
+
+读任务要求结构化事实字段以便确定性判分，但不规定工具和路径查找策略；引用必须指向正确资料。
 写入校验是文件内容/差异，不依赖用了几次调用或某个工具。禁止无关文件变化。
 自动评分覆盖指定事实，不保证已验证答复所有附加解释；完整回答的幻觉评估需要另加人工审查或独立判分。
 
@@ -130,7 +145,7 @@ episodes/<任务>-<配置>-<重复>/
   final-files.json                # 合成库最终内容，供核验
 ```
 
-运行记录保留语料指纹、插件包指纹、评测源码指纹和平台 Git 提交。每组比较须使用相同初始内容指纹。
+运行记录保留语料、任务、验收规则、插件包和评测源码指纹及平台 Git 提交。每组比较须使用相同初始内容和任务。
 不要从输出目录继续会话或把标准答案作为 Agent 的文件附件。
 
 需要提交合成基准证据时，可运行 `python -m benchmarks.agent.export <运行目录> --output docs/reports/evidence/<名称>.json`；使用修订评分时加 `--results graded-results.json`。它不导出 OMP 配置目录，并检查常见令牌格式，仍应在提交前检查文件。

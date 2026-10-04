@@ -13,7 +13,7 @@ import time
 
 import httpx
 
-from benchmarks.agent.tasks import corpus, tasks
+from benchmarks.agent.tasks import DEFAULT_DATASET, load_dataset
 from benchmarks.agent.evaluate import GRADER_VERSION, grade
 from folder_kb.capabilities import Capabilities, Policy
 from folder_kb.plugin_package import package_plugin
@@ -95,6 +95,22 @@ def read_tree(root):
     return {p.relative_to(root).as_posix(): p.read_text(encoding='utf-8') for p in root.rglob('*') if p.is_file()}
 
 
+def seed_knowledge(root, documents):
+    """Populate a newly created benchmark library, never the source dataset."""
+    existing = set(read_tree(root))
+    if existing - {'README.md'}:
+        raise ValueError('Expected a newly created benchmark library')
+    # create_library supplies a README; it must not leak into other datasets.
+    if 'README.md' in existing and 'README.md' not in documents:
+        (root / 'README.md').unlink()
+    for path, content in documents.items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding='utf-8', newline='\n')
+    if read_tree(root) != documents:
+        raise ValueError('Seeded library does not match the selected dataset')
+
+
 def parse_events(stdout):
     events = []
     for line in stdout.splitlines():
@@ -156,11 +172,7 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
     directory = suite.output / 'episodes' / name
     directory.mkdir(parents=True)
     lid, key, root = suite.setup()
-    original = corpus()
-    for path, content in original.items():
-        target = root / path
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding='utf-8', newline='\n')
+    seed_knowledge(root, args.knowledge)
     assert admin.put(f'/admin/api/libraries/{lid}/plugin', json={'plugin_id': 'benchmark-rag', 'plugin_version': args.plugin_version}).status_code == 200
     index_start = time.perf_counter()
     index_response = admin.post(f'/admin/api/libraries/{lid}/index/build')
@@ -260,6 +272,11 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
 
 
 async def run(args):
+    args.knowledge, definitions, dataset_metadata = load_dataset(args.dataset)
+    unknown = set(args.tasks or ()) - {t.id for t in definitions}
+    if unknown:
+        raise ValueError('Unknown task IDs in selected dataset: ' + ', '.join(sorted(unknown)))
+    selected = [t for t in definitions if not args.tasks or t.id in args.tasks]
     recorder = Recorder()
     suite = Suite(args.output, app_wrapper=recorder.wrap)
     results = []
@@ -269,7 +286,6 @@ async def run(args):
     try:
         admin = install_index_plugin(suite, args)
         for repeat in range(1, args.repeats + 1):
-            selected = [t for t in tasks() if not args.tasks or t.id in args.tasks]
             for number, task in enumerate(selected):
                 # Rotate order by task/repeat; no per-arm task hints or tool recipes.
                 shift = (number + repeat - 1) % len(args.variants)
@@ -281,7 +297,7 @@ async def run(args):
                         'benchmark_version': '1.0', 'grader_version': GRADER_VERSION, 'started_at': suite.result['timestamp'],
                         'agent_adapter': 'OMP explicit extension; unchanged MCP schemas; JSON Streamable HTTP',
                         'plugin': suite.result['plugin'], 'system_prompt': SYSTEM,
-                        'source_sha256': source_hash,
+                        'source_sha256': source_hash, 'dataset': dataset_metadata,
                         'model': args.model, 'omp_version': subprocess.check_output([args.omp, '--version'], text=True).strip(),
                         'episodes': results}, ensure_ascii=False, indent=2), encoding='utf-8')
                     if args.fail_fast and not result['valid_run']:
@@ -296,13 +312,15 @@ def main():
     logging.disable(logging.CRITICAL)
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--dataset', type=Path, default=DEFAULT_DATASET,
+                   help='Dataset directory containing knowledge/, tasks.csv and expectations.json')
     p.add_argument('--omp', default=shutil.which('omp') or 'omp')
     p.add_argument('--model', default='hyper-op/GLM-5.3-Flash')
     p.add_argument('--models-config', type=Path, default=Path.home() / '.omp/agent/models.yml')
     p.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/simple-rag/definition.json'))
     p.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/simple-rag/package'))
     p.add_argument('--variants', nargs='+', choices=['grep', 'search', 'hybrid'], default=['grep', 'search', 'hybrid'])
-    p.add_argument('--tasks', nargs='+', choices=[t.id for t in tasks()])
+    p.add_argument('--tasks', nargs='+', help='Task IDs from the selected dataset')
     p.add_argument('--repeats', type=int, default=1)
     p.add_argument('--timeout', type=int, default=180)
     p.add_argument('--fail-fast', action='store_true')
