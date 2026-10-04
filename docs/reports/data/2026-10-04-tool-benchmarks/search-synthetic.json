@@ -1,0 +1,334 @@
+{
+  "environment": {
+    "os": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.15",
+    "logical_cpus": 18,
+    "transport": "MCP Streamable HTTP, loopback",
+    "server_concurrency_limit": 32,
+    "packages": {
+      "mcp": "1.30.0",
+      "fastapi": "0.141.1",
+      "uvicorn": "0.53.0"
+    },
+    "commit": "115d1597515d19b9a9fa54b630ab8cb758424fd8"
+  },
+  "datasets": [
+    {
+      "seed_files": 32,
+      "seed_bytes_each": 8192,
+      "build_ms": 1501.518,
+      "indexed_files": 36,
+      "chunks": 228,
+      "queries": [
+        {
+          "query": "访问密钥",
+          "kind": "lexical",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 669.744,
+          "min_ms": 668.643,
+          "max_ms": 928.207
+        },
+        {
+          "query": "rollback",
+          "kind": "lexical",
+          "expected_top_file": "deployment.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 1201.173,
+          "min_ms": 1184.796,
+          "max_ms": 1287.963
+        },
+        {
+          "query": "模型配置",
+          "kind": "lexical",
+          "expected_top_file": "models.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 1196.265,
+          "min_ms": 1172.65,
+          "max_ms": 1284.405
+        },
+        {
+          "query": "如何生成访问密钥",
+          "kind": "lexical",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 1348.577,
+          "min_ms": 1343.579,
+          "max_ms": 1353.483
+        },
+        {
+          "query": "凭证",
+          "kind": "synonym",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1255.626,
+          "min_ms": 1244.92,
+          "max_ms": 1297.263
+        },
+        {
+          "query": "回退版本",
+          "kind": "cross_language",
+          "expected_top_file": "deployment.md",
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1271.727,
+          "min_ms": 1177.312,
+          "max_ms": 1316.28
+        },
+        {
+          "query": "fkbnomatch4c21a393e6",
+          "kind": "negative",
+          "expected_top_file": null,
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1244.128,
+          "min_ms": 1158.982,
+          "max_ms": 1257.342
+        }
+      ],
+      "tools": [
+        "knowledge_info",
+        "list_directory",
+        "glob",
+        "read_file",
+        "grep",
+        "search",
+        "list_libraries",
+        "write_file",
+        "file_manifest",
+        "apply_changes"
+      ]
+    },
+    {
+      "seed_files": 128,
+      "seed_bytes_each": 32768,
+      "build_ms": 15292.735,
+      "indexed_files": 132,
+      "chunks": 3588,
+      "queries": [
+        {
+          "query": "访问密钥",
+          "kind": "lexical",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 3730.021,
+          "min_ms": 3707.609,
+          "max_ms": 3844.95
+        },
+        {
+          "query": "rollback",
+          "kind": "lexical",
+          "expected_top_file": "deployment.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 3787.896,
+          "min_ms": 3594.412,
+          "max_ms": 3960.908
+        },
+        {
+          "query": "模型配置",
+          "kind": "lexical",
+          "expected_top_file": "models.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 3895.336,
+          "min_ms": 3842.056,
+          "max_ms": 4024.362
+        },
+        {
+          "query": "如何生成访问密钥",
+          "kind": "lexical",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            true,
+            true,
+            true
+          ],
+          "result_counts": [
+            1,
+            1,
+            1
+          ],
+          "samples": 3,
+          "median_ms": 3000.737,
+          "min_ms": 1687.552,
+          "max_ms": 3682.568
+        },
+        {
+          "query": "凭证",
+          "kind": "synonym",
+          "expected_top_file": "security.md",
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1735.537,
+          "min_ms": 1698.783,
+          "max_ms": 1749.321
+        },
+        {
+          "query": "回退版本",
+          "kind": "cross_language",
+          "expected_top_file": "deployment.md",
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1675.976,
+          "min_ms": 1627.026,
+          "max_ms": 1686.667
+        },
+        {
+          "query": "fkbnomatch4c21a393e6",
+          "kind": "negative",
+          "expected_top_file": null,
+          "top1_hits": [
+            false,
+            false,
+            false
+          ],
+          "result_counts": [
+            0,
+            0,
+            0
+          ],
+          "samples": 3,
+          "median_ms": 1710.984,
+          "min_ms": 1687.165,
+          "max_ms": 1724.13
+        }
+      ],
+      "tools": [
+        "knowledge_info",
+        "list_directory",
+        "glob",
+        "read_file",
+        "grep",
+        "search",
+        "list_libraries",
+        "write_file",
+        "file_manifest",
+        "apply_changes"
+      ]
+    }
+  ],
+  "lifecycle": {
+    "before_build": {
+      "http_status": 409,
+      "error": "index_missing"
+    },
+    "invalid_query_rejected": true,
+    "after_write_stale": true,
+    "after_rebuild_works": true
+  }
+}

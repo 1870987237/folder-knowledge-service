@@ -1,0 +1,1990 @@
+{
+  "timestamp": "2026-10-04T08:50:39.980467+00:00",
+  "environment": {
+    "os": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.15",
+    "logical_cpus": 18,
+    "transport": "MCP Streamable HTTP, loopback",
+    "server_concurrency_limit": 32,
+    "packages": {
+      "mcp": "1.30.0",
+      "fastapi": "0.141.1",
+      "uvicorn": "0.53.0"
+    },
+    "commit": "115d1597515d19b9a9fa54b630ab8cb758424fd8",
+    "cpu": "Intel Core Ultra 5 135H",
+    "physical_memory_bytes": 16017846272
+  },
+  "performance": [
+    {
+      "scenario": "import-28",
+      "strategy": "single",
+      "repeat": 1,
+      "initial_files": 1,
+      "initial_bytes": 16,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 33103.503,
+      "calls": 28,
+      "request_bytes": 256386,
+      "response_bytes": 36128,
+      "snapshot_copies": 28,
+      "bytes_copied": 3097024,
+      "storage_growth_bytes": 3326400,
+      "new_snapshots": 28,
+      "new_receipts": 28,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "write_file",
+          "ms": 183.959,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 265.733,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 341.278,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 418.625,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 513.25,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 591.268,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 615.262,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 692.317,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 767.423,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 836.051,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 886.262,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 993.793,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1096.065,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1173.937,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1223.825,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1279.72,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1416.072,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1489.274,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1549.525,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1632.839,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1667.101,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1762.967,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1781.471,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1839.282,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1983.421,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1930.945,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2001.623,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2163.345,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "import-28",
+      "strategy": "batch",
+      "repeat": 1,
+      "initial_files": 1,
+      "initial_bytes": 16,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 1080.328,
+      "calls": 1,
+      "request_bytes": 254843,
+      "response_bytes": 9865,
+      "snapshot_copies": 1,
+      "bytes_copied": 16,
+      "storage_growth_bytes": 229392,
+      "new_snapshots": 1,
+      "new_receipts": 1,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "apply_changes",
+          "ms": 1076.878,
+          "error": false,
+          "request_bytes": 254843,
+          "response_bytes": 9865,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "replace-small",
+      "strategy": "single",
+      "repeat": 1,
+      "initial_files": 33,
+      "initial_bytes": 262160,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 70566.199,
+      "calls": 56,
+      "request_bytes": 260250,
+      "response_bytes": 1117944,
+      "snapshot_copies": 28,
+      "bytes_copied": 7340480,
+      "storage_growth_bytes": 7340480,
+      "new_snapshots": 28,
+      "new_receipts": 28,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "read_file",
+          "ms": 108.64,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2595.409,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 102.62,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2457.71,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 98.721,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2444.338,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 106.706,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2406.976,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 111.549,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2343.297,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 110.111,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2295.536,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 101.144,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2394.166,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 102.261,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2456.002,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 107.306,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2366.092,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 101.775,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38631,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2442.432,
+          "error": false,
+          "request_bytes": 9229,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 113.438,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2495.941,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 115.262,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2427.542,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 115.365,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2444.073,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 104.336,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2424.268,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 112.352,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2276.065,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 108.291,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2265.261,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 119.432,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2391.247,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 107.662,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2482.044,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 131.285,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2360.646,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 108.213,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2608.34,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 105.518,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2365.339,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 99.989,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2385.701,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 115.286,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2269.79,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 100.051,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2433.656,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 108.756,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2385.317,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 108.73,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2462.742,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 106.797,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2411.673,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 106.362,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38633,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 2402.751,
+          "error": false,
+          "request_bytes": 9230,
+          "response_bytes": 1295,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "replace-small",
+      "strategy": "batch",
+      "repeat": 1,
+      "initial_files": 33,
+      "initial_bytes": 262160,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 5699.041,
+      "calls": 2,
+      "request_bytes": 254399,
+      "response_bytes": 28022,
+      "snapshot_copies": 1,
+      "bytes_copied": 262160,
+      "storage_growth_bytes": 262160,
+      "new_snapshots": 1,
+      "new_receipts": 1,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "file_manifest",
+          "ms": 2035.284,
+          "error": false,
+          "request_bytes": 50,
+          "response_bytes": 18101,
+          "error_message": null
+        },
+        {
+          "tool": "apply_changes",
+          "ms": 3660.445,
+          "error": false,
+          "request_bytes": 254349,
+          "response_bytes": 9921,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "replace-medium",
+      "strategy": "single",
+      "repeat": 1,
+      "initial_files": 129,
+      "initial_bytes": 4194320,
+      "changed_files": 28,
+      "content_bytes_each": 32768,
+      "elapsed_ms": 436522.603,
+      "calls": 56,
+      "request_bytes": 1017202,
+      "response_bytes": 1118056,
+      "snapshot_copies": 28,
+      "bytes_copied": 117440960,
+      "storage_growth_bytes": 117440960,
+      "new_snapshots": 28,
+      "new_receipts": 28,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "read_file",
+          "ms": 175.265,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 17983.874,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 101.844,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13011.016,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 101.276,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12676.152,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 102.027,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13596.318,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 162.067,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13401.271,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 199.415,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 19019.38,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 229.445,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 16613.776,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 134.712,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13489.356,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 98.367,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13086.595,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 110.549,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38635,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13264.804,
+          "error": false,
+          "request_bytes": 36263,
+          "response_bytes": 1293,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 103.692,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13597.703,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 118.452,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 18202.544,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 127.356,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 14887.699,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 135.337,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 14400.082,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 154.311,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 14757.514,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 102.57,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 19954.194,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 259.904,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 22068.819,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 295.713,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 21994.414,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 240.098,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 16085.993,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 121.346,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12106.003,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 110.177,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13968.339,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 224.968,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 21234.987,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 236.005,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 19290.105,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 230.666,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 13863.008,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 145.784,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12521.094,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 97.881,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12527.073,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 149.134,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12315.794,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        },
+        {
+          "tool": "read_file",
+          "ms": 126.523,
+          "error": false,
+          "request_bytes": 65,
+          "response_bytes": 38637,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 12153.474,
+          "error": false,
+          "request_bytes": 36264,
+          "response_bytes": 1295,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "replace-medium",
+      "strategy": "batch",
+      "repeat": 1,
+      "initial_files": 129,
+      "initial_bytes": 4194320,
+      "changed_files": 28,
+      "content_bytes_each": 32768,
+      "elapsed_ms": 23128.809,
+      "calls": 2,
+      "request_bytes": 1011351,
+      "response_bytes": 77910,
+      "snapshot_copies": 1,
+      "bytes_copied": 4194320,
+      "storage_growth_bytes": 4194320,
+      "new_snapshots": 1,
+      "new_receipts": 1,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "file_manifest",
+          "ms": 10518.689,
+          "error": false,
+          "request_bytes": 50,
+          "response_bytes": 67989,
+          "error_message": null
+        },
+        {
+          "tool": "apply_changes",
+          "ms": 12598.125,
+          "error": false,
+          "request_bytes": 1011301,
+          "response_bytes": 9921,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "import-28",
+      "strategy": "batch",
+      "repeat": 2,
+      "initial_files": 1,
+      "initial_bytes": 16,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 1108.323,
+      "calls": 1,
+      "request_bytes": 254843,
+      "response_bytes": 9865,
+      "snapshot_copies": 1,
+      "bytes_copied": 16,
+      "storage_growth_bytes": 229392,
+      "new_snapshots": 1,
+      "new_receipts": 1,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "apply_changes",
+          "ms": 1105.324,
+          "error": false,
+          "request_bytes": 254843,
+          "response_bytes": 9865,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "import-28",
+      "strategy": "single",
+      "repeat": 2,
+      "initial_files": 1,
+      "initial_bytes": 16,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 32264.222,
+      "calls": 28,
+      "request_bytes": 256386,
+      "response_bytes": 36128,
+      "snapshot_copies": 28,
+      "bytes_copied": 3097024,
+      "storage_growth_bytes": 3326400,
+      "new_snapshots": 28,
+      "new_receipts": 28,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "write_file",
+          "ms": 199.466,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 294.136,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 328.858,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 378.136,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 474.732,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 609.605,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 709.671,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 780.59,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 782.357,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 849.951,
+          "error": false,
+          "request_bytes": 9156,
+          "response_bytes": 1289,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 919.651,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 950.835,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1033.442,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1131.696,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1134.656,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1309.902,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1418.458,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1245.79,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1475.159,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1482.726,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1632.141,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1700.257,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1752.059,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1886.602,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1910.683,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1971.539,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1926.746,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        },
+        {
+          "tool": "write_file",
+          "ms": 1966.733,
+          "error": false,
+          "request_bytes": 9157,
+          "response_bytes": 1291,
+          "error_message": null
+        }
+      ]
+    },
+    {
+      "scenario": "replace-small",
+      "strategy": "batch",
+      "repeat": 2,
+      "initial_files": 33,
+      "initial_bytes": 262160,
+      "changed_files": 28,
+      "content_bytes_each": 8192,
+      "elapsed_ms": 4423.124,
+      "calls": 2,
+      "request_bytes": 254399,
+      "response_bytes": 28022,
+      "snapshot_copies": 1,
+      "bytes_copied": 262160,
+      "storage_growth_bytes": 262160,
+      "new_snapshots": 1,
+      "new_receipts": 1,
+      "verified": true,
+      "call_log": [
+        {
+          "tool": "file_manifest",
+          "ms": 1864.436,
+          "error": false,
+          "request_bytes": 50,
+          "response_bytes": 18101,
+          "error_message": null
+        },
+        {
+          "tool": "apply_changes",
+          "ms": 2555.593,
+          "error": false,
+          "request_bytes": 254349,
+          "response_bytes": 9921,
+          "error_message": null
+        }
+      ]
+    }
+  ],
+  "functional": [
+    {
+      "name": "nested create with parents",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "write_file",
+      "ms": 211.641,
+      "error": false,
+      "request_bytes": 146,
+      "response_bytes": 1273,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "missing parent is explicit",
+      "passed": true,
+      "expected_error": "parent_not_found",
+      "actual_error": "Error executing tool write_file: parent_not_found: Parent directory does not exist: none",
+      "tool": "write_file",
+      "ms": 125.052,
+      "error": true,
+      "request_bytes": 112,
+      "response_bytes": 142,
+      "error_message": "Error executing tool write_file: parent_not_found: Parent directory does not exist: none",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "parent is file",
+      "passed": true,
+      "expected_error": "parent_not_directory",
+      "actual_error": "Error executing tool write_file: parent_not_directory: Parent path is not a directory: README.md/a.md",
+      "tool": "write_file",
+      "ms": 123.891,
+      "error": true,
+      "request_bytes": 121,
+      "response_bytes": 155,
+      "error_message": "Error executing tool write_file: parent_not_directory: Parent path is not a directory: README.md/a.md",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "standalone mkdir",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 225.494,
+      "error": false,
+      "request_bytes": 112,
+      "response_bytes": 773,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "late error rolls back all",
+      "passed": true,
+      "expected_error": "file_exists",
+      "actual_error": "Error executing tool apply_changes: file_exists: Path already exists: README.md",
+      "tool": "apply_changes",
+      "ms": 128.571,
+      "error": true,
+      "request_bytes": 202,
+      "response_bytes": 133,
+      "error_message": "Error executing tool apply_changes: file_exists: Path already exists: README.md",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "Chinese request id rejected",
+      "passed": true,
+      "expected_error": "pattern",
+      "actual_error": "Error executing tool write_file: 1 validation error for write_fileArguments\nrequest_id\n  String should match pattern '^[A-Za-z0-9][A-Za-z0-9._:-]*$' [type=string_pattern_mismatch, input_value='中文文件名', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_pattern_mismatch",
+      "tool": "write_file",
+      "ms": 47.82,
+      "error": true,
+      "request_bytes": 120,
+      "response_bytes": 376,
+      "error_message": "Error executing tool write_file: 1 validation error for write_fileArguments\nrequest_id\n  String should match pattern '^[A-Za-z0-9][A-Za-z0-9._:-]*$' [type=string_pattern_mismatch, input_value='中文文件名', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_pattern_mismatch",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "batch over 100 rejected",
+      "passed": true,
+      "expected_error": "100",
+      "actual_error": "Error executing tool apply_changes: 1 validation error for FileChanges\nchanges\n  List should have at most 100 items after validation, not 101 [type=too_long, input_value=[Change(operation='mkdir'...False, recursive=False)], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long",
+      "tool": "apply_changes",
+      "ms": 47.144,
+      "error": true,
+      "request_bytes": 3600,
+      "response_bytes": 375,
+      "error_message": "Error executing tool apply_changes: 1 validation error for FileChanges\nchanges\n  List should have at most 100 items after validation, not 101 [type=too_long, input_value=[Change(operation='mkdir'...False, recursive=False)], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/too_long",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "path escape rejected",
+      "passed": true,
+      "expected_error": "invalid_path",
+      "actual_error": "Error executing tool write_file: invalid_path: Use a canonical relative path with /; no hidden, parent, reserved or absolute paths",
+      "tool": "write_file",
+      "ms": 108.066,
+      "error": true,
+      "request_bytes": 111,
+      "response_bytes": 184,
+      "error_message": "Error executing tool write_file: invalid_path: Use a canonical relative path with /; no hidden, parent, reserved or absolute paths",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "binary extension rejected",
+      "passed": true,
+      "expected_error": "unsupported_document",
+      "actual_error": "Error executing tool write_file: unsupported_document: Only UTF-8 Markdown / txt files can be written",
+      "tool": "write_file",
+      "ms": 103.069,
+      "error": true,
+      "request_bytes": 119,
+      "response_bytes": 155,
+      "error_message": "Error executing tool write_file: unsupported_document: Only UTF-8 Markdown / txt files can be written",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "initial idempotent write",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 273.014,
+      "error": false,
+      "request_bytes": 135,
+      "response_bytes": 966,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "identical retry adds no snapshot",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 57.872,
+      "error": false,
+      "request_bytes": 135,
+      "response_bytes": 964,
+      "error_message": null,
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "changed retry rejected",
+      "passed": true,
+      "expected_error": "request_conflict",
+      "actual_error": "Error executing tool apply_changes: request_conflict: request_id was used for a different mutation",
+      "tool": "apply_changes",
+      "ms": 59.075,
+      "error": true,
+      "request_bytes": 113,
+      "response_bytes": 152,
+      "error_message": "Error executing tool apply_changes: request_conflict: request_id was used for a different mutation",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "nonempty deletion requires recursive",
+      "passed": true,
+      "expected_error": "directory_not_empty",
+      "actual_error": "Error executing tool apply_changes: directory_not_empty: Directory is not empty; recursive=true requires a library version",
+      "tool": "apply_changes",
+      "ms": 179.848,
+      "error": true,
+      "request_bytes": 207,
+      "response_bytes": 176,
+      "error_message": "Error executing tool apply_changes: directory_not_empty: Directory is not empty; recursive=true requires a library version",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "delete empty directory",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 298.216,
+      "error": false,
+      "request_bytes": 214,
+      "response_bytes": 789,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "stale library version rejected",
+      "passed": true,
+      "expected_error": "version_changed",
+      "actual_error": "Error executing tool apply_changes: version_changed: Library changed; fetch a new manifest before retrying",
+      "tool": "apply_changes",
+      "ms": 130.539,
+      "error": true,
+      "request_bytes": 206,
+      "response_bytes": 160,
+      "error_message": "Error executing tool apply_changes: version_changed: Library changed; fetch a new manifest before retrying",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "recursive deletion",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 259.806,
+      "error": false,
+      "request_bytes": 225,
+      "response_bytes": 777,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "delete file with CAS",
+      "passed": true,
+      "expected_error": null,
+      "actual_error": "",
+      "tool": "apply_changes",
+      "ms": 194.631,
+      "error": false,
+      "request_bytes": 212,
+      "response_bytes": 785,
+      "error_message": null,
+      "publication_unchanged_checked": false
+    },
+    {
+      "name": "unchanged file old version rejected",
+      "passed": true,
+      "expected_error": "version_changed",
+      "actual_error": "Error executing tool write_file: version_changed: File changed: README.md",
+      "tool": "write_file",
+      "ms": 101.473,
+      "error": true,
+      "request_bytes": 218,
+      "response_bytes": 127,
+      "error_message": "Error executing tool write_file: version_changed: File changed: README.md",
+      "publication_unchanged_checked": true
+    },
+    {
+      "name": "revoked direct permission blocks retry",
+      "passed": true,
+      "expected_error": "capability_forbidden",
+      "actual_error": "Error executing tool apply_changes: capability_forbidden: This tool is not granted for this library",
+      "tool": "apply_changes",
+      "ms": 70.663,
+      "error": true,
+      "request_bytes": 135,
+      "response_bytes": 153,
+      "error_message": "Error executing tool apply_changes: capability_forbidden: This tool is not granted for this library",
+      "publication_unchanged_checked": true
+    }
+  ],
+  "observations": {
+    "unchanged_file_version_changed": true,
+    "concurrent_same_version": {
+      "requests": 5,
+      "successes": 1,
+      "conflicts": 4,
+      "elapsed_ms": 744.982,
+      "new_snapshots": 1
+    },
+    "default_manifest_pagination": {
+      "calls": 2,
+      "first_page": 100,
+      "second_page": 34,
+      "next_offset": null
+    }
+  },
+  "tool_catalog": {
+    "direct": {
+      "names": [
+        "knowledge_info",
+        "list_directory",
+        "glob",
+        "read_file",
+        "list_libraries",
+        "write_file",
+        "file_manifest",
+        "apply_changes"
+      ],
+      "tools": [
+        {
+          "name": "knowledge_info",
+          "schema_and_description_bytes": 496
+        },
+        {
+          "name": "list_directory",
+          "schema_and_description_bytes": 676
+        },
+        {
+          "name": "glob",
+          "schema_and_description_bytes": 723
+        },
+        {
+          "name": "read_file",
+          "schema_and_description_bytes": 1143
+        },
+        {
+          "name": "list_libraries",
+          "schema_and_description_bytes": 446
+        },
+        {
+          "name": "write_file",
+          "schema_and_description_bytes": 1581
+        },
+        {
+          "name": "file_manifest",
+          "schema_and_description_bytes": 993
+        },
+        {
+          "name": "apply_changes",
+          "schema_and_description_bytes": 2377
+        }
+      ]
+    },
+    "readonly_names": [
+      "knowledge_info",
+      "list_directory",
+      "glob",
+      "read_file",
+      "list_libraries"
+    ]
+  },
+  "execution_note": "Stopped further repetitions after the 4 MiB single-write case took 436.5 seconds; only fully completed cases are retained. In-flight partial work is not included.",
+  "requested_repeats": 3,
+  "completed_cases": 9,
+  "summary": [
+    {
+      "scenario": "import-28",
+      "strategy": "single",
+      "samples": 2,
+      "median_ms": 32683.8625,
+      "min_ms": 32264.222,
+      "max_ms": 33103.503
+    },
+    {
+      "scenario": "import-28",
+      "strategy": "batch",
+      "samples": 2,
+      "median_ms": 1094.3255,
+      "min_ms": 1080.328,
+      "max_ms": 1108.323
+    },
+    {
+      "scenario": "replace-small",
+      "strategy": "single",
+      "samples": 1,
+      "median_ms": 70566.199,
+      "min_ms": 70566.199,
+      "max_ms": 70566.199
+    },
+    {
+      "scenario": "replace-small",
+      "strategy": "batch",
+      "samples": 2,
+      "median_ms": 5061.0825,
+      "min_ms": 4423.124,
+      "max_ms": 5699.041
+    },
+    {
+      "scenario": "replace-medium",
+      "strategy": "single",
+      "samples": 1,
+      "median_ms": 436522.603,
+      "min_ms": 436522.603,
+      "max_ms": 436522.603
+    },
+    {
+      "scenario": "replace-medium",
+      "strategy": "batch",
+      "samples": 1,
+      "median_ms": 23128.809,
+      "min_ms": 23128.809,
+      "max_ms": 23128.809
+    }
+  ]
+}
