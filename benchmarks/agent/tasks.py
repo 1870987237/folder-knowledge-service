@@ -24,6 +24,7 @@ class Task:
     refuse: bool = False
     readonly: bool = False
     answer_fields: dict = field(default_factory=dict)
+    reference: dict | None = None
 
 
 def fingerprint(value):
@@ -58,10 +59,20 @@ def corpus(dataset=DEFAULT_DATASET):
 
 
 def _oracle(identifier, value):
-    allowed = {'facts', 'source', 'expected_files', 'contains', 'absent', 'refuse', 'answer_fields'}
+    allowed = {'facts', 'source', 'expected_files', 'contains', 'absent', 'refuse', 'answer_fields', 'reference'}
     if not isinstance(value, dict) or not value or value.keys() - allowed:
         raise ValueError(f'{identifier}: invalid or empty expectations')
     result = dict(value)
+    if 'reference' in result:
+        ref = result['reference']
+        if (not isinstance(ref, dict) or set(ref) != {'benchmark', 'query_id', 'answer', 'evidence_docids', 'gold_docids'}
+                or ref.get('benchmark') != 'browsecomp-plus'
+                or not isinstance(ref.get('query_id'), str) or not re.fullmatch(r'[0-9]+', ref['query_id'])
+                or not isinstance(ref.get('answer'), str) or not ref['answer'].strip()):
+            raise ValueError(f'{identifier}: invalid external benchmark reference')
+        for key in ('evidence_docids', 'gold_docids'):
+            if not isinstance(ref[key], list) or not ref[key] or not all(isinstance(v, str) and re.fullmatch(r'[0-9]+', v) for v in ref[key]):
+                raise ValueError(f'{identifier}: invalid {key}')
     if 'facts' in result:
         if not isinstance(result['facts'], list) or not all(isinstance(x, str) for x in result['facts']):
             raise ValueError(f'{identifier}: facts must be a list of strings')
@@ -131,9 +142,21 @@ def load_dataset(dataset=DEFAULT_DATASET):
     for task in definitions:
         if task.source and task.source not in documents:
             raise ValueError(f'{task.id}: citation source is missing from knowledge/: {task.source}')
+        if task.reference:
+            if not task.readonly:
+                raise ValueError('BrowseComp-Plus tasks must be read-only')
+            for did in set(task.reference['evidence_docids'] + task.reference['gold_docids']):
+                if f'documents/{did}.md' not in documents:
+                    raise ValueError(f'{task.id}: required evidence/gold document {did} is missing')
     public = [{k: v for k, v in asdict(t).items() if k in ('id', 'kind', 'prompt', 'readonly')} for t in definitions]
     hidden = [{k: v for k, v in asdict(t).items() if k not in ('kind', 'prompt', 'readonly')} for t in definitions]
     metadata = {'name': Path(dataset).resolve().name, 'corpus_files': len(documents), 'task_count': len(definitions),
                 'corpus_sha256': fingerprint(documents), 'tasks_sha256': fingerprint(public),
                 'expectations_sha256': fingerprint(hidden)}
+    manifest = Path(dataset) / 'manifest.json'
+    if manifest.is_file():
+        value = json.loads(manifest.read_text(encoding='utf-8'))
+        if value.get('corpus_sha256') != metadata['corpus_sha256']:
+            raise ValueError('Dataset differs from its import manifest')
+        metadata['provenance'] = value
     return documents, definitions, metadata

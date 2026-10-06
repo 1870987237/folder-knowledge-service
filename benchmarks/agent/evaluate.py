@@ -40,6 +40,9 @@ def canonical(text):
 
 
 def grade(task, before, after, final, tool_calls):
+    if task.reference:
+        from benchmarks.browsecomp.evaluate import grade as grade_browsecomp
+        return grade_browsecomp(task, before, after, final, tool_calls)
     payload = final_payload(final)
     answer = str(payload.get('answer', '')) if payload else final
     claimed = payload.get('completed') if payload else None

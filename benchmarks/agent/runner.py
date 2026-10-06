@@ -27,6 +27,8 @@ SYSTEM = '''你是通用工作助手。请通过已连接的知识平台完成�
 用户要求的结构化事实放入 facts。无法获得所需事实或无法完成所要求的修改时，completed 为 false。
 不要询问用户补充信息；在现有授权和资料范围内尽力完成。'''
 
+BCP_SYSTEM = SYSTEM + '\n在 facts.final_answer 中只填写简短的最终答案，保留题目所用语言；answer 中可以解释依据。sources 使用知识库相对文件路径。'
+
 
 class Recorder:
     """Observe actual MCP requests/results without prescribing calls to the solver."""
@@ -121,6 +123,7 @@ def parse_events(stdout):
         except ValueError:
             pass
     messages = [e['message'] for e in events if e.get('type') == 'message_end' and e.get('message', {}).get('role') == 'assistant']
+    responses = [m for m in messages if m.get('stopReason') not in ('error', 'aborted') and m.get('content')]
     final = '\n'.join(v.get('text', '') for v in messages[-1].get('content', []) if v.get('type') == 'text') if messages else ''
     counts = Counter()
     llm_ms = 0
@@ -135,6 +138,7 @@ def parse_events(stdout):
               if e.get('isError') or e.get('result', {}).get('isError')]
     return {'final': final, 'usage': dict(counts), 'model_duration_ms': llm_ms,
             'assistant_messages': len(messages), 'agent_tool_names': tool_starts,
+            'model_response_messages': len(responses),
             'agent_tool_attempts': len(tool_starts), 'agent_tool_results': len(executions),
             'agent_tool_errors': errors,
             'event_types': sorted({e.get('type', '') for e in events})}
@@ -205,7 +209,7 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
     command = [args.omp, '--cwd', str(work), '-e', str(Path('benchmarks/agent/omp-policy.ts').resolve()),
                '--auto-approve', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp',
                '--no-title', '--no-session', '--model', args.model, '--thinking', 'off', '--mode', 'json',
-               '--max-time', str(args.timeout), '--system-prompt', SYSTEM, '-p', task.prompt]
+               '--max-time', str(args.timeout), '--system-prompt', getattr(args, 'system_prompt', SYSTEM), '-p', task.prompt]
     index = len(recorder.calls)
     catalog_index = len(recorder.catalogs)
     started = time.perf_counter()
@@ -253,7 +257,7 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
     policy = [json.loads(line) for line in (directory / 'policy.jsonl').read_text(encoding='utf-8').splitlines()] if (directory / 'policy.jsonl').exists() else []
     exposed = [e['names'] for e in policy if e['type'] == 'provider_tools']
     result['provider_tool_sets'] = exposed
-    result['valid_run'] = bool(exposed) and all(set(n) == set(result['enabled_agent_tools']) for n in exposed) and analysis['assistant_messages'] > 0
+    result['valid_run'] = bool(exposed) and all(set(n) == set(result['enabled_agent_tools']) for n in exposed) and analysis['model_response_messages'] > 0
     result['adapter_handshake'] = len(recorder.instructions) > 0
     if not result['valid_run'] or timed_out or process.returncode != 0:
         result['evaluation']['success'] = False
@@ -277,11 +281,17 @@ async def run(args):
     if unknown:
         raise ValueError('Unknown task IDs in selected dataset: ' + ', '.join(sorted(unknown)))
     selected = [t for t in definitions if not args.tasks or t.id in args.tasks]
+    external = [t for t in selected if t.reference]
+    if external and len(external) != len(selected):
+        raise ValueError('Run external benchmark and basic regression tasks separately')
+    args.system_prompt = BCP_SYSTEM if external else SYSTEM
     recorder = Recorder()
     suite = Suite(args.output, app_wrapper=recorder.wrap)
     results = []
     admin = None
     source_files = [Path('benchmarks/agent') / name for name in ('runner.py', 'tasks.py', 'evaluate.py', 'omp-policy.ts')]
+    if external:
+        source_files.append(Path('benchmarks/browsecomp/evaluate.py'))
     source_hash = hashlib.sha256(b''.join(p.read_bytes() for p in source_files)).hexdigest()
     try:
         admin = install_index_plugin(suite, args)
@@ -296,7 +306,8 @@ async def run(args):
                     (suite.output / 'results.json').write_text(json.dumps({'environment': suite.result['environment'],
                         'benchmark_version': '1.0', 'grader_version': GRADER_VERSION, 'started_at': suite.result['timestamp'],
                         'agent_adapter': 'OMP explicit extension; unchanged MCP schemas; JSON Streamable HTTP',
-                        'plugin': suite.result['plugin'], 'system_prompt': SYSTEM,
+                        'plugin': suite.result['plugin'], 'system_prompt': args.system_prompt,
+                        'evaluation_mode': 'browsecomp-exact-match-proxy' if external else 'deterministic-outcome',
                         'source_sha256': source_hash, 'dataset': dataset_metadata,
                         'model': args.model, 'omp_version': subprocess.check_output([args.omp, '--version'], text=True).strip(),
                         'episodes': results}, ensure_ascii=False, indent=2), encoding='utf-8')

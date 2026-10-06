@@ -10,6 +10,18 @@ def task(identifier):
     return next(t for t in tasks() if t.id == identifier)
 
 
+def test_provider_errors_are_not_model_responses():
+    error = {'type': 'message_end', 'message': {'role': 'assistant', 'stopReason': 'error',
+             'content': [], 'errorMessage': 'socket closed'}}
+    parsed = parse_events(json.dumps(error))
+    assert parsed['assistant_messages'] == 1
+    assert parsed['model_response_messages'] == 0
+    response = {'type': 'message_end', 'message': {'role': 'assistant', 'stopReason': 'stop',
+                'content': [{'type': 'text', 'text': 'answer'}]}}
+    parsed = parse_events(json.dumps(error) + '\n' + json.dumps(response))
+    assert parsed['model_response_messages'] == 1
+
+
 def final(completed=True, **kwargs):
     return json.dumps({'answer': '已完成', 'sources': [], 'completed': completed, **kwargs}, ensure_ascii=False)
 

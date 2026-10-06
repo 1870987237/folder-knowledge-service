@@ -48,6 +48,8 @@ OMP 从已有 `~/.omp/agent/models.yml` 复制模型配置到临时运行配置�
 
 已完成的首轮结果见[精简报告](../../docs/reports/2026-10-04-agent-task-benchmark.md)。
 
+公开基准接入见 [BrowseComp-Plus](../browsecomp/README.md)：支持官方数据下载、独立知识文件夹与任务 CSV、三种 MCP 配置对比、证据召回、离线语义判分和官方 run 格式导出。当前为缩小语料的内部适配版，与此处的合成读写回归分开统计。
+
 `--fail-fast` 只在无模型响应/无 MCP 目录的接入异常时中止，普通任务失败仍继续。
 每次任务预算默认 180 秒，可通过 `--timeout` 调整；超时会被计为任务失败。
 进程外另设 20 秒收尾上限，防止 OMP 卡住。

@@ -27,6 +27,9 @@ def outcome(row):
 
 
 def render(data, traces):
+    if data.get('evaluation_mode') == 'browsecomp-exact-match-proxy':
+        from benchmarks.browsecomp.evaluate import report
+        return report(data)
     rows = data['episodes']
     valid = [r for r in rows if r['valid_run']]
     lines = ['# 通用 Agent 任务评测', '',
