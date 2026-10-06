@@ -36,7 +36,7 @@ export interface TemplateDefinition {
   protocol_version: string; capabilities: string[]; required_secrets: string[];
   config_schema: Record<string, unknown>; runtime: Record<string, unknown>; plugin?: PluginFeatures | null;
 }
-export interface Template { definition: TemplateDefinition; status: string; package_sha256?: string; libraries?: { id: string; name: string }[]; legacy_template?: boolean }
+export interface Template { definition: TemplateDefinition; status: string; package_sha256?: string; capabilities?: Record<string, { integration: string }>; libraries?: { id: string; name: string }[]; legacy_template?: boolean }
 export interface Workspace {
   type: 'local' | 'git'; root_path?: string; repository_id?: string;
   workspace_subpath?: string; knowledge_subpath: string; exclude_paths: string[];

@@ -114,6 +114,20 @@ def test_chunk_citations_and_long_lines():
     assert parts[-1][0:2] == (3,4)
 
 
+def test_legacy_directory_filter_and_truncation(env, tmp_path):
+    app, c, _, settings = env
+    service = setup(app, c, settings, tmp_path)
+    root = Path(settings.root) / 'alpha'
+    (root / 'docs').mkdir()
+    for n in range(3):
+        (root / f'docs/{n}.md').write_text('rollback example', encoding='utf-8')
+    service.build('alpha')
+    result = service.search('alpha', 'rollback', limit=1, path='docs')
+    assert result['scope']['path'] == 'docs' and result['has_more']
+    assert all(hit['path'].startswith('docs/') for hit in result['results'])
+    assert service.search('alpha', 'rollback')['scope']['path'] == '.'
+
+
 def test_failed_install_and_missing_directory(env, tmp_path, monkeypatch):
     app, c, key, settings = env
     service = setup(app, c, settings, tmp_path)
@@ -130,9 +144,14 @@ def test_failed_install_and_missing_directory(env, tmp_path, monkeypatch):
     assert result.json()['error'] == 'library_unavailable'
 
 
-def test_real_mcp_search(env, tmp_path):
+@pytest.mark.parametrize('backend', ['legacy', 'program'])
+def test_real_mcp_search(env, tmp_path, monkeypatch, backend):
     app, c, key, settings = env
-    setup(app, c, settings, tmp_path).build('alpha')
+    if backend == 'program':
+        from tests.test_search_plugin import install_program
+        install_program(env, tmp_path, monkeypatch).build('alpha')
+    else:
+        setup(app, c, settings, tmp_path).build('alpha')
     sock = socket.socket(); sock.bind(('127.0.0.1',0)); port = sock.getsockname()[1]
     # The fixture only trusts testserver; explicitly permit our isolated loopback server.
     from dataclasses import replace
@@ -150,9 +169,11 @@ def test_real_mcp_search(env, tmp_path):
                         await session.initialize()
                         tools = await session.list_tools()
                         assert {'search','grep','read_file'} <= {t.name for t in tools.tools}
-                        result = await session.call_tool('search', {'library_id':'alpha','query':'访问密钥'})
+                        assert 'path' in next(t for t in tools.tools if t.name == 'search').inputSchema['properties']
+                        result = await session.call_tool('search', {'library_id':'alpha','query':'Apple' if backend == 'program' else '访问密钥',
+                                                                  'path': 'docs' if backend == 'program' else '.'})
                         assert not result.isError
-                        assert result.structuredContent['results'][0]['path'] == 'guide.md'
+                        assert result.structuredContent['results'][0]['path'] == ('docs/a.md' if backend == 'program' else 'guide.md')
                         denied = await session.call_tool('search', {'library_id':'beta','query':'密钥'})
                         assert denied.isError
         asyncio.run(check())

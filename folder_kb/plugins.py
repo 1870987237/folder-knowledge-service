@@ -1,7 +1,7 @@
 """Plugin-facing API over the existing immutable package catalog.
 
-Installation and binding never execute code. Fulltext indexing has a built-in
-consumer; semantic/custom indexing and instructions remain declarations.
+Installation and binding never execute code. Protocol 1.0 search packages own
+their build/query programs; old declarative fulltext packages remain compatible.
 """
 import anyio
 from fastapi import Query, Request

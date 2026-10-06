@@ -25,7 +25,7 @@ flowchart LR
 
 本版采用词汇检索，不需要 embedding 服务、向量数据库或大模型密钥；同义词、跨语言和隐含语义召回能力有限。没有 reranker 或平台内问答接口，回答由外部 Agent 生成；检索无命中不等于知识必然不存在。
 
-`metadata_fields` 暂不自动抽取业务字段；返回上述固定来源字段。语义/混合模式、自定义索引程序仍只保留声明，不能误报为已可检索。
+本文描述旧 `simple-rag/1.0.0` 的兼容全文后端，不是平台强制的检索方式。新的独立程序示例位于 `examples/plugins/simple-rag-python`，见 [Search 插件协议](search-plugin-protocol.md)。`metadata_fields` 暂不自动抽取业务字段。
 
 ## 安装与管理台
 
@@ -50,7 +50,7 @@ python -m folder_kb.plugin_package \
 | 管理员 | `POST /admin/api/libraries/{id}/index/build` | 构建或重建索引 |
 | 管理员 | `GET /admin/api/libraries/{id}/search?query=…&limit=5` | 检索测试 |
 | Agent Key | `GET /api/v1/search?library_id=…&query=…&limit=5` | 按现有知识库授权检索 |
-| MCP | `search(library_id, query, limit=5)` | 同一检索能力和权限检查 |
+| MCP | `search(library_id, query, limit=5, path=".")` | 同一检索能力和权限检查 |
 
 结果示例：
 
@@ -76,6 +76,4 @@ python -m folder_kb.plugin_package \
 
 ## 与多知识库设计的衔接
 
-已支持同一 Key 在现有授权范围内按 `library_id` 分别调用 search，索引互相隔离。目前还沿用统一读取授权，**尚未实现按 Key、按知识库单独开关 grep/search、动态筛选 tools/list 或组装 instructions**。这些作为下一阶段实现；此版本不会因插件的 instructions 自动改变 Agent 的系统指令。
-
-后续补按库的能力授权，再添加后台增量构建、向量检索适配器；统一的 `search` 和来源引用结构可继续沿用。
+同一 Key 可按库配置 grep/search/写入权限，Search 路由到所选库绑定的插件。新增算法应放在插件中，通过统一协议接入；文件读取和目录组织仍由平台提供。目录过滤在检索前执行，返回的 has_more 只表示本次候选截断，不证明知识是否存在。

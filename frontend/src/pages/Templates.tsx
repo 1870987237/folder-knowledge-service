@@ -73,9 +73,9 @@ function Capabilities({ plugin }: { plugin: Template }) {
 }
 function PluginDetails({ plugin }: { plugin: Template }) {
   const f = plugin.definition.plugin, index = f?.indexing;
-  const searchable = index?.mode === 'fulltext' && index.splitter !== 'custom';
+  const searchable = plugin.capabilities?.indexing?.integration === 'available';
   return <Tabs items={[
-    { key: 'capabilities', label: '能力', children: <><Capabilities plugin={plugin} /><Typography.Paragraph className="block-gap" type="secondary">{plugin.definition.capabilities.length ? '初始化与更新可接入现有任务流程。' : '此插件不修改知识文件。'}{index && (searchable ? ' 全文索引可在知识库的“检索索引”中构建。' : ' 该索引类型目前仅保存定义，尚未接入执行。')}{f?.instructions && ' Agent 指引尚未合入 MCP instructions。'}</Typography.Paragraph>{plugin.legacy_template && <Tag>兼容原有模板</Tag>}</> },
+    { key: 'capabilities', label: '能力', children: <><Capabilities plugin={plugin} /><Typography.Paragraph className="block-gap" type="secondary">{plugin.definition.capabilities.length ? '初始化与更新可接入现有任务流程。' : '此插件不修改知识文件。'}{index && (searchable ? ' 可在知识库的“检索索引”中构建与查询。' : ' 该索引类型目前仅保存定义，尚未接入执行。')}{f?.instructions && ' Agent 指引通过 MCP instructions 提供。'}</Typography.Paragraph>{plugin.legacy_template && <Tag>兼容原有模板</Tag>}</> },
     ...(index ? [{ key: 'indexing', label: '索引定义', children: <Descriptions column={1} items={[
       { key: 'mode', label: '检索方式', children: ({ fulltext: '全文', semantic: '语义', hybrid: '混合' } as Record<string, string>)[index.mode] },
       { key: 'splitter', label: '切分方式', children: ({ document: '按文档分段', markdown_sections: 'Markdown 章节', custom: '插件程序' } as Record<string, string>)[index.splitter] },
