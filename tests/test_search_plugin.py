@@ -25,7 +25,7 @@ def install_program(env, tmp_path, monkeypatch, code=None, path_filter=True):
     manifest = tmp_path / 'definition.json'
     manifest.write_text(json.dumps(definition), encoding='utf-8')
     output = package_plugin(source, manifest, tmp_path / 'upload')
-    response = client.post('/admin/api/plugins', headers=auth(), json=json.loads(Path(output['manifest']).read_text()))
+    response = client.post('/admin/api/plugins', headers=auth(), json=json.loads(Path(output['manifest']).read_text(encoding='utf-8')))
     assert response.status_code == 201, response.text
     assert response.json()['capabilities']['indexing']['integration'] == 'available'
     installed = client.put('/admin/api/plugins/simple-rag-python/versions/1.0.0/package', headers=auth(),
