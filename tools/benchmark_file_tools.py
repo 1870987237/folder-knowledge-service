@@ -19,6 +19,7 @@ import statistics
 import subprocess
 import threading
 import time
+import tempfile
 import uuid
 
 import httpx
@@ -65,9 +66,13 @@ class Probe:
 
 
 class Suite:
-    def __init__(self, output, app_wrapper=None):
+    def __init__(self, output, app_wrapper=None, short_fixture=False):
         self.output = output.resolve()
-        self.run_root = self.output / ('fixture-' + uuid.uuid4().hex)
+        # Plugin generations add several path components; keep disposable Windows
+        # state away from long report paths while leaving all evidence in output.
+        self.run_root = (Path(tempfile.mkdtemp(prefix='fkb-fixture-')).resolve() if short_fixture
+                         else self.output / ('fixture-' + uuid.uuid4().hex))
+        self._fixture_parent, self._fixture_name = self.run_root.parent, self.run_root.name
         pool = self.run_root / 'knowledge'
         pool.mkdir(parents=True)
         self.app = create_app(Settings(str(pool), admin_token=uuid.uuid4().hex,
@@ -301,7 +306,7 @@ class Suite:
         writes.copy_workspace = self.original_copy
         # Only this run's generated fixture can be removed; never a user knowledge root.
         target = self.run_root.resolve()
-        assert target.parent == self.output and target.name.startswith('fixture-') and not self.thread.is_alive()
+        assert target.parent == self._fixture_parent and target.name == self._fixture_name and not self.thread.is_alive()
         shutil.rmtree(target)
 
 

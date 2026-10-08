@@ -28,6 +28,9 @@ flowchart LR
 ## 使用
 
 ```powershell
+# 可单独预检；正式 runner 也会先自动检查模型连接
+python -m benchmarks.agent.preflight
+
 # 先验证接入，执行一个检索任务和一个嵌套写入任务
 python -m benchmarks.agent.runner --output data/agent-smoke --tasks R01 W01 --variants hybrid --fail-fast
 
@@ -51,6 +54,8 @@ OMP 从已有 `~/.omp/agent/models.yml` 复制模型配置到临时运行配置�
 公开基准接入见 [BrowseComp-Plus](../browsecomp/README.md)：支持官方数据下载、独立知识文件夹与任务 CSV、三种 MCP 配置对比、证据召回、离线语义判分和官方 run 格式导出。当前为缩小语料的内部适配版，与此处的合成读写回归分开统计。
 
 `--fail-fast` 只在无模型响应/无 MCP 目录的接入异常时中止，普通任务失败仍继续。
+运行前保存 `plan.json`，模型预检结果写入 `preflight.json`；预检失败不会开始测试。
+支持通过 `--plugin-definition` 和 `--plugin-source` 更换索引插件；独立 Python 插件还需显式 `--trust-plugin`，只在隔离测试进程批准对应包。详细对比报告见 BrowseComp-Plus 文档。
 每次任务预算默认 180 秒，可通过 `--timeout` 调整；超时会被计为任务失败。
 进程外另设 20 秒收尾上限，防止 OMP 卡住。
 

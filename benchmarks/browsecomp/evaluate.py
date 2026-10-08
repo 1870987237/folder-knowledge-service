@@ -104,7 +104,7 @@ def report(data):
         tools = '、'.join(f'{k}×{v}' for k, v in row['tools_used'].items())
         answer_status = ('匹配' if ev['answer_exact_match'] else '未匹配，需语义判分') if row['valid_run'] and not row['timed_out'] and row['returncode'] == 0 else '执行失败，未判分'
         lines.append(f"| {row['task_id']} | {row['variant']} | {tools or '无'} | {row['tool_errors']} | {ev['evidence_recall']:.1%} | {answer_status} | {row['wall_ms']/1000:.2f} |")
-    lines += ['', 'Search 为当前平台 SQLite FTS5 / BM25 插件；保持其原始工具和结果格式，不采用官方工具的 Top-5/512-token 格式。因此此报告用于平台内部配置对比。',
+    lines += ['', 'Search 使用本次运行记录的索引插件，算法由插件决定；保持平台原始工具和结果格式，不采用官方工具的 Top-5/512-token 格式。因此此报告用于平台内部配置对比。',
               '原始答复、标准答案、文档和轨迹只保存在被 Git 忽略的 data/ 中，不应公开上传。',
               '可导出官方 run 格式，再使用固定版本的上游 Qwen3-32B 判分；或使用独立 OpenAI 兼容模型进行明确标记的内部语义判分。', '']
     return '\n'.join(lines)

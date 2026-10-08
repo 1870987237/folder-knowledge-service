@@ -18,6 +18,7 @@ from benchmarks.agent.evaluate import GRADER_VERSION, grade
 from folder_kb.capabilities import Capabilities, Policy
 from folder_kb.plugin_package import package_plugin
 from tools.benchmark_file_tools import Suite
+from benchmarks.agent.preflight import check_model, stop_process
 
 
 SYSTEM = '''你是通用工作助手。请通过已连接的知识平台完成用户任务，自行决定如何查找和处理资料。
@@ -165,9 +166,17 @@ def install_index_plugin(suite, args):
     client = httpx.Client(base_url=suite.url, headers={'Authorization': 'Bearer ' + admin}, trust_env=False, timeout=120)
     response = client.post('/admin/api/plugins', json=json.loads(Path(package['manifest']).read_text(encoding='utf-8')))
     assert response.status_code == 201, response.status_code
-    assert client.put(f'/admin/api/plugins/benchmark-rag/versions/{definition["version"]}/package', content=Path(package['package']).read_bytes()).status_code == 200
+    installed = client.put(f'/admin/api/plugins/benchmark-rag/versions/{definition["version"]}/package', content=Path(package['package']).read_bytes())
+    assert installed.status_code == 200, installed.status_code
     args.plugin_version = definition['version']
-    suite.result['plugin'] = {'definition': definition, 'package_sha256': hashlib.sha256(Path(package['package']).read_bytes()).hexdigest()}
+    suite.result['plugin'] = {'definition': definition, 'package_sha256': installed.json()['package_sha256'],
+                             'archive_sha256': hashlib.sha256(Path(package['package']).read_bytes()).hexdigest()}
+    if definition.get('plugin', {}).get('indexing', {}).get('search_protocol'):
+        if not getattr(args, 'trust_plugin', False):
+            client.close()
+            raise ValueError('Program plugins require --trust-plugin after reviewing their source')
+        os.environ['KB_SEARCH_TRUSTED_PYTHON'] = '1'
+        os.environ['KB_SEARCH_PLUGIN_ALLOWLIST'] = suite.result['plugin']['package_sha256']
     return client
 
 
@@ -180,7 +189,11 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
     assert admin.put(f'/admin/api/libraries/{lid}/plugin', json={'plugin_id': 'benchmark-rag', 'plugin_version': args.plugin_version}).status_code == 200
     index_start = time.perf_counter()
     index_response = admin.post(f'/admin/api/libraries/{lid}/index/build')
-    assert index_response.status_code == 200
+    (directory / 'setup.json').write_text(json.dumps({'index_build_http_status': index_response.status_code,
+        'index': index_response.json()}, ensure_ascii=False, indent=2), encoding='utf-8')
+    if index_response.status_code != 200:
+        suite.registry.revoke_key(key['key']['id'])
+        raise RuntimeError(f'Index setup failed ({index_response.status_code}); see episode setup.json')
     index_build_ms = (time.perf_counter() - index_start) * 1000
     Capabilities(suite.registry).policy(key['key']['id'], Policy(permissions=[{
         'library_id': lid, 'grep': variant in ('grep', 'hybrid'), 'search': variant in ('search', 'hybrid'),
@@ -221,8 +234,7 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=args.timeout + 20)
     except asyncio.TimeoutError:
         timed_out = True
-        process.kill()
-        stdout, stderr = await process.communicate()
+        stdout, stderr = await stop_process(process)
     finally:
         suite.registry.revoke_key(key['key']['id'])
         # OMP can cache configuration in SQLite. Remove the entire generated
@@ -285,10 +297,20 @@ async def run(args):
     if external and len(external) != len(selected):
         raise ValueError('Run external benchmark and basic regression tasks separately')
     args.system_prompt = BCP_SYSTEM if external else SYSTEM
+    args.output.mkdir(parents=True, exist_ok=True)
+    plan = {'task_ids': [t.id for t in selected], 'variants': args.variants, 'repeats': args.repeats,
+            'timeout_seconds': args.timeout, 'planned_episodes': len(selected) * len(args.variants) * args.repeats,
+            'model': args.model, 'dataset': dataset_metadata}
+    (args.output / 'plan.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
+    health = await check_model(args)
+    (args.output / 'preflight.json').write_text(json.dumps(health, indent=2), encoding='utf-8')
+    if not health['ok']:
+        raise RuntimeError('Model preflight failed; no tasks executed. See preflight.json (no raw credentials).')
     recorder = Recorder()
-    suite = Suite(args.output, app_wrapper=recorder.wrap)
+    suite = Suite(args.output, app_wrapper=recorder.wrap, short_fixture=True)
     results = []
     admin = None
+    saved_env = {k: os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON', 'KB_SEARCH_PLUGIN_ALLOWLIST')}
     source_files = [Path('benchmarks/agent') / name for name in ('runner.py', 'tasks.py', 'evaluate.py', 'omp-policy.ts')]
     if external:
         source_files.append(Path('benchmarks/browsecomp/evaluate.py'))
@@ -304,7 +326,8 @@ async def run(args):
                     result = await episode(suite, recorder, admin, task, variant, repeat, args)
                     results.append(result)
                     (suite.output / 'results.json').write_text(json.dumps({'environment': suite.result['environment'],
-                        'benchmark_version': '1.0', 'grader_version': GRADER_VERSION, 'started_at': suite.result['timestamp'],
+                        'benchmark_version': '1.1', 'grader_version': GRADER_VERSION, 'started_at': suite.result['timestamp'],
+                        'plan': plan, 'preflight': health,
                         'agent_adapter': 'OMP explicit extension; unchanged MCP schemas; JSON Streamable HTTP',
                         'plugin': suite.result['plugin'], 'system_prompt': args.system_prompt,
                         'evaluation_mode': 'browsecomp-exact-match-proxy' if external else 'deterministic-outcome',
@@ -317,6 +340,11 @@ async def run(args):
         if admin:
             admin.close()
         suite.close()
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def main():
@@ -330,6 +358,7 @@ def main():
     p.add_argument('--models-config', type=Path, default=Path.home() / '.omp/agent/models.yml')
     p.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/simple-rag/definition.json'))
     p.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/simple-rag/package'))
+    p.add_argument('--trust-plugin', action='store_true', help='Permit reviewed local Python plugin only in this isolated test process')
     p.add_argument('--variants', nargs='+', choices=['grep', 'search', 'hybrid'], default=['grep', 'search', 'hybrid'])
     p.add_argument('--tasks', nargs='+', help='Task IDs from the selected dataset')
     p.add_argument('--repeats', type=int, default=1)
@@ -338,6 +367,8 @@ def main():
     args = p.parse_args()
     if args.repeats < 1 or args.timeout < 1:
         p.error('Repeats and timeout must be positive')
+    if len(set(args.variants)) != len(args.variants):
+        p.error('Variants must be unique')
     args.output = args.output.resolve()
     if args.output.exists() and any(args.output.iterdir()):
         p.error('Output must be a new or empty directory; previous episodes are immutable')
