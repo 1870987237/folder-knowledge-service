@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, App as AntApp, Button, Form, Input, Layout, Menu, Spin, Typography } from 'antd';
+import { Alert, App as AntApp, Button, Card, Form, Input, Layout, Spin, Typography } from 'antd';
 import { ApiOutlined, AppstoreOutlined, DashboardOutlined, DatabaseOutlined, FolderOutlined, HistoryOutlined, InboxOutlined, KeyOutlined, LogoutOutlined, MenuOutlined, BranchesOutlined, TeamOutlined, UserOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { Api, errorMessage } from './api';
 import { SessionContext, type Claim } from './context';
@@ -13,6 +13,7 @@ import { ActivityPage } from './pages/Activity';
 import { OverviewPage } from './pages/Overview';
 
 import { ModelsPage, UpdatesPage } from './pages/Updates';
+import { NavigationSider, NavigationMenu } from './Navigation';
 import { AccountsPage, OrganizationsPage, OwnershipPage } from './pages/People';
 
 const knownPages = ['accounts', 'organizations', 'ownership', 'models', 'updates', 'overview', 'libraries', 'inbox', 'plugins', 'templates', 'repositories', 'keys', 'activity'];
@@ -24,14 +25,14 @@ export function AdminApp() {
   const liveClient = useRef<Api | undefined>(undefined);
   const logout = useCallback(() => { liveClient.current?.dispose(); liveClient.current = undefined; setSession(undefined); form.resetFields(); }, [form]);
   useEffect(() => () => { liveClient.current?.dispose(); }, []);
-  if (!session) return <div className="login-screen"><div className="login-panel"><div className="brand-mark"><FolderOutlined /></div><Typography.Title level={2}>Folder KB</Typography.Title><Typography.Paragraph type="secondary">知识库管理平台</Typography.Paragraph><Form form={form} layout="vertical" requiredMark={false} onFinish={async values => {
+  if (!session) return <div className="login-screen"><Card className="login-panel"><div className="brand-mark"><FolderOutlined /></div><Typography.Title level={2}>Folder KB</Typography.Title><Typography.Paragraph type="secondary">知识库管理平台</Typography.Paragraph><Form form={form} layout="vertical" requiredMark={false} onFinish={async values => {
     setBusy(true); setLoginError('');
     const client = new Api(values.token.trim(), () => { logout(); setLoginError('会话已失效，请重新登录。'); });
     liveClient.current = client;
     try { const overview = await client.request<Overview>('/overview'); setSession({ api: client, overview }); form.resetFields(); }
     catch (e) { client.dispose(); setLoginError(errorMessage(e)); }
     finally { setBusy(false); }
-  }}><Form.Item name="token" label="管理员令牌" rules={[{ required: true, whitespace: true, message: '请输入管理员令牌' }]}><Input.Password autoComplete="off" placeholder="KB_ADMIN_TOKEN" size="large" /></Form.Item>{loginError && <Alert type="error" title={loginError} className="block-gap" />}<Button type="primary" htmlType="submit" block size="large" loading={busy}>进入管理平台</Button></Form><Typography.Paragraph type="secondary" className="login-note">令牌仅保存在当前页面，刷新后需要重新登录。</Typography.Paragraph></div></div>;
+  }}><Form.Item name="token" label="管理员令牌" rules={[{ required: true, whitespace: true, message: '请输入管理员令牌' }]}><Input.Password autoComplete="off" placeholder="KB_ADMIN_TOKEN" size="large" /></Form.Item>{loginError && <Alert type="error" title={loginError} className="block-gap" />}<Button type="primary" htmlType="submit" block size="large" loading={busy}>进入管理平台</Button></Form><Typography.Paragraph type="secondary" className="login-note">令牌仅保存在当前页面，刷新后需要重新登录。</Typography.Paragraph></Card></div>;
   return <Workspace key="workspace" client={session.api} initial={session.overview} logout={logout} />;
 }
 function Workspace({ client, initial, logout }: { client: Api; initial: Overview; logout: () => void }) {
@@ -49,13 +50,13 @@ function Workspace({ client, initial, logout }: { client: Api; initial: Overview
   }, [client, revision]);
   useEffect(() => () => { claims.current.clear(); }, []);
   const content = ({ accounts: <AccountsPage />, organizations: <OrganizationsPage />, ownership: <OwnershipPage />, models: <ModelsPage />, updates: <UpdatesPage />, overview: <OverviewPage navigate={navigate} />, libraries: <LibrariesPage />, inbox: <InboxPage />, plugins: <TemplatesPage />, repositories: <RepositoriesPage />, keys: <KeysPage />, activity: <ActivityPage /> } as Record<string, React.ReactNode>)[page];
-  return <SessionContext.Provider value={{ api: client, overview, refresh, revision, claims: claims.current }}><Layout className={`app-layout${page === 'organizations' ? ' admin-organization-layout' : ''}`}><Layout.Sider theme="light" width={232} breakpoint="lg" collapsedWidth={0} collapsed={collapsed} trigger={null} onBreakpoint={broken => { setMobile(broken); setCollapsed(broken); }} className="app-sidebar">
+  return <SessionContext.Provider value={{ api: client, overview, refresh, revision, claims: claims.current }}><Layout className={`app-layout${page === 'organizations' ? ' admin-organization-layout' : ''}`}><NavigationSider theme="light" width={232} breakpoint="lg" collapsedWidth={0} collapsed={collapsed} trigger={null} onBreakpoint={broken => { setMobile(broken); setCollapsed(broken); }} className={`app-sidebar${mobile && !collapsed ? " navigation-overlay" : ""}`}>
     <div className="brand"><span className="brand-mark"><FolderOutlined /></span><Typography.Text strong>Folder KB</Typography.Text></div>
-    <Menu mode="inline" selectedKeys={[page]} onClick={({ key }) => navigate(key)} items={[
+    <NavigationMenu selectedKeys={[page]} onClick={({ key }) => navigate(key)} items={[
       { key: 'overview', icon: <DashboardOutlined />, label: '服务概览' },
       { type: 'group', label: '组织与权限', children: [{ key: 'accounts', icon: <UserOutlined />, label: '账号管理' }, { key: 'organizations', icon: <TeamOutlined />, label: '组织管理' }, { key: 'ownership', icon: <ApartmentOutlined />, label: '知识库归属' }] },
       { type: 'group', label: '知识工作区', children: [{ key: 'libraries', icon: <DatabaseOutlined />, label: '知识库' }, { key: 'inbox', icon: <InboxOutlined />, label: '增量收件箱' }, { key: 'updates', icon: <HistoryOutlined />, label: '更新任务' }, { key: 'plugins', icon: <AppstoreOutlined />, label: '插件' }] },
       { type: 'group', label: '服务管理', children: [{ key: 'models', icon: <ApiOutlined />, label: '模型连接' }, { key: 'repositories', icon: <BranchesOutlined />, label: 'Git 仓库' }, { key: 'keys', icon: <KeyOutlined />, label: 'Agent 与密钥' }, { key: 'activity', icon: <HistoryOutlined />, label: '访问活动' }] },
     ]} /><div className="sidebar-footer"><Button type="text" icon={<LogoutOutlined />} onClick={logout}>退出登录</Button></div>
-  </Layout.Sider><Layout.Content className="app-content">{mobile && <Button className="mobile-menu" icon={<MenuOutlined />} aria-label="展开导航" onClick={() => setCollapsed(!collapsed)} />}{error && <Alert className="block-gap" type="error" showIcon title={error} action={<Button onClick={refresh}>重试</Button>} />}<div className="page-container" key={page}>{content || <Spin />}</div></Layout.Content></Layout></SessionContext.Provider>;
+  </NavigationSider><Layout.Content className="app-content">{mobile && <Button className={`mobile-menu${!collapsed ? " navigation-toggle-open" : ""}`} icon={<MenuOutlined />} aria-label="展开导航" onClick={() => setCollapsed(!collapsed)} />}{error && <Alert className="block-gap" type="error" showIcon title={error} action={<Button onClick={refresh}>重试</Button>} />}<div className={`page-container${page === "organizations" ? " full-height" : ""}`} key={page}>{content || <Spin />}</div></Layout.Content></Layout></SessionContext.Provider>;
 }

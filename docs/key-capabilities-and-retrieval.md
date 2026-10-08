@@ -48,6 +48,7 @@
 | search | 至少一个库授权且已配置索引检索时提供 |
 | submit_material / get_submission | 存在材料提交授权时提供，回执仍按提交者隔离 |
 | write_file | 至少一个库允许直接编辑时提供 |
+| apply_changes / file_manifest | 直接编辑 Key 的批量变更与版本清单；批量变更一次发布 |
 
 工具列表取各库有效能力的并集。索引临时不可用时保留 search，返回明确的不可用/更新中状态，避免短暂故障引发工具列表反复变化。
 
@@ -95,9 +96,11 @@ flowchart LR
 
 ### write_file
 
-首版只支持原生知识库中的 UTF-8 `.md` / `.txt` 创建和替换，单文件最多 256 KiB，父目录必须已存在，不支持删除、移动、任意二进制写入或执行程序。
+支持原生知识库中的 UTF-8 `.md` / `.txt` 创建和替换，单文件最多 256 KiB。创建可传 `create_parents=true` 自动建立父目录。批量导入、独立建目录、文件及目录删除使用 `apply_changes`；不支持移动、任意二进制写入或执行程序。
 
-输入 library_id、path、content、operation（create/replace）、expected_version 和 request_id。替换必须带读取时的版本；创建必须验证路径不存在。返回 request_id、library_id、path、operation、version、published_at、knowledge_updated 和 duplicate。REST 为 `POST /api/v1/write`；MCP 使用同名参数。重复 request_id 的相同请求返回原结果，不同内容返回冲突。
+输入 library_id、path、content、operation（create/replace）、expected_version、create_parents 和 request_id。替换必须带读取时的版本；创建必须验证路径不存在。返回 request_id、library_id、path、operation、version、published_at、knowledge_updated 和 duplicate，并附带 results 和 library_version。REST 为 `POST /api/v1/write`；MCP 使用同名参数。request_id 为 1–128 位 ASCII，匹配 `^[A-Za-z0-9][A-Za-z0-9._:-]*$`，建议 UUID。重复 request_id 的相同请求返回原结果，不同内容返回冲突。
+
+批量操作先用 `file_manifest` 获取版本清单，再调用 `apply_changes`。替换/删除可统一提交 expected_library_version，避免逐文件 read。每批只复制一次快照，任一操作失败则整批不发布。目录删除需整库版本，非空目录还需 recursive=true。完整参数、限制和历史清理见[文件事务接口](file-transactions.md)。
 
 复用现有候选快照、历史版本及发布指针机制，以事务或锁保护基准版本比较与发布切换。权限校验应覆盖最终发布，两个写入不能都基于同一旧版本成功覆盖。这里只免去人工审核，仍保留校验、历史和审计；写成功不等于索引已经完成。
 

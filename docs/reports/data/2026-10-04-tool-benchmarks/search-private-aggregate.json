@@ -1,0 +1,69 @@
+{
+  "private": true,
+  "timestamp": "2026-10-04T08:57:58.989004+00:00",
+  "probes": [
+    {
+      "transport": "rest",
+      "http_status": 403,
+      "ms": 67.538,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "rest",
+      "http_status": 403,
+      "ms": 65.875,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "rest",
+      "http_status": 403,
+      "ms": 192.79,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "rest",
+      "http_status": 403,
+      "ms": 63.403,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "rest",
+      "http_status": 403,
+      "ms": 68.538,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "mcp",
+      "ms": 101.597,
+      "is_error": true,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "mcp",
+      "ms": 90.619,
+      "is_error": true,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    },
+    {
+      "transport": "mcp",
+      "ms": 85.372,
+      "is_error": true,
+      "error_code": "capability_forbidden",
+      "result_count": 0
+    }
+  ],
+  "index": {
+    "status": "unconfigured",
+    "error": "index_not_configured"
+  },
+  "search_exposed": false,
+  "temporary_key_revoked": true,
+  "target": "user-designated private library"
+}

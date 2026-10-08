@@ -23,9 +23,9 @@ export function ActivityPage() {
   const resource = useResource<{ events: Activity[]; next_before_id: number | null }>('/activity?' + query({ ...filters, before_id: before, limit: 100 }), 10000);
   function change(key: string, value?: string) { setFilters(f => ({ ...f, [key]: value || '' })); setBefore(undefined); }
   return <><PageHeader title="访问活动" action={<Button icon={<ReloadOutlined />} onClick={resource.refresh}>刷新</Button>} /><div className="toolbar">
-    <Select aria-label="筛选操作方" placeholder="全部操作方" allowClear options={overview.keys.map(k => ({ label: k.agent_name, value: k.id }))} onChange={v => change('key_id', v)} />
-    <Select aria-label="筛选知识库" placeholder="全部知识库" allowClear options={overview.libraries.map(l => ({ label: l.name, value: l.id }))} onChange={v => change('library_id', v)} />
-    <Select aria-label="筛选结果" placeholder="全部结果" allowClear options={[{ value: 'ok', label: '成功' }, { value: 'error', label: '失败' }, { value: 'partial', label: '不完整' }]} onChange={v => change('status', v)} />
+    <Select className="filter-select" aria-label="筛选操作方" placeholder="全部操作方" allowClear options={overview.keys.map(k => ({ label: k.agent_name, value: k.id }))} onChange={v => change('key_id', v)} />
+    <Select className="filter-select" aria-label="筛选知识库" placeholder="全部知识库" allowClear options={overview.libraries.map(l => ({ label: l.name, value: l.id }))} onChange={v => change('library_id', v)} />
+    <Select className="filter-select" aria-label="筛选结果" placeholder="全部结果" allowClear options={[{ value: 'ok', label: '成功' }, { value: 'error', label: '失败' }, { value: 'partial', label: '不完整' }]} onChange={v => change('status', v)} />
     <DatePicker.RangePicker placeholder={['开始时间', '结束时间']} showTime onChange={range => { setFilters(f => ({ ...f, start_time: range?.[0]?.toISOString() || '', end_time: range?.[1]?.toISOString() || '' })); setBefore(undefined); }} />
   </div><LoadError error={resource.error} retry={resource.refresh} />
   {overview.active_requests.length > 0 && <Surface className="padded block-gap"><Typography.Title level={5}>正在处理</Typography.Title>{overview.active_requests.map((r, i) => <div className="connection-row" key={r.request_id || i}><Space><Tag color="processing">处理中</Tag>{r.agent_name}<code>{r.tool}</code></Space><span>{overview.libraries.find(l => l.id === r.library_id)?.name || r.library_id}</span></div>)}</Surface>}

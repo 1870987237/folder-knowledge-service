@@ -86,8 +86,8 @@ def workspace_digest(root):
     return snapshot(root)[0]
 
 
-def copy_workspace(source, target):
-    _, files, directories = snapshot(source)
+def copy_workspace(source, target, *, captured=None):
+    _, files, directories = captured if captured is not None else snapshot(source)
     target.mkdir(exist_ok=False)
     for directory in directories:
         (target / directory).mkdir(parents=True, exist_ok=True)
@@ -287,7 +287,14 @@ class Collaboration:
         except KnowledgeError as exc:
             if exc.code == 'not_found' and missing:
                 # Parent must already exist and obey the same path restrictions.
-                folder._path(str(pure.parent))
+                try:
+                    parent = folder._path(str(pure.parent))
+                except KnowledgeError as parent_error:
+                    if parent_error.code == 'not_found':
+                        fail('parent_not_found', 'Parent directory does not exist; create it first', 404)
+                    raise
+                if not parent.is_dir():
+                    fail('parent_not_directory', 'Parent path is not a directory', 409)
                 if any(p.startswith('.') or ':' in p or '\\' in p for p in pure.parts) or pure.is_absolute() or '..' in pure.parts:
                     fail('invalid_path', '无效文档路径', 400)
                 return ''

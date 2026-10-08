@@ -111,6 +111,8 @@ class IndexDefinition(StrictModel):
     exclude: list[str] = Field(default_factory=list, max_length=32)
     metadata_fields: list[str] = Field(default_factory=list, max_length=32)
     entrypoint: list[str] | None = None
+    search_protocol: Literal['1.0'] | None = None
+    supports_path_filter: bool = False
 
     @model_validator(mode='after')
     def contract(self):
@@ -121,6 +123,8 @@ class IndexDefinition(StrictModel):
                 raise ValueError('Index patterns must stay relative to the knowledge directory')
         if (self.splitter == 'custom') != (self.entrypoint is not None):
             raise ValueError('Only custom indexing requires an entrypoint')
+        if self.search_protocol and not self.entrypoint:
+            raise ValueError('Search protocol requires a plugin entrypoint')
         if any(not name.isidentifier() or len(name) > 64 for name in self.metadata_fields):
             raise ValueError('Invalid metadata field name')
         return self

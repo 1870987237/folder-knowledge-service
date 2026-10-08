@@ -404,6 +404,10 @@ python -m pytest -q
 
 前端源代码位于 `frontend/`，构建自动写入 `folder_kb/web/`；生成文件不提交 Git。Docker 镜像与 CI 已包含前端构建步骤。单独安装 Python 包不会自动运行 npm。
 
+工具与索引的任务效果使用[通用 Agent Benchmark](benchmarks/agent/README.md)评测：让 OMP 自主完成自然语言读写任务，独立核验答案和文件结果，对比 grep、Search 及混合配置，并记录调用成功率、错误恢复、耗时和 tokens。
+
+公开检索任务可用 [BrowseComp-Plus 适配器](benchmarks/browsecomp/README.md)：导入官方问题、完整证据和干扰文档，经相同 MCP 工具运行，统计证据召回并独立判分。当前为缩小语料的内部测试，不能直接对比官方全量榜单。
+
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。
 
 权限窗口通过 `GET/PUT /admin/api/keys/{key_id}/permissions` 读取与保存，PUT 请求体为 `{"library_ids":["team-guide"],"submit_library_ids":["team-guide"]}`。两类权限在一个 SQLite 事务中更新，失败不会只保存一部分。原 `/grants` 和 `/inbox-grants` 接口继续可用。
@@ -415,9 +419,9 @@ python -m pytest -q
 
 - **Search**：库需绑定检索插件并构建索引；当前提供 SQLite FTS5/BM25 全文检索。
 - **提交收件箱**：沿用 submit_material / get_submission，不直接修改正式知识。
-- **直接写入**：知识库管理者先在「Agent 接入」开启，再给 Key 授权；仅限独立的平台原生文档库，Key 所有者需具备发布权限。write_file 可创建/替换最多 256 KiB 的 UTF-8 Markdown/txt 文件，替换需带 read_file 返回的 expected_version，request_id 用于幂等重试。
+- **直接写入**：知识库管理者先在「Agent 接入」开启，再给 Key 授权；仅限独立的平台原生文档库，Key 所有者需具备发布权限。`write_file` 创建/替换 UTF-8 Markdown/txt 文件，创建可带 `create_parents=true` 自动建立父目录。`apply_changes` 将建目录、创建、替换、删除合并成一次原子发布；`file_manifest` 一次获取多文件版本，无须逐个读取正文。替换/删除必须校验文件或整库版本。`request_id` 使用 ASCII UUID，原样重试保证幂等。
 
-写入保留历史并立即发布，索引需随后重建。Git 库和带更新程序的插件库继续使用原更新流程。详细接口及兼容行为见[多知识库授权与 MCP 接口](docs/key-capabilities-and-retrieval.md)。
+写入保留历史并立即发布，索引需随后重建。单文件最多 256 KiB，每批最多 100 项、正文合计 1 MiB。Git 库和带更新程序的插件库继续使用原更新流程。批量导入、错误码和历史清理见[文件事务接口](docs/file-transactions.md)，授权规则见[多知识库授权与 MCP 接口](docs/key-capabilities-and-retrieval.md)。
 
 
 ### 组织与知识库管理
@@ -431,3 +435,5 @@ python -m pytest -q
 - 「知识库 → 成员权限 → 部门与用户组」：按部门或组授权读者、编辑者、发布者、管理者；部门可显式包含下级。成员关系变化后，用户和个人 Key 的有效权限实时变化，其他独立授权继续生效。
 
 部门管理范围、详细权限来源和组织服务账号仍待后续实现。管理数据库已升级到 v10，升级前备份。
+
+检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/simple-rag-python`。

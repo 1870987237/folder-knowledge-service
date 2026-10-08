@@ -96,23 +96,23 @@ export function OrganizationMembers({ api, oid, onChanged }: { api: Client; oid:
   }
   function membershipNames(id: string, kind: Unit['kind']) {
     const names = units.filter(u => u.kind === kind && u.member_ids.includes(id)).map(u => unitPath(u, units));
-    return <Typography.Text ellipsis={{ tooltip: names.join('、') }}>{names.join('、') || '—'}</Typography.Text>;
+    return <Typography.Text className="full-width" ellipsis={{ tooltip: names.join('、') }}>{names.join('、') || '—'}</Typography.Text>;
   }
   const memberTable = <Table<Member> size="small" className="organization-member-table" rowKey="id" loading={busy} dataSource={rows} pagination={{ current: page, onChange: setPage, pageSize: 15, hideOnSinglePage: true }} scroll={{ x: 660 }} columns={[
-    { title: '成员', dataIndex: 'username', width: 150, render: (name, m) => <Button type="link" className="organization-name" onClick={() => void openMember(m.id)}>{name}</Button> },
+    { title: '成员', dataIndex: 'username', width: 150, render: (name, m) => <Button type="link" className="name-link" onClick={() => void openMember(m.id)}>{name}</Button> },
     { title: '部门', width: 180, render: (_, m) => membershipNames(m.id, 'department') },
     { title: '用户组', width: 170, render: (_, m) => membershipNames(m.id, 'group') },
     { title: '组织角色', width: 130, render: (_, m) => m.role === 'admin' ? '组织管理员' : '成员' },
     { title: '', width: 48, render: (_, m) => <Dropdown trigger={['click']} menu={{ items: [{ key: 'edit', label: '成员详情' }, { key: 'remove', label: '移出组织', danger: true }], onClick: ({ key }) => key === 'edit' ? void openMember(m.id) : removeMember(m) }}><Button type="text" size="small" aria-label={`${m.username}操作`} icon={<MoreOutlined />} /></Dropdown> },
   ]} />;
-  const filters = <div className="organization-filters"><Input aria-label="搜索成员" placeholder="搜索成员" prefix={<SearchOutlined />} value={query} allowClear onChange={e => setQuery(e.target.value)} /><Select aria-label="筛选组织角色" className="role-select" placeholder="全部角色" value={role || undefined} allowClear onChange={v => setRole(v || '')} options={roles} />{tab === 'members' && selectedDepartment && <Checkbox checked={descendants} onChange={e => setDescendants(e.target.checked)}>包含下级部门</Checkbox>}</div>;
+  const filters = <div className="organization-filters"><Input className="member-search" aria-label="搜索成员" placeholder="搜索成员" prefix={<SearchOutlined />} value={query} allowClear onChange={e => setQuery(e.target.value)} /><Select aria-label="筛选组织角色" className="role-select" placeholder="全部角色" value={role || undefined} allowClear onChange={v => setRole(v || '')} options={roles} />{tab === 'members' && selectedDepartment && <Checkbox checked={descendants} onChange={e => setDescendants(e.target.checked)}>包含下级部门</Checkbox>}</div>;
   return <div className="organization-manager">
     {error && <LoadError error={error} retry={load} />}
-    <Tabs activeKey={tab} onChange={t => { setTab(t); setQuery(''); setRole(''); }} tabBarExtraContent={<Space><Button type="text" aria-label="刷新成员" icon={<ReloadOutlined />} onClick={load} loading={busy} /><Button type="primary" icon={<PlusOutlined />} disabled={busy || !!error} onClick={() => { if (tab === 'groups') openUnit('group'); else { addForm.resetFields(); setAddError(''); setDirty(false); setAdding(true); } }}>{tab === 'groups' ? '新建用户组' : '添加成员'}</Button></Space>} items={[{ key: 'members', label: '成员与部门' }, { key: 'groups', label: '用户组' }]} />
+    <Tabs className="organization-tabs" styles={{ header: { marginBottom: 0 } }} activeKey={tab} onChange={t => { setTab(t); setQuery(''); setRole(''); }} tabBarExtraContent={<Space><Button type="text" aria-label="刷新成员" icon={<ReloadOutlined />} onClick={load} loading={busy} /><Button type="primary" icon={<PlusOutlined />} disabled={busy || !!error} onClick={() => { if (tab === 'groups') openUnit('group'); else { addForm.resetFields(); setAddError(''); setDirty(false); setAdding(true); } }}>{tab === 'groups' ? '新建用户组' : '添加成员'}</Button></Space>} items={[{ key: 'members', label: '成员与部门' }, { key: 'groups', label: '用户组' }]} />
     {tab === 'members' ? <div className="organization-directory-layout">
       <aside className="organization-tree" aria-label="部门导航">
-        <Button block type={scope === 'all' ? 'primary' : 'text'} onClick={() => setScope('all')}>全部成员<span>{members.length}</span></Button>
-        <Button block type={scope === 'unassigned' ? 'primary' : 'text'} onClick={() => setScope('unassigned')}>未分配部门</Button>
+        <Button className="department-scope" block type={scope === 'all' ? 'primary' : 'text'} onClick={() => setScope('all')}>全部成员<span className="toolbar-spacer" /><span>{members.length}</span></Button>
+        <Button className="department-scope" block type={scope === 'unassigned' ? 'primary' : 'text'} onClick={() => setScope('unassigned')}>未分配部门</Button>
         <div className="organization-tree-heading"><Typography.Text strong>部门</Typography.Text><Button type="text" size="small" aria-label="添加部门" icon={<PlusOutlined />} disabled={busy || !!error} onClick={() => openUnit('department')} /></div>
         <Tree blockNode showLine selectedKeys={[scope]} autoExpandParent treeData={treeData(departmentRows(units))} onSelect={keys => { if (keys.length) setScope(String(keys[0])); }} />
         {!busy && !departments.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无部门" />}
@@ -120,7 +120,7 @@ export function OrganizationMembers({ api, oid, onChanged }: { api: Client; oid:
       <div className="organization-members-content">{filters}{memberTable}</div>
     </div> : <div className="organization-group-content">
       {group ? <><div className="organization-group-heading"><Button onClick={() => { setGroupId(undefined); setQuery(''); setRole(''); }}>返回用户组</Button><Typography.Text strong>{group.name}</Typography.Text><Button onClick={() => openUnit('group', group)}>管理组成员</Button></div>{filters}{memberTable}</> : <Table<Unit> size="small" rowKey="id" loading={busy} dataSource={groups} pagination={{ hideOnSinglePage: true }} columns={[
-        { title: '用户组', render: (_, u) => <Button type="link" className="organization-name" onClick={() => setGroupId(u.id)}>{u.name}</Button> },
+        { title: '用户组', render: (_, u) => <Button type="link" className="name-link" onClick={() => setGroupId(u.id)}>{u.name}</Button> },
         { title: '成员数', width: 120, render: (_, u) => u.member_ids.length },
         { title: '', width: 48, render: (_, u) => <Dropdown trigger={['click']} menu={unitMenu(u)}><Button type="text" size="small" aria-label={`${u.name}菜单`} icon={<MoreOutlined />} /></Dropdown> },
       ]} />}

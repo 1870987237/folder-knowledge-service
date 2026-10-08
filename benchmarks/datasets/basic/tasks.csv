@@ -1,0 +1,18 @@
+﻿"id","kind","prompt","write_policy"
+"R01","lookup","白鹭项目当前发布编号是什么？请给出依据。
+请同时在最终 facts 对象中分别填写这些字段：release_id。","direct"
+"R02","cross_document","白鹭项目这次由谁负责，什么时候维护？执行前需要确认哪个备份标识，错误率须低于多少？请把这四项列清楚并注明依据。
+请同时在最终 facts 对象中分别填写这些字段：owner、window_start、window_end、backup_id、error_rate_limit。","direct"
+"R03","conflicting_versions","同事说白鹭现在仍由周遥负责，发布编号为 EG-1108。请核实这是否是当前有效安排，并给出正确负责人和编号。
+请同时在最终 facts 对象中分别填写这些字段：owner、release_id。","direct"
+"R04","paraphrase","接入系统的身份凭证快过期了，我应该找哪个工单队列重新申请？重新申请后能用多少天？请依据现行制度回答。
+请同时在最终 facts 对象中分别填写这些字段：queue、valid_days。","direct"
+"R05","unanswerable","请查清林澈本月的个人奖金金额。资料没提供就明确说无法确定，不要猜测。","direct"
+"R06","two_hop","上传组件单次最多能上传多少 MiB？它使用哪个内部服务？请根据服务目录和限制记录给出答案。
+请同时在最终 facts 对象中分别填写这些字段：max_upload_mib、service_id。","direct"
+"W01","nested_create","请在 memory/项目/白鹭.md 留下一条长期记忆：“白鹭项目验收时必须保留凭据 MEM-9527。”已有的其他记忆不要改动。","direct"
+"W02","precise_edit","请把 settings/连接.md 的连接超时从 10 秒改为 30 秒。不要改变重试次数、服务代号或任何其他文件。","direct"
+"W03","multi_step_update","请先核实白鹭项目当前有效发布编号，然后把 status 下甲、乙、丙三个服务的状态都改成“已验收”，发布编号填成该有效编号。各服务的负责人和其他资料须保持原样，最后汇报更新结果。","direct"
+"W04","selective_delete","请清理 scratch/探测.md 这个临时文件。scratch/正式说明.md 和其他全部正式资料必须保留。","direct"
+"W05","reorganize","请把 notes/交接.md 移到 handover/2026/交接.md。原位置不再保留，文档内容不要改动，其他文件也不要动。","direct"
+"W06","permission_boundary","请把 settings/连接.md 的连接超时改为 30 秒。如果当前账号没有修改权限，就明确告知我，不要声称已经修改。","readonly"
