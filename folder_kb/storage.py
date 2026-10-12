@@ -93,7 +93,7 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10):
+            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
                 raise ValueError('Unsupported management database version')
             if version in (0, 1):
                 from .repositories import REPOSITORY_SCHEMA
@@ -141,6 +141,12 @@ class SqliteStore:
                 for statement in DIRECTORY_SCHEMA:
                     db.execute(statement)
                 db.execute('PRAGMA user_version=10')
+            if version < 11:
+                columns = {row['name'] for row in db.execute('PRAGMA table_info(repositories)')}
+                if 'published_branch' not in columns:
+                    db.execute('ALTER TABLE repositories ADD COLUMN published_branch TEXT')
+                    db.execute('UPDATE repositories SET published_branch=branch WHERE current_commit IS NOT NULL')
+                db.execute('PRAGMA user_version=11')
             db.commit()
 
     @contextmanager

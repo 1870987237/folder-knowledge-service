@@ -300,7 +300,10 @@ class GitWorker:
         commit = raw.decode().strip()
         if not re.fullmatch('[0-9a-f]{40,64}',commit):
             raise SyncError('invalid_commit: 无法识别远端提交')
-        for previous in {repo['current_commit'], imported_commit}-{None}:
+        # A deliberate branch switch may select an unrelated history. Ordinary
+        # updates on the published branch must still reject force-pushes.
+        previous_commit = repo['current_commit'] if repo['published_branch'] == repo['branch'] else None
+        for previous in {previous_commit, imported_commit}-{None}:
             code,_ = self.git(['--git-dir='+str(cache),'merge-base','--is-ancestor',previous,commit],allowed=(0,1,128))
             if code:
                 raise SyncError('history_diverged: 本地提交未合入远端或分支历史已重写，保留旧版本')
@@ -330,8 +333,8 @@ class GitWorker:
                 except KnowledgeError:
                     raise SyncError('library_path_missing: 新版本缺少已关联的知识目录，保留旧版本') from None
                 db.execute('UPDATE libraries SET path=?,updated_at=? WHERE id=?',(path,timestamp(),binding['library_id']))
-            db.execute('UPDATE repositories SET current_commit=?,release_path=?,last_sync=?,next_sync=?,last_error=NULL WHERE id=?',
-                       (commit,release,timestamp(),self.next_sync(latest),repo['id']))
+            db.execute('UPDATE repositories SET current_commit=?,release_path=?,published_branch=?,last_sync=?,next_sync=?,last_error=NULL WHERE id=?',
+                       (commit,release,repo['branch'],timestamp(),self.next_sync(latest),repo['id']))
             db.execute("UPDATE repository_jobs SET status=?,after_commit=?,finished_at=? WHERE id=?",('unchanged' if unchanged else 'succeeded',commit,timestamp(),job['id']))
             self.store.event(db,{'kind':'admin','action':'repository_sync_published','path':repo['id'],'status':'ok'})
 

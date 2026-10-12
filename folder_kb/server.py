@@ -457,6 +457,7 @@ class RepositorySettings(BaseModel):
     credential: str = Field(default='', max_length=64)
     interval_seconds: int = Field(default=0, ge=0, le=2592000)
     enabled: bool = True
+    branch: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class RepositoryBinding(BaseModel):
@@ -514,6 +515,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     @app.put('/admin/api/repositories/{repository_id}')
     def repository_update(repository_id: str, value: RepositorySettings):
         return repositories.update(repository_id, **value.model_dump())
+
+    @app.delete('/admin/api/repositories/{repository_id}')
+    def repository_remove(repository_id: str):
+        return repositories.remove(repository_id)
 
     @app.post('/admin/api/repositories/{repository_id}/sync', status_code=202)
     def repository_sync(repository_id: str):

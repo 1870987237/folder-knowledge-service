@@ -240,3 +240,93 @@ def test_schema_v1_migration_preserves_grants(setup):
     reopened=Registry(str(r.pool.root),str(r.directory))
     assert read(reopened,token)=='version one'
     assert RepositoryCatalog(reopened).list()['repositories']==[]
+
+
+def test_change_failed_initial_branch_reuses_queued_job(setup):
+    r,c,w,source=setup
+    repo=c.create('Docs',URL,'missing');rid=repo['id']
+    w.tick()
+    assert 'branch_not_found' in c.jobs(rid)['jobs'][0]['error']
+    c.update(rid,'Docs','',0,True,branch='main')
+    queued=c.jobs(rid)['jobs'][0]
+    c.update(rid,'Docs','',0,True,branch='other')
+    assert c.jobs(rid)['jobs'][0]['id']==queued['id']
+    c.update(rid,'Docs','',0,True,branch='main')
+    w.tick()
+    assert c.jobs(rid)['jobs'][0]['status']=='succeeded'
+    assert c.list()['repositories'][0]['published_branch']=='main'
+
+
+def test_branch_switch_keeps_old_release_until_success_then_protects_history(setup):
+    r,c,w,source=setup;rid=published(setup)
+    c.bind(rid,'guide','Guide','a')
+    token=r.create_key('Agent',['guide'],None)['token']
+    old=c.list()['repositories'][0]
+    c.update(rid,'Docs','',0,True,branch='other')
+    w.tick()
+    failed=c.list()['repositories'][0]
+    assert failed['published_branch']=='main'
+    assert failed['current_commit']==old['current_commit']
+    assert read(r,token)=='version one'
+    git(source,'checkout','--orphan','other')
+    update(source,'other branch\n')
+    c.enqueue(rid);w.tick()
+    assert c.list()['repositories'][0]['published_branch']=='other'
+    assert read(r,token)=='other branch'
+    git(source,'checkout','--orphan','rewrite')
+    update(source,'rewritten history\n')
+    git(source,'branch','-M','other')
+    c.enqueue(rid);w.tick()
+    assert 'history_diverged' in c.jobs(rid)['jobs'][0]['error']
+    assert read(r,token)=='other branch'
+
+
+def test_running_repository_cannot_switch_or_remove(setup):
+    r,c,w,source=setup
+    rid=c.create('Docs',URL,'main')['id'];w.claim()
+    for operation in (lambda:c.update(rid,'Docs','',0,True,branch='other'), lambda:c.remove(rid)):
+        with pytest.raises(KnowledgeError) as error: operation()
+        assert error.value.code=='repository_busy'
+    assert c.list()['repositories'][0]['branch']=='main'
+
+
+def test_remove_blocks_bindings_and_preserves_files_and_keys(setup):
+    r,c,w,source=setup;rid=published(setup)
+    c.bind(rid,'guide','Guide','a')
+    token=r.create_key('Agent',['guide'],None)['token']
+    release=c.list()['repositories'][0]['release_path']
+    with pytest.raises(KnowledgeError) as error:c.remove(rid)
+    assert error.value.code=='repository_in_use'
+    c.unbind(rid,'guide');c.enqueue(rid)
+    assert c.remove(rid)=={'status':'ok'}
+    assert c.list()['repositories']==[]
+    assert (r.pool.root/release/'a/guide.md').is_file()
+    assert read(r,token)=='version one'
+    assert not w.tick()
+    with r.store.transaction() as db:
+        assert not db.execute('SELECT 1 FROM repository_jobs WHERE repository_id=?',(rid,)).fetchone()
+
+
+def test_repository_edit_remove_http_auth_and_validation(setup):
+    r,c,w,source=setup
+    rid=c.create('Docs',URL,'wrong')['id']
+    app=create_app(Settings(str(r.pool.root),admin_token=ADMIN,state_dir=str(r.directory),allowed_hosts=('testserver',)))
+    headers={'Authorization':'Bearer '+ADMIN}
+    with TestClient(app) as client:
+        path=f'/admin/api/repositories/{rid}'
+        assert client.put(path,json={'name':'Docs','branch':'main'}).status_code==401
+        assert client.delete(path).status_code==401
+        assert client.put(path,headers=headers,json={'name':'Docs','branch':'../unsafe'}).status_code==400
+        assert client.put(path,headers=headers,json={'name':'Docs','branch':'main'}).status_code==200
+        assert c.list()['repositories'][0]['branch']=='main'
+        assert client.delete(path,headers=headers).status_code==200
+        assert client.delete(path,headers=headers).status_code==404
+
+
+def test_v10_migration_remembers_published_branch(setup):
+    r,c,w,source=setup;rid=published(setup)
+    with r.store.transaction(write=True) as db:
+        db.execute('ALTER TABLE repositories DROP COLUMN published_branch')
+        db.execute('PRAGMA user_version=10')
+    reopened=Registry(str(r.pool.root),str(r.directory))
+    assert RepositoryCatalog(reopened).list()['repositories'][0]['published_branch']=='main'

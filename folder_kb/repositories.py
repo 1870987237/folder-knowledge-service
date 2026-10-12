@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 import re
+import json
 import time
 from urllib.parse import urlsplit
 import uuid
@@ -140,17 +141,41 @@ class RepositoryCatalog:
         if interval != 0 and not 60 <= interval <= 2592000:
             raise KnowledgeError('invalid_interval', '更新间隔为 0（手动）或 60–2592000 秒')
 
-    def update(self, rid, name, credential, interval_seconds, enabled):
+    def update(self, rid, name, credential, interval_seconds, enabled, branch=None):
         self._settings(credential, interval_seconds)
         if not 1 <= len(name.strip()) <= 80:
             raise KnowledgeError('invalid_name', '仓库名称需为 1–80 个字符')
         with self.store.transaction(write=True) as db:
-            self.get(db, rid)
-            db.execute('UPDATE repositories SET name=?,credential=?,interval_seconds=?,enabled=?,next_sync=? WHERE id=?',
-                       (name.strip(), credential, interval_seconds, enabled,
+            repo = self.get(db, rid)
+            target = repo['branch'] if branch is None else branch_name(branch)
+            changed = target != repo['branch']
+            if changed and db.execute("SELECT 1 FROM repository_jobs WHERE repository_id=? AND status='running'", (rid,)).fetchone():
+                raise KnowledgeError('repository_busy', '仓库正在同步，请完成后再切换分支', 409)
+            db.execute('UPDATE repositories SET name=?,credential=?,interval_seconds=?,enabled=?,branch=?,next_sync=? WHERE id=?',
+                       (name.strip(), credential, interval_seconds, enabled, target,
                         time.time()+interval_seconds if enabled and interval_seconds else None, rid))
+            if changed:
+                db.execute('UPDATE repositories SET last_error=NULL WHERE id=?', (rid,))
+                job = self._queue(db, rid, 'branch_change')
+                db.execute("UPDATE repository_jobs SET trigger='branch_change' WHERE id=?", (job['id'],))
             self.store.event(db, {'kind':'admin','action':'repository_settings_update','path':rid,'status':'ok'})
             return self.get(db, rid)
+
+    def remove(self, rid):
+        """Remove registration only; published files and the private cache remain."""
+        with self.store.transaction(write=True) as db:
+            self.get(db, rid)
+            if db.execute("SELECT 1 FROM repository_jobs WHERE repository_id=? AND status='running'", (rid,)).fetchone():
+                raise KnowledgeError('repository_busy', '仓库正在同步，请完成后再移除', 409)
+            if db.execute('SELECT 1 FROM repository_libraries WHERE repository_id=?', (rid,)).fetchone():
+                raise KnowledgeError('repository_in_use', '请先解除所有知识库关联，再移除仓库；知识文件会保留', 409)
+            for row in db.execute('SELECT workspace_json FROM library_templates WHERE workspace_json IS NOT NULL'):
+                if json.loads(row['workspace_json']).get('repository_id') == rid:
+                    raise KnowledgeError('repository_in_use', '请先调整引用此仓库的插件工作范围，再移除仓库', 409)
+            db.execute('DELETE FROM repository_jobs WHERE repository_id=?', (rid,))
+            db.execute('DELETE FROM repositories WHERE id=?', (rid,))
+            self.store.event(db, {'kind':'admin','action':'repository_remove','path':rid,'status':'ok'})
+        return {'status': 'ok'}
 
     def enqueue(self, rid):
         with self.store.transaction(write=True) as db:
