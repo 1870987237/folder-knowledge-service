@@ -15,6 +15,7 @@ import time
 import uuid
 
 from .core import KnowledgeError, KnowledgeFolder
+from .filesystem import native_path
 from .storage import SqliteStore
 
 
@@ -49,7 +50,7 @@ class Registry:
 
     def folder_for_path(self, path: str, name: str = 'knowledge') -> KnowledgeFolder:
         candidate = self.pool._path(path)
-        if not stat.S_ISDIR(candidate.stat().st_mode):
+        if not stat.S_ISDIR(native_path(candidate).stat().st_mode):
             raise KnowledgeError('not_directory', 'A library must point to an existing directory')
         folder = KnowledgeFolder(candidate, name)
         if not folder.root.is_relative_to(self.pool.root):
@@ -61,7 +62,7 @@ class Registry:
         try:
             folder = self.folder_for_path(row['path'], row['name'])
             # Opening and advancing scandir exercises real directory permissions.
-            with os.scandir(folder.root) as entries:
+            with os.scandir(native_path(folder.root)) as entries:
                 next(entries, None)
             if os.name != 'nt' and not os.access(folder.root, os.X_OK):
                 raise PermissionError()

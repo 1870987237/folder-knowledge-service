@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import errno
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -17,12 +19,26 @@ import uuid
 
 from .core import is_link
 from .errors import KnowledgeError
+from .filesystem import native_path, resolved_path
 from .management import Registry
 from .repositories import RepositoryCatalog, branch_name, identifier, remote_url, timestamp
 
 
 class SyncError(Exception):
     pass
+
+
+def sync_error(exc):
+    if isinstance(exc, SyncError):
+        return str(exc)
+    if isinstance(exc, OSError):
+        if getattr(exc, 'winerror', None) == 206 or exc.errno == errno.ENAMETOOLONG:
+            return 'path_too_long: 仓库文件路径超过文件系统限制，请缩短知识根目录或仓库内路径'
+        if exc.errno == errno.ENOSPC:
+            return 'disk_full: 发布磁盘空间不足'
+        if isinstance(exc, PermissionError):
+            return 'filesystem_permission: 无法写入发布目录，请检查同步进程的目录权限'
+    return 'sync_failed: 同步程序发生异常，请管理员检查 Git worker 日志'
 
 
 @contextmanager
@@ -100,7 +116,17 @@ class GitWorker:
             self.sync(job, repo)
         except Exception as exc:
             # No raw Git stderr, URL credentials, absolute paths or traceback in the DB/UI.
-            error = str(exc) if isinstance(exc, SyncError) else 'sync_failed: 检查文件权限、磁盘空间和同步进程配置'
+            error = sync_error(exc)
+            if not isinstance(exc, SyncError):
+                # Log code locations, never exception text/locals (may contain credentials).
+                frames = []
+                frame = exc.__traceback__
+                while frame:
+                    frames.append(f'{Path(frame.tb_frame.f_code.co_filename).name}:{frame.tb_lineno}')
+                    frame = frame.tb_next
+                logging.getLogger(__name__).error('Git sync %s failed: %s errno=%s winerror=%s at %s',
+                    job['id'], type(exc).__name__, getattr(exc, 'errno', None),
+                    getattr(exc, 'winerror', None), ' -> '.join(frames))
             with self.store.transaction(write=True) as db:
                 latest = self.catalog.get(db, repo['id'])
                 db.execute("UPDATE repository_jobs SET status='failed',finished_at=?,error=? WHERE id=?", (timestamp(), error, job['id']))
@@ -249,10 +275,10 @@ class GitWorker:
         current = root
         for part in relative.split('/'):
             current = current/part
-            if current.exists() and is_link(current.lstat()):
+            if native_path(current).exists() and is_link(native_path(current).lstat()):
                 raise SyncError('unsafe_release_path: 发布目录不能是链接')
-            current.mkdir(exist_ok=True)
-            if not current.resolve().is_relative_to(root):
+            native_path(current).mkdir(exist_ok=True)
+            if not resolved_path(current).is_relative_to(root):
                 raise SyncError('unsafe_release_path: 发布目录超出知识根目录')
         total = count = 0
         with tarfile.open(fileobj=archive, mode='r:') as tar:
@@ -265,7 +291,7 @@ class GitWorker:
                 total += entry.size
                 if count>50000 or total>self.max_bytes:
                     raise SyncError('snapshot_too_large: 快照超过 50000 项或大小限制')
-                target = current.joinpath(*parts)
+                target = native_path(current.joinpath(*parts))
                 if entry.isdir():
                     target.mkdir(parents=True,exist_ok=True)
                 else:
@@ -313,6 +339,9 @@ class GitWorker:
             _, tree = self.git(['--git-dir='+str(cache),'ls-tree','-r',commit])
             if any(line.startswith(b'160000 ') for line in tree.splitlines()):
                 raise SyncError('submodule_unsupported: 暂不支持包含 Git 子模块的知识仓库')
+            links = sum(line.startswith(b'120000 ') for line in tree.splitlines())
+            if links:
+                raise SyncError(f'symlink_unsupported: 仓库包含 {links} 个符号链接，当前不支持发布；请将链接替换为普通文件后重试')
             with tempfile.TemporaryFile(dir=self.private) as archive:
                 self.git(['--git-dir='+str(cache),'archive','--format=tar',commit],destination=archive)
                 archive.seek(0)

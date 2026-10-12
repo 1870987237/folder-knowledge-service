@@ -1,4 +1,5 @@
 import io
+import errno
 import json
 from pathlib import Path
 import subprocess
@@ -8,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from folder_kb.errors import KnowledgeError
-from folder_kb.git_worker import GitWorker, SyncError, worker_lock
+from folder_kb.git_worker import GitWorker, SyncError, worker_lock, sync_error
 from folder_kb.management import Registry
 from folder_kb.repositories import RepositoryCatalog, remote_url
 from folder_kb.server import Settings, create_app
@@ -16,6 +17,69 @@ from folder_kb.server import Settings, create_app
 
 URL = 'https://git.example.test/team/docs.git'
 ADMIN = 'git-test-admin-token-with-sufficient-length'
+
+
+def test_long_git_paths_can_be_published_listed_and_read(tmp_path):
+    root = tmp_path/'knowledge'
+    root.mkdir()
+    registry = Registry(str(root), str(tmp_path/'state'))
+    worker = GitWorker(registry)
+    relative = '/'.join(['folder' * 5] * 9) + '/guide.md'
+    content = b'long path evidence\n'
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode='w') as tar:
+        entry = tarfile.TarInfo(relative)
+        entry.size = len(content)
+        tar.addfile(entry, io.BytesIO(content))
+    archive.seek(0)
+    release = worker.make_release('test-long-path', 'a'*40, archive)
+    folder = registry.folder_for_path(release)
+    assert len(str(folder.root/relative)) > 300
+    assert folder.read_file(relative)['lines'][0]['text'] == 'long path evidence'
+    assert folder.glob('**/*.md')['files'][0]['path'] == relative
+    nested = registry.folder_for_path(release + '/' + relative.rsplit('/', 1)[0])
+    assert nested.list_directory()['entries'][0]['path'] == 'guide.md'
+    assert nested.read_file('guide.md')['lines'][0]['text'] == 'long path evidence'
+    with pytest.raises(KnowledgeError):
+        nested.read_file('../guide.md')
+
+
+def test_sync_errors_are_actionable_without_exposing_paths_or_secrets():
+    for exc, code in [(OSError(errno.ENOSPC, 'secret'), 'disk_full'),
+                      (OSError(errno.ENAMETOOLONG, 'secret'), 'path_too_long'),
+                      (PermissionError('secret'), 'filesystem_permission'),
+                      (RuntimeError('secret'), 'sync_failed')]:
+        assert sync_error(exc).startswith(code + ':')
+        assert 'secret' not in sync_error(exc)
+
+
+def test_unexpected_sync_failure_logs_only_code_locations(setup, monkeypatch, caplog):
+    r, c, w, source = setup
+    c.create('Docs', URL, 'main')
+    def fail(*args):
+        raise RuntimeError('secret-token-in-path')
+    monkeypatch.setattr(w, 'sync', fail)
+    assert w.tick()
+    assert 'RuntimeError' in caplog.text
+    assert 'test_repositories.py:' in caplog.text
+    assert 'secret-token-in-path' not in caplog.text
+    assert 'secret-token-in-path' not in c.list()['repositories'][0]['last_error']
+
+
+def test_symlink_is_reported_before_archive_extraction(setup):
+    r, c, w, source = setup
+    # Add a Git symlink without requiring Windows symlink privileges.
+    blob = subprocess.check_output(['git', '-C', str(source), 'hash-object', '-w', '--stdin'],
+                                   input=b'a/guide.md').decode().strip()
+    git(source, 'update-index', '--add', '--cacheinfo', '120000', blob, 'alias.md')
+    git(source, 'commit', '-m', 'add symlink')
+    c.create('Docs', URL, 'main')
+    assert w.tick()
+    row = c.list()['repositories'][0]
+    assert row['last_error'].startswith('symlink_unsupported:')
+    assert '1 ' in row['last_error']
+    assert row['current_commit'] is None
+    assert not (r.pool.root/'git-releases').exists()
 
 
 def git(path, *args):
