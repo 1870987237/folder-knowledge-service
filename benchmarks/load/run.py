@@ -106,7 +106,7 @@ def background_jobs(suite, number, file_count, file_bytes):
     return jobs
 
 
-async def clients(suite, keys, lid, profile, requests_per_client, timeout):
+async def clients(suite, keys, lid, profile, requests_per_client, timeout, on_start=None):
     ready=asyncio.Event()
     async def client_loop(index,key):
         rows=[]
@@ -134,9 +134,15 @@ async def clients(suite, keys, lid, profile, requests_per_client, timeout):
         return rows
     tasks=[asyncio.create_task(client_loop(i,k)) for i,k in enumerate(keys)]
     await asyncio.sleep(0)
+    try:
+        context=await on_start() if on_start else None
+    except BaseException:
+        for task in tasks:task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
+        raise
     start=time.perf_counter(); ready.set()
     groups=await asyncio.gather(*tasks)
-    return [r for group in groups for r in group],time.perf_counter()-start
+    return [r for group in groups for r in group],time.perf_counter()-start,context
 
 
 def render(data):
@@ -183,7 +189,8 @@ async def run(args):
                             'search':profile=='search','write_policy':'direct' if profile=='mixed' else 'readonly'}]))
                         keys.append(k)
                     jobs=background_jobs(suite,3,args.files,args.file_bytes) if profile=='background' else []
-                    if jobs:
+                    async def begin_background():
+                        nonlocal worker
                         worker=subprocess.Popen([sys.executable,'-m','folder_kb.template_worker'],env=env,stdin=subprocess.DEVNULL,
                             stdout=worker_log,stderr=worker_log,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
                         # Startup time must not silently turn this into an idle
@@ -194,7 +201,8 @@ async def run(args):
                             if 'running' in start_states or all(s in ('candidate_ready','failed') for s in start_states):break
                             await asyncio.sleep(.05)
                         start_states=[updates.get(j)['status'] for j in jobs]
-                    rows,elapsed=await clients(suite,keys,lid,profile,args.requests,args.timeout)
+                        return start_states
+                    rows,elapsed,start_states=await clients(suite,keys,lid,profile,args.requests,args.timeout,begin_background if jobs else None)
                     row={'profile':profile,'clients':number,'summary':summarize(rows,elapsed),'requests':rows}
                     if profile=='mixed':
                         published=sum(r['success'] and r['operation']=='write' for r in rows)
