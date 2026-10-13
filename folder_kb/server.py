@@ -457,6 +457,7 @@ class RepositorySettings(BaseModel):
     credential: str = Field(default='', max_length=64)
     interval_seconds: int = Field(default=0, ge=0, le=2592000)
     enabled: bool = True
+    branch: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class RepositoryBinding(BaseModel):
@@ -468,6 +469,8 @@ class RepositoryBinding(BaseModel):
 
 
 def add_admin_routes(app: FastAPI, registry: Registry):
+    from .workers import add_worker_routes
+    add_worker_routes(app, registry)
     from .governance import add_governance_routes
     add_governance_routes(app, registry)
     from .collaboration import add_collaboration_routes
@@ -483,6 +486,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     add_retrieval_routes(app, registry)
     from .updates import add_update_routes
     add_update_routes(app, registry)
+    from .resource_access import add_resource_routes
+    from .library_updates import add_library_update_routes
+    add_resource_routes(app, registry)
+    add_library_update_routes(app, registry)
     repositories = RepositoryCatalog(registry)
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')
@@ -514,6 +521,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     @app.put('/admin/api/repositories/{repository_id}')
     def repository_update(repository_id: str, value: RepositorySettings):
         return repositories.update(repository_id, **value.model_dump())
+
+    @app.delete('/admin/api/repositories/{repository_id}')
+    def repository_remove(repository_id: str):
+        return repositories.remove(repository_id)
 
     @app.post('/admin/api/repositories/{repository_id}/sync', status_code=202)
     def repository_sync(repository_id: str):

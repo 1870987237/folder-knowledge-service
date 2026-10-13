@@ -171,7 +171,7 @@ class Capabilities:
         from .collaboration import Collaboration
         service = Collaboration(self.registry)
         with self.store.transaction(write=value is not None) as db:
-            row, _ = service.check(db, actor or {'platform': True}, lid, 4)
+            row, _ = service.check_configuration(db, actor or {'platform': True}, lid)
             eligible = service.editable(db, lid, row['path'])
             if value is not None:
                 if value.direct_enabled and not eligible:

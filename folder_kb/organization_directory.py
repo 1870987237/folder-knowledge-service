@@ -189,7 +189,7 @@ class Directory:
     def grants(self, actor, lid, uid=None, value=None):
         from .governance import metadata
         with self.store.transaction(write=value is not None) as db:
-            self.collab.check(db, actor, lid, 4)
+            self.collab.check_configuration(db, actor, lid)
             scope = db.execute('SELECT organization_id FROM library_ownership WHERE library_id=?', (lid,)).fetchone()
             if not scope or not scope[0]:
                 fail('organization_library_required', '仅组织库支持部门和用户组授权', 409)

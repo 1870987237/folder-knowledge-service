@@ -113,7 +113,7 @@ class Governance:
     def sharing(self, lid, actor, value=None):
         from .collaboration import Collaboration
         with self.store.transaction(write=value is not None) as db:
-            Collaboration(self.registry).check(db, actor, lid, 4)
+            Collaboration(self.registry).check_configuration(db, actor, lid)
             state = self.state(db, lid)
             if not state['organization_id']:
                 raise KnowledgeError('organization_library_required', '仅组织库支持组织内共享', 409)

@@ -12,7 +12,7 @@ import sqlite3
 import time
 import uuid
 
-from fastapi import Query
+from fastapi import Query, Request
 
 from .core import matches
 from .errors import KnowledgeError
@@ -53,6 +53,8 @@ class Retrieval:
             binding = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()
             if not binding:
                 raise KnowledgeError('index_not_configured', 'Bind an indexing plugin first', 409)
+            from .resource_access import check_binding_access
+            check_binding_access(db, library_id, binding)
             installed = self.catalog.require(db, binding['template_id'], binding['template_version'])
             definition = json.loads(installed['metadata_json'])
             index = (definition.get('plugin') or {}).get('indexing')
@@ -287,4 +289,25 @@ def add_retrieval_routes(app, registry):
 
     @app.get('/admin/api/libraries/{library_id}/search')
     def search(library_id: str, query: str = Query(min_length=1, max_length=200), limit: int = Query(default=5, ge=1, le=10), path: str = '.'):
+        return service.search(library_id, query, limit, path)
+
+    def authorize_configuration(request, library_id):
+        from .collaboration import Collaboration
+        with registry.store.transaction() as db:
+            Collaboration(registry).check_configuration(db, request.state.human, library_id)
+
+    @app.get('/portal/api/libraries/{library_id}/index')
+    def portal_state(library_id: str, request: Request):
+        authorize_configuration(request, library_id)
+        return service.state(library_id)
+
+    @app.post('/portal/api/libraries/{library_id}/index/build')
+    def portal_build(library_id: str, request: Request):
+        authorize_configuration(request, library_id)
+        return service.build(library_id)
+
+    @app.get('/portal/api/libraries/{library_id}/index/search')
+    def portal_search(library_id: str, request: Request, query: str = Query(min_length=1, max_length=200),
+                      limit: int = Query(default=5, ge=1, le=10), path: str = '.'):
+        authorize_configuration(request, library_id)
         return service.search(library_id, query, limit, path)

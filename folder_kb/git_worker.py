@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import json
+import errno
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -15,8 +17,10 @@ import tempfile
 import time
 import uuid
 
+from .worker_runtime import worker_lock, worker_heartbeat
 from .core import is_link
 from .errors import KnowledgeError
+from .filesystem import native_path, resolved_path
 from .management import Registry
 from .repositories import RepositoryCatalog, branch_name, identifier, remote_url, timestamp
 
@@ -25,32 +29,19 @@ class SyncError(Exception):
     pass
 
 
-@contextmanager
-def worker_lock(directory, filename='git-worker.lock'):
-    """OS lock dies with the process; no second worker can recover live jobs."""
-    with (directory / filename).open('a+b') as handle:
-        handle.seek(0)
-        if os.name == 'nt':
-            import msvcrt
-            if os.fstat(handle.fileno()).st_size == 0:
-                handle.write(b'0'); handle.flush()
-            handle.seek(0)
-            try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
-                raise SyncError('已有 Git 同步进程正在运行') from None
-        else:
-            import fcntl
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError:
-                raise SyncError('已有 Git 同步进程正在运行') from None
-        try:
-            yield
-        finally:
-            if os.name == 'nt':
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+def sync_error(exc):
+    if isinstance(exc, SyncError):
+        return str(exc)
+    if isinstance(exc, OSError):
+        if getattr(exc, 'winerror', None) == 206 or exc.errno == errno.ENAMETOOLONG:
+            return 'path_too_long: 仓库文件路径超过文件系统限制，请缩短知识根目录或仓库内路径'
+        if exc.errno == errno.ENOSPC:
+            return 'disk_full: 发布磁盘空间不足'
+        if isinstance(exc, PermissionError):
+            return 'filesystem_permission: 无法写入发布目录，请检查同步进程的目录权限'
+    return 'sync_failed: 同步程序发生异常，请管理员检查 Git worker 日志'
+
+
 
 
 class GitWorker:
@@ -100,7 +91,17 @@ class GitWorker:
             self.sync(job, repo)
         except Exception as exc:
             # No raw Git stderr, URL credentials, absolute paths or traceback in the DB/UI.
-            error = str(exc) if isinstance(exc, SyncError) else 'sync_failed: 检查文件权限、磁盘空间和同步进程配置'
+            error = sync_error(exc)
+            if not isinstance(exc, SyncError):
+                # Log code locations, never exception text/locals (may contain credentials).
+                frames = []
+                frame = exc.__traceback__
+                while frame:
+                    frames.append(f'{Path(frame.tb_frame.f_code.co_filename).name}:{frame.tb_lineno}')
+                    frame = frame.tb_next
+                logging.getLogger(__name__).error('Git sync %s failed: %s errno=%s winerror=%s at %s',
+                    job['id'], type(exc).__name__, getattr(exc, 'errno', None),
+                    getattr(exc, 'winerror', None), ' -> '.join(frames))
             with self.store.transaction(write=True) as db:
                 latest = self.catalog.get(db, repo['id'])
                 db.execute("UPDATE repository_jobs SET status='failed',finished_at=?,error=? WHERE id=?", (timestamp(), error, job['id']))
@@ -249,10 +250,10 @@ class GitWorker:
         current = root
         for part in relative.split('/'):
             current = current/part
-            if current.exists() and is_link(current.lstat()):
+            if native_path(current).exists() and is_link(native_path(current).lstat()):
                 raise SyncError('unsafe_release_path: 发布目录不能是链接')
-            current.mkdir(exist_ok=True)
-            if not current.resolve().is_relative_to(root):
+            native_path(current).mkdir(exist_ok=True)
+            if not resolved_path(current).is_relative_to(root):
                 raise SyncError('unsafe_release_path: 发布目录超出知识根目录')
         total = count = 0
         with tarfile.open(fileobj=archive, mode='r:') as tar:
@@ -265,7 +266,7 @@ class GitWorker:
                 total += entry.size
                 if count>50000 or total>self.max_bytes:
                     raise SyncError('snapshot_too_large: 快照超过 50000 项或大小限制')
-                target = current.joinpath(*parts)
+                target = native_path(current.joinpath(*parts))
                 if entry.isdir():
                     target.mkdir(parents=True,exist_ok=True)
                 else:
@@ -300,7 +301,10 @@ class GitWorker:
         commit = raw.decode().strip()
         if not re.fullmatch('[0-9a-f]{40,64}',commit):
             raise SyncError('invalid_commit: 无法识别远端提交')
-        for previous in {repo['current_commit'], imported_commit}-{None}:
+        # A deliberate branch switch may select an unrelated history. Ordinary
+        # updates on the published branch must still reject force-pushes.
+        previous_commit = repo['current_commit'] if repo['published_branch'] == repo['branch'] else None
+        for previous in {previous_commit, imported_commit}-{None}:
             code,_ = self.git(['--git-dir='+str(cache),'merge-base','--is-ancestor',previous,commit],allowed=(0,1,128))
             if code:
                 raise SyncError('history_diverged: 本地提交未合入远端或分支历史已重写，保留旧版本')
@@ -310,6 +314,9 @@ class GitWorker:
             _, tree = self.git(['--git-dir='+str(cache),'ls-tree','-r',commit])
             if any(line.startswith(b'160000 ') for line in tree.splitlines()):
                 raise SyncError('submodule_unsupported: 暂不支持包含 Git 子模块的知识仓库')
+            links = sum(line.startswith(b'120000 ') for line in tree.splitlines())
+            if links:
+                raise SyncError(f'symlink_unsupported: 仓库包含 {links} 个符号链接，当前不支持发布；请将链接替换为普通文件后重试')
             with tempfile.TemporaryFile(dir=self.private) as archive:
                 self.git(['--git-dir='+str(cache),'archive','--format=tar',commit],destination=archive)
                 archive.seek(0)
@@ -330,8 +337,8 @@ class GitWorker:
                 except KnowledgeError:
                     raise SyncError('library_path_missing: 新版本缺少已关联的知识目录，保留旧版本') from None
                 db.execute('UPDATE libraries SET path=?,updated_at=? WHERE id=?',(path,timestamp(),binding['library_id']))
-            db.execute('UPDATE repositories SET current_commit=?,release_path=?,last_sync=?,next_sync=?,last_error=NULL WHERE id=?',
-                       (commit,release,timestamp(),self.next_sync(latest),repo['id']))
+            db.execute('UPDATE repositories SET current_commit=?,release_path=?,published_branch=?,last_sync=?,next_sync=?,last_error=NULL WHERE id=?',
+                       (commit,release,repo['branch'],timestamp(),self.next_sync(latest),repo['id']))
             db.execute("UPDATE repository_jobs SET status=?,after_commit=?,finished_at=? WHERE id=?",('unchanged' if unchanged else 'succeeded',commit,timestamp(),job['id']))
             self.store.event(db,{'kind':'admin','action':'repository_sync_published','path':repo['id'],'status':'ok'})
 
@@ -344,15 +351,12 @@ def main():
     def stop(signum, frame):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM,stop)
-    with worker_lock(registry.directory):
+    with worker_lock(registry.directory), worker_heartbeat(registry.store, 'git'):
         worker.recover()
-        try:
-            while True:
-                if not worker.tick():
-                    time.sleep(2)
-        finally:
-            with registry.store.transaction(write=True) as db:
-                db.execute("DELETE FROM metadata WHERE name='git_worker_heartbeat'")
+        while True:
+            if not worker.tick():
+                time.sleep(2)
+
 
 
 if __name__ == '__main__':

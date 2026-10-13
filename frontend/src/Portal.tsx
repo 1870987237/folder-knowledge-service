@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Modal, Popover, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
+import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { NavigationSider, NavigationMenu } from './Navigation';
 import { UnitGrants } from './pages/Directory';
 import { SharingSettings } from './pages/Governance';
-import { KeyPolicy, LibraryAgentSettings } from './KeyPolicy';
+import { KeyPolicy } from './KeyPolicy';
+import { LibraryInbox, LibraryUpdateJobs, NewLibraryDialog } from './LibraryUpdates';
+import { LibrarySettings } from './LibrarySettings';
 import { Api, errorMessage, query } from './api';
 import { PageHeader, date } from './components';
 import { Organizations, type Identity } from './pages/People';
@@ -15,7 +17,7 @@ import { FileExplorer } from './FileExplorer';
 import { MarkdownEditor } from './MarkdownEditor';
 import type { DirectoryPage } from './types';
 
-type Library = { id: string; name: string; role: number; editable: boolean; updated_at?: string; organization_id?: string; owner_id?: string };
+type Library = { id: string; name: string; role: number; editable: boolean; can_configure: boolean; updated_at?: string; organization_id?: string; owner_id?: string };
 type Doc = { path: string; content: string; version: string };
 type Draft = { id: string; path: string; author_id: string; author: string; status: string; revision: number; updated_at: string; content: string; original: string; diff: string };
 const statuses: Record<string, string> = { draft: '草稿', submitted: '待审核', published: '已发布', rejected: '已退回' };
@@ -50,7 +52,7 @@ export function PortalApp() {
 function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; identity: Identity; setIdentity: (v: Identity) => void; logout: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const [libraries, setLibraries] = useState<Library[]>([]), [page, setPage] = useState('libraries'), [library, setLibrary] = useState<Library>();
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [create, setCreate] = useState(false); const [form] = Form.useForm(); const { modal } = App.useApp(); const [dirty, setDirty] = useState(false);
+  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [create, setCreate] = useState(false); const { modal } = App.useApp(); const [dirty, setDirty] = useState(false);
   function navigate(fn: () => void) { if (dirty) modal.confirm({ title: '放弃未保存的修改？', onOk: fn }); else fn(); }
   async function load() { setBusy(true); setError(''); try { const [ls, me] = await Promise.all([api.request<Library[]>('/libraries'), api.request<Identity>('/me')]); setLibraries(ls); setIdentity(me); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
   useEffect(() => { void load(); }, [api]);
@@ -58,14 +60,14 @@ function PortalWorkspace({ api, identity, setIdentity, logout }: { api: Api; ide
     <NavigationMenu selectedKeys={[page]} onClick={({ key }) => navigate(() => { setPage(key); setLibrary(undefined); void load(); })} items={[{ key: 'libraries', label: '知识库', icon: <FolderOutlined /> }, { key: 'organizations', label: '组织管理', icon: <TeamOutlined /> }, { key: 'keys', label: '我的 Agent Key', icon: <KeyOutlined /> }]} />
     <div className={`sidebar-footer${collapsed ? " rail-centered" : ""}`}>{!collapsed && <Typography.Text ellipsis>{identity.username}</Typography.Text>}<Tooltip title="退出"><Button type="text" aria-label="退出" icon={<LogoutOutlined />} onClick={() => navigate(() => { void api.request('/logout', 'POST').then(logout).catch(e => setError(errorMessage(e))); })}>{!collapsed && '退出'}</Button></Tooltip></div>
   </NavigationSider><Layout.Content className="app-content"><div className={`page-container${page === "organizations" ? " full-height" : ""}`}>{error && <Alert type="error" title={error} action={<Button onClick={load}>重试</Button>} />}
-    {page === 'libraries' && (library ? <KnowledgeEditor key={library.id} api={api} identity={identity} library={library} onDirtyChange={setDirty} back={() => { setLibrary(undefined); void load(); }} /> : <><div className="workspace-topbar"><span className="workspace-location">知识库</span><div className="workspace-actions"><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} onClick={load} loading={busy} /></Tooltip><Button size="small" type="primary" onClick={() => { form.resetFields(); setCreate(true); }}>创建知识库</Button></div></div><FileExplorer loading={busy} items={libraries.map(r => ({ id: r.id, name: r.name, folder: true, modified: r.updated_at, kind: r.owner_id ? '个人知识库' : '组织知识库' }))} onOpen={id => setLibrary(libraries.find(r => r.id === id))} /></>)}
+    {page === 'libraries' && (library ? <KnowledgeEditor key={library.id} api={api} identity={identity} library={library} onChanged={name => { void api.request<Library[]>('/libraries').then(ls => { setLibraries(ls); setLibrary(ls.find(l => l.id === library.id)); }).catch(e => setError(errorMessage(e))); setLibrary(v => v ? { ...v, name } : v); setLibraries(ls => ls.map(v => v.id === library.id ? { ...v, name } : v)); }} onDirtyChange={setDirty} back={() => { setLibrary(undefined); void load(); }} /> : <><div className="workspace-topbar"><span className="workspace-location">知识库</span><div className="workspace-actions"><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} onClick={load} loading={busy} /></Tooltip><Button size="small" type="primary" onClick={() => setCreate(true)}>创建知识库</Button></div></div><FileExplorer loading={busy} items={libraries.map(r => ({ id: r.id, name: r.name, folder: true, modified: r.updated_at, kind: r.owner_id ? '个人知识库' : '组织知识库' }))} onOpen={id => setLibrary(libraries.find(r => r.id === id))} /></>)}
     {page === 'organizations' && <div className="organization-workspace"><div className="workspace-topbar"><span className="workspace-location">组织管理</span></div><Organizations api={api} identity={identity} reload={load} /></div>}
     {page === 'keys' && <UserKeys api={api} libraries={libraries} />}
-    <Modal title="创建知识库" open={create} footer={null} onCancel={() => setCreate(false)}><Form form={form} layout="vertical" initialValues={{ organization_id: '' }} onFinish={async v => { setBusy(true); setError(''); try { await api.request('/libraries', 'POST', { ...v, organization_id: v.organization_id || null }); setCreate(false); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }}><Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true }]}><Input maxLength={80} /></Form.Item><Form.Item name="organization_id" label="归属"><Select options={[{ value: '', label: '个人私有' }, ...identity.organizations.filter(o => o.role === 'admin').map(o => ({ value: o.id, label: o.name }))]} /></Form.Item>{error && <Alert type="error" title={error} />}<Button type="primary" htmlType="submit" loading={busy}>创建</Button></Form></Modal>
+    <NewLibraryDialog api={api} organizations={identity.organizations} open={create} onClose={() => setCreate(false)} onCreated={async () => { setCreate(false); await load(); }} />
   </div></Layout.Content></Layout>;
 }
 
-function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api: Api; identity: Identity; library: Library; back: () => void; onDirtyChange: (dirty: boolean) => void }) {
+function KnowledgeEditor({ api, identity, library, back, onChanged, onDirtyChange }: { api: Api; identity: Identity; library: Library; back: () => void; onChanged: (name: string) => void; onDirtyChange: (dirty: boolean) => void }) {
   const { modal, message } = App.useApp();
   const [agentSettings, setAgentSettings] = useState(false);
   const [editorTools, setEditorTools] = useState<HTMLSpanElement | null>(null), [searchOpen, setSearchOpen] = useState(false);
@@ -115,21 +117,41 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
   function openEntry(id: string) { const entry = directory?.entries.find(r => r.path === id); if (entry?.type === 'directory') void browse(id); else void open(id); }
   function switchView(t: string) { navigate(() => { setText(doc?.content || ''); setEditorRevision(v => v + 1); setTab(t); if (t === 'drafts') void loadDrafts(); if (t === 'documents' && !directory) void browse(path); }); }
   return <div className="workspace-browser">
-    <Modal title="Agent 接入" open={agentSettings} footer={null} onCancel={() => setAgentSettings(false)} destroyOnHidden><LibraryAgentSettings api={api} id={library.id} /></Modal>
+    <Modal centered title="知识库设置" open={agentSettings} footer={null} onCancel={() => setAgentSettings(false)} destroyOnHidden><LibrarySettings api={api} library={library} onChanged={onChanged} /></Modal>
+    <Modal title="搜索文档" open={searchOpen} footer={null} onCancel={() => setSearchOpen(false)} destroyOnHidden>
+      <Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear enterButton="搜索" onSearch={q => { setSearchOpen(false); void find(q); }} />
+    </Modal>
     <div className="workspace-topbar">
       <Tooltip title={doc && tab === 'documents' ? '返回列表' : '上一级'}><Button size="small" type="text" aria-label={doc && tab === 'documents' ? '返回列表' : '上一级'} icon={<ArrowLeftOutlined />} disabled={busy} onClick={() => navigate(() => {
         if (tab !== 'documents') switchView('documents'); else if (doc) { setDoc(undefined); } else if (path === '.') back(); else void browse(path.split('/').slice(0, -1).join('/') || '.');
       })} /></Tooltip>
       <Breadcrumb className="explorer-breadcrumb" items={crumbs} />
       <div className="workspace-actions">
-        {library.role >= 4 && <Button size="small" type="text" onClick={() => setAgentSettings(true)}>Agent 接入</Button>}
-        {library.role >= 4 && library.organization_id && <Button size="small" type="text" onClick={() => switchView('members')}>成员权限</Button>}
         <span ref={setEditorTools} className="workspace-editor-tools" />
-        {tab === 'documents' && !doc && <><Popover trigger="click" open={searchOpen} onOpenChange={setSearchOpen} content={<Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear onSearch={q => { setSearchOpen(false); void find(q); }} />}><Button size="small" type="text" aria-label="搜索" icon={<SearchOutlined />} /></Popover><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} disabled={busy} onClick={() => { void browse(path); }} /></Tooltip>{canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}</>}
+        {tab === 'documents' && !doc && canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}
         {tab === 'documents' && doc && canEdit && <>{text !== doc.content && <Button size="small" disabled={busy} onClick={() => navigate(() => { setText(doc.content); setEditorRevision(v => v + 1); })}>撤销修改</Button>}<Button size="small" type="primary" loading={busy} disabled={text === doc.content} onClick={async () => {
             setBusy(true); setError(''); try { const d = await api.request<{ id: string }>(base + '/drafts', 'POST', { path: doc.path, content: text, expected_version: doc.version }); setText(doc.content); setEditorRevision(v => v + 1); setTab('drafts'); await loadDrafts(); await openDraft(d.id); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
           }}>保存为草稿</Button></>}
-        <Dropdown trigger={['click']} menu={{ selectedKeys: [tab], onClick: ({ key }) => switchView(key), items: [{ key: 'documents', label: '文档' }, { key: 'drafts', label: '草稿与版本' }, ...(library.role >= 4 && library.organization_id ? [{ key: 'members', label: '成员权限' }] : []), { type: 'divider' }, { key: 'role', label: `当前权限：${roles[library.role]}`, disabled: true }] }}><Button size="small" type="text" className="workspace-view-switch" aria-label="切换视图">{{ documents: '文档', drafts: '草稿与版本', members: '成员权限' }[tab]} <DownOutlined /></Button></Dropdown>
+        <Dropdown trigger={['click']} menu={{ selectedKeys: [tab], onClick: ({ key }) => {
+          if (key === 'settings') navigate(() => setAgentSettings(true));
+          else if (key === 'search') setSearchOpen(true);
+          else if (key === 'refresh') void browse(path);
+          else switchView(key);
+        }, items: [
+          { key: 'documents', label: '文档' }, ...(library.editable ? [{ key: 'drafts', label: '草稿与版本' }] : []),
+          ...(library.role >= 2 ? [{ key: 'inbox', label: '增量收件箱' }] : []),
+          ...(library.role >= 3 ? [{ key: 'updates', label: '更新任务' }] : []),
+          ...(tab === 'documents' && !doc ? [
+            { type: 'divider' as const },
+            { key: 'search', label: '搜索', icon: <SearchOutlined />, disabled: busy },
+            { key: 'refresh', label: '刷新', icon: <ReloadOutlined />, disabled: busy },
+          ] : []),
+          ...(library.can_configure ? [
+            { type: 'divider' as const }, { key: 'settings', label: '知识库设置' },
+            ...(library.organization_id ? [{ key: 'members', label: '成员权限' }] : []),
+          ] : []),
+          { type: 'divider' }, { key: 'role', label: `当前权限：${roles[library.role]}`, disabled: true },
+        ] }}><Button size="small" type="text" className="workspace-view-switch" aria-label="视图与操作">{{ documents: '文档', drafts: '草稿与版本', members: '成员权限', inbox: '增量收件箱', updates: '更新任务' }[tab]} <DownOutlined /></Button></Dropdown>
       </div>
     </div>
     {error && <Alert className="block-gap" type="error" title={error} closable onClose={() => setError('')} />}
@@ -144,7 +166,9 @@ function KnowledgeEditor({ api, identity, library, back, onDirtyChange }: { api:
         </>}
       </> },
       { key: 'drafts', label: '草稿与版本', children: <Table<Draft> size="small" rowKey="id" loading={busy} pagination={{ hideOnSinglePage: true }} dataSource={drafts} columns={[{ title: '文档', dataIndex: 'path' }, { title: '作者', dataIndex: 'author' }, { title: '状态', render: (_, r) => <Tag>{statuses[r.status]}</Tag> }, { title: '更新时间', render: (_, r) => date(r.updated_at) }, { title: '操作', render: (_, r) => <Button type="link" onClick={() => { void openDraft(r.id); }}>查看</Button> }]} /> },
-      ...(library.role >= 4 && library.organization_id ? [{ key: 'members', label: '成员权限', children: <LibraryMembers api={api} library={library} /> }] : []),
+      ...(library.role >= 2 ? [{ key: 'inbox', label: '增量收件箱', children: <LibraryInbox api={api} libraryId={library.id} /> }] : []),
+      ...(library.role >= 3 ? [{ key: 'updates', label: '更新任务', children: <LibraryUpdateJobs api={api} libraryId={library.id} /> }] : []),
+      ...(library.can_configure && library.organization_id ? [{ key: 'members', label: '成员权限', children: <LibraryMembers api={api} library={library} /> }] : []),
     ]} />
     <Modal title="新建文档" open={newFile} onCancel={() => setNewFile(false)} onOk={() => { if (!/^[^/\\:.][^/\\:]*\.(md|txt)$/i.test(filename)) { message.error('请输入 .md 或 .txt 文件名'); return; } const file = (path === '.' ? '' : path + '/') + filename; if (directory?.entries.some(r => r.path === file)) { message.error('文件已存在'); return; } setDoc({ path: file, content: '', version: emptyDigest }); setText(''); setNewFile(false); }}><Input aria-label="文件名" placeholder="例如：使用指南.md" value={filename} onChange={e => setFilename(e.target.value)} /></Modal>
     <Modal title={selected?.path} open={!!selected} width={1000} onCancel={() => navigate(() => setSelected(undefined))} footer={selected && <Space>

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from contextlib import nullcontext
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
@@ -364,8 +365,8 @@ class TemplateCatalog:
             if stage.exists() and stage.resolve().is_relative_to(staging_root.resolve()) and stage != staging_root:
                 shutil.rmtree(stage)
 
-    def bind(self, library_id, value: TemplateBinding):
-        with self.store.transaction(write=True) as db:
+    def bind(self, library_id, value: TemplateBinding, db=None):
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
             library = db.execute('SELECT * FROM libraries WHERE id=?', (library_id,)).fetchone()
             if library is None:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
@@ -412,10 +413,10 @@ class TemplateCatalog:
                 (library_id, value.template_id, value.template_version, json.dumps(value.config, ensure_ascii=False),
                  scope_json, None if native else scope['workspace_key']))
             self.event(db, 'template_bind', value.template_id, value.template_version, library_id)
-        return self.binding(library_id)
+            return self.binding(library_id, db)
 
-    def binding(self, library_id):
-        with self.store.transaction() as db:
+    def binding(self, library_id, db=None):
+        with self.store.transaction() if db is None else nullcontext(db) as db:
             if db.execute('SELECT 1 FROM libraries WHERE id=?', (library_id,)).fetchone() is None:
                 raise KnowledgeError('unknown_library', 'Library does not exist', 404)
             row = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()

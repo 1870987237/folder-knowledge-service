@@ -21,7 +21,7 @@ export interface RepositoryJob {
   finished_at?: string; before_commit?: string; after_commit?: string; error?: string;
 }
 export interface Repository {
-  id: string; name: string; url: string; branch: string; import_path?: string;
+  id: string; name: string; url: string; branch: string; published_branch?: string | null; import_path?: string;
   credential: string; interval_seconds: number; enabled: boolean;
   current_commit?: string; release_path?: string; last_sync?: string; next_sync?: number; last_error?: string;
   libraries: { library_id: string; name: string; subpath: string }[]; job?: RepositoryJob;

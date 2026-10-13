@@ -4,6 +4,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import hmac
+from contextlib import nullcontext
 import json
 import os
 import secrets
@@ -125,6 +126,22 @@ def user_role(db, user_id, library_id):
                inherited_role(db, user_id, library_id, scope['organization_id']))
 
 
+def can_configure_library(db, actor, library_id):
+    """Configuration authority follows ownership, never a content-role grant."""
+    if actor.get('platform'):
+        return True
+    uid = actor['id']
+    if not db.execute("SELECT 1 FROM users WHERE id=? AND status='active'", (uid,)).fetchone():
+        return False
+    scope = db.execute('SELECT owner_id,organization_id FROM library_ownership WHERE library_id=?', (library_id,)).fetchone()
+    if not scope:
+        return False
+    if scope['owner_id']:
+        return scope['owner_id'] == uid
+    return bool(db.execute("SELECT 1 FROM organization_members WHERE organization_id=? AND user_id=? AND role='admin'",
+                           (scope['organization_id'], uid)).fetchone())
+
+
 def owned_key_allowed(db, key_id, library_id, submit=False):
     owner = db.execute('SELECT user_id FROM key_owners WHERE key_id=?', (key_id,)).fetchone()
     return not owner or user_role(db, owner[0], library_id) >= (2 if submit else 1)
@@ -196,6 +213,12 @@ class Collaboration:
             fail('library_forbidden', '没有该知识库的操作权限')
         return dict(row), role
 
+    def check_configuration(self, db, actor, library_id):
+        row, role = self.check(db, actor, library_id)
+        if not can_configure_library(db, actor, library_id):
+            fail('configuration_forbidden', '仅个人库所有者或所属组织管理员可配置知识库')
+        return row, role
+
     def org_check(self, db, actor, oid):
         if not db.execute('SELECT 1 FROM organizations WHERE id=?', (oid,)).fetchone():
             fail('organization_forbidden', '组织不存在或不可管理')
@@ -222,7 +245,7 @@ class Collaboration:
                 if role:
                     editable = self.editable(db, row['id'], row['path'])
                     result.append({'id': row['id'], 'name': row['name'], 'owner_id': row['owner_id'],
-                                   'organization_id': row['organization_id'], 'role': role, 'editable': editable, 'updated_at': row['updated_at']})
+                                   'organization_id': row['organization_id'], 'role': role, 'can_configure': can_configure_library(db, actor, row['id']), 'editable': editable, 'updated_at': row['updated_at']})
         return result
 
     def editable(self, db, lid, root):
@@ -243,9 +266,9 @@ class Collaboration:
                 return False
         return True
 
-    def create_library(self, actor, name, oid):
+    def create_library(self, actor, name, oid, db=None):
         lid = uuid.uuid4().hex
-        with self.store.transaction(write=True) as db:
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
             if oid:
                 self.org_check(db, actor, oid)
             elif actor.get('platform'):
@@ -423,8 +446,12 @@ class Scope(Input):
     organization_id: str
 
 
+from .library_updates import LibraryPluginSettings
+
+
 class NewLibrary(Name):
     organization_id: str | None = None
+    template: LibraryPluginSettings | None = None
 
 
 class Grant(Input):
@@ -543,19 +570,32 @@ def add_collaboration_routes(app, registry):
 
     @app.post('/portal/api/libraries', status_code=201)
     def create_library(value: NewLibrary, request: Request):
+        if value.template is not None:
+            from .library_updates import LibraryUpdates
+            return LibraryUpdates(registry).create(actor(request), value)
         return service.create_library(actor(request), value.name, value.organization_id)
+
+    @app.put('/portal/api/libraries/{lid}/settings')
+    def configure_library(lid: str, value: Name, request: Request):
+        with service.store.transaction(write=True) as db:
+            a = actor(request)
+            service.check_configuration(db, a, lid)
+            name = value.name.strip()
+            db.execute('UPDATE libraries SET name=?,updated_at=? WHERE id=?', (name, now(), lid))
+            service.event(db, a, 'library_settings', lid)
+        return {'id': lid, 'name': name}
 
     @app.get('/portal/api/libraries/{lid}/members')
     def grants(lid: str, request: Request):
         with service.store.transaction() as db:
-            service.check(db, actor(request), lid, 4)
+            service.check_configuration(db, actor(request), lid)
             return [dict(r) for r in db.execute('SELECT u.id,u.username,g.role FROM library_members g JOIN users u ON u.id=g.user_id WHERE library_id=?', (lid,))]
 
     @app.put('/portal/api/libraries/{lid}/members')
     def grant(lid: str, value: Grant, request: Request):
         with service.store.transaction(write=True) as db:
             a = actor(request)
-            service.check(db, a, lid, 4)
+            service.check_configuration(db, a, lid)
             scope = db.execute('SELECT organization_id FROM library_ownership WHERE library_id=?', (lid,)).fetchone()
             if not scope or not scope[0] or not db.execute('SELECT 1 FROM organization_members WHERE organization_id=? AND user_id=?', (scope[0], value.user_id)).fetchone():
                 fail('invalid_member', '仅能授权同组织成员；个人库暂不共享', 400)
@@ -569,7 +609,7 @@ def add_collaboration_routes(app, registry):
     @app.get('/portal/api/libraries/{lid}/candidates')
     def candidates(lid: str, request: Request):
         with service.store.transaction() as db:
-            service.check(db, actor(request), lid, 4)
+            service.check_configuration(db, actor(request), lid)
             return [dict(r) for r in db.execute('SELECT u.id,u.username FROM users u JOIN organization_members m ON u.id=m.user_id '
                 "JOIN library_ownership s ON s.organization_id=m.organization_id WHERE s.library_id=? AND u.status='active'", (lid,))]
 

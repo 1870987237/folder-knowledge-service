@@ -1,6 +1,7 @@
 """Durable template jobs. Publishing always requires an explicit admin approval."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 import difflib
 import json
 import re
@@ -109,25 +110,25 @@ class Updates:
             row = db.execute('SELECT definition FROM update_policies WHERE library_id=?', (library_id,)).fetchone()
             return json.loads(row[0]) if row else UpdatePolicy().model_dump()
 
-    def save_policy(self, library_id, policy):
-        binding = self.catalog.binding(library_id)['binding']
-        if policy.enabled:
-            if not binding:
-                raise KnowledgeError('template_required', 'Bind an installed template first', 409)
-            template = self.catalog.get(binding['template_id'], binding['template_version'])
-            if 'update' not in template['definition']['capabilities']:
-                raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
-            if policy.approved_package_sha256 != template['package_sha256']:
-                raise KnowledgeError('package_approval_required', 'Approve the installed package digest before enabling execution', 409)
-            if template['definition']['protocol_version'] != '1.1':
-                raise KnowledgeError('protocol_unsupported', 'Updates require protocol 1.1', 409)
-        with self.store.transaction(write=True) as db:
+    def save_policy(self, library_id, policy, db=None):
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
+            binding = self.catalog.binding(library_id, db)['binding']
+            if policy.enabled:
+                if not binding:
+                    raise KnowledgeError('template_required', 'Bind an installed template first', 409)
+                template = self.catalog.public(self.catalog.require(db, binding['template_id'], binding['template_version']))
+                if 'update' not in template['definition']['capabilities']:
+                    raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
+                if policy.approved_package_sha256 != template['package_sha256']:
+                    raise KnowledgeError('package_approval_required', 'Approve the installed package digest before enabling execution', 409)
+                if template['definition']['protocol_version'] != '1.1':
+                    raise KnowledgeError('protocol_unsupported', 'Updates require protocol 1.1', 409)
             if policy.model_connection_id and not db.execute('SELECT 1 FROM model_connections WHERE id=?', (policy.model_connection_id,)).fetchone():
                 raise KnowledgeError('unknown_model', 'Model connection does not exist', 404)
             db.execute('INSERT INTO update_policies VALUES (?,?) ON CONFLICT(library_id) DO UPDATE SET definition=excluded.definition',
                        (library_id, encode(policy.model_dump())))
             self.event(db, 'update_policy_save', library_id=library_id)
-        return policy.model_dump()
+            return policy.model_dump()
 
     def context(self, db, library_id):
         lib = db.execute('SELECT * FROM libraries WHERE id=? AND enabled=1', (library_id,)).fetchone()
@@ -136,6 +137,10 @@ class Updates:
         if not lib or not binding or not policy or not json.loads(policy[0])['enabled']:
             raise KnowledgeError('updates_disabled', 'Enabled library, binding and update policy required', 409)
         policy = json.loads(policy[0])
+        from .resource_access import check_binding_access, check_workspace_owner
+        access = check_binding_access(db, library_id, binding, policy['model_connection_id'])
+        if access and access['model_environment'] != policy['model_environment']:
+            raise KnowledgeError('model_mapping_changed', '平台模型映射已变化，请重新保存知识库更新设置', 409)
         template = self.catalog.public(self.catalog.require(db, binding['template_id'], binding['template_version']))
         if 'update' not in template['definition']['capabilities']:
             raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
@@ -143,6 +148,7 @@ class Updates:
             raise KnowledgeError('package_approval_required', 'Template package approval is stale', 409)
         spec = WorkspaceSpec.model_validate_json(binding['workspace_json']) if binding['workspace_json'] else None
         scope = resolve_workspace(self.registry, db, lib, spec)
+        check_workspace_owner(db, self.registry, library_id, scope['root'])
         # Git releases remain owned by the Git synchronizer; never silently detach them.
         if scope['spec'].type != 'local':
             raise KnowledgeError('git_update_unsupported', 'Template publication currently requires a local workspace', 409)
@@ -162,7 +168,10 @@ class Updates:
 
     @staticmethod
     def permitted(db, item):
-        from .collaboration import owned_key_allowed
+        from .collaboration import owned_key_allowed, user_role
+        if 'user_id' in item.keys() and item['user_id']:
+            return user_role(db, item['user_id'], item['library_id']) >= 2 and bool(db.execute(
+                'SELECT 1 FROM libraries WHERE id=? AND enabled=1', (item['library_id'],)).fetchone())
         if not owned_key_allowed(db, item['key_id'], item['library_id'], submit=True):
             return False
         return db.execute('''SELECT 1 FROM agent_keys k JOIN inbox_grants g ON g.key_id=k.id
@@ -170,8 +179,8 @@ class Updates:
             AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at>?)''',
             (item['key_id'], item['library_id'], now())).fetchone() is not None
 
-    def enqueue(self, library_id, operation='update', retry_id=None):
-        with self.store.transaction(write=True) as db:
+    def enqueue(self, library_id, operation='update', retry_id=None, db=None):
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
             context = self.context(db, library_id)
             if operation not in context['template']['definition']['capabilities']:
                 raise KnowledgeError('operation_unsupported', 'Template does not support this operation', 409)
@@ -183,12 +192,9 @@ class Updates:
                     items = db.execute('SELECT i.* FROM inbox_items i JOIN update_job_items j ON j.item_id=i.id WHERE j.job_id=? ORDER BY i.sequence', (retry_id,)).fetchall()
                 else:
                     candidates = db.execute('''SELECT i.* FROM inbox_items i
-                        JOIN agent_keys k ON k.id=i.key_id
-                        JOIN inbox_grants g ON g.key_id=i.key_id AND g.library_id=i.library_id
-                        WHERE i.library_id=? AND i.status='pending' AND k.revoked_at IS NULL
-                        AND (k.expires_at IS NULL OR k.expires_at>?)
+                        WHERE i.library_id=? AND i.status='pending'
                         AND NOT EXISTS (SELECT 1 FROM update_job_items j WHERE j.item_id=i.id)
-                        ORDER BY i.sequence''', (library_id, now()))
+                        ORDER BY i.sequence''', (library_id,))
                     # Filter current human ownership before filling the batch;
                     # revoked submissions must not starve later authorized keys.
                     items = []
@@ -208,7 +214,7 @@ class Updates:
                 db.execute('INSERT INTO update_job_items VALUES (?,?)', (job_id, item['id']))
                 db.execute("UPDATE inbox_items SET status='processing',claim_digest=NULL,lease_until=NULL,attempts=attempts+1,updated_at=? WHERE id=?", (now(), item['id']))
             self.event(db, 'update_enqueue', job_id, library_id)
-        return self.get(job_id)
+            return self.get(job_id, db)
 
     @staticmethod
     def require(db, job_id):
@@ -224,8 +230,8 @@ class Updates:
         result['publish_mode'] = 'manual_review'
         return result
 
-    def get(self, job_id):
-        with self.store.transaction() as db:
+    def get(self, job_id, db=None):
+        with self.store.transaction() if db is None else nullcontext(db) as db:
             row = self.require(db, job_id)
             return self.public(row)
 
@@ -236,13 +242,13 @@ class Updates:
             return {'jobs': [self.public(r) for r in rows[:limit]], 'next_offset': offset+limit if len(rows)>limit else None,
                     'worker_heartbeat': heartbeat[0] if heartbeat else None}
 
-    def act(self, job_id, action):
-        if action == 'retry':
-            job = self.get(job_id)
-            if job['status'] != 'failed':
-                raise KnowledgeError('invalid_job_state', 'Only failed jobs can be retried', 409)
-            return self.enqueue(job['library_id'], job['operation'], job_id)
-        with self.store.transaction(write=True) as db:
+    def act(self, job_id, action, db=None):
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
+            if action == 'retry':
+                job = self.get(job_id, db)
+                if job['status'] != 'failed':
+                    raise KnowledgeError('invalid_job_state', 'Only failed jobs can be retried', 409)
+                return self.enqueue(job['library_id'], job['operation'], job_id, db)
             row = self.require(db, job_id)
             if row['status'] != 'candidate_ready':
                 raise KnowledgeError('invalid_job_state', 'A validated candidate is required', 409)
@@ -258,7 +264,7 @@ class Updates:
                 raise KnowledgeError('invalid_action', 'Unknown action', 400)
             db.execute('UPDATE update_jobs SET status=?,updated_at=? WHERE id=?', (status, now(), job_id))
             self.event(db, 'update_'+action, job_id, row['library_id'])
-        return self.get(job_id)
+            return self.get(job_id, db)
 
     def preview(self, job_id):
         row = self.get(job_id)

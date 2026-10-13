@@ -45,7 +45,7 @@ function MaterialDetail({ id }: { id: string }) {
   return <><div className="detail-heading"><Typography.Title level={4}>{material.title || '未命名材料'}</Typography.Title><Status status={row.status} /></div><Descriptions size="small" column={1} items={[
     { key: 'library', label: '知识库', children: overview.libraries.find(l => l.id === row.library_id)?.name || row.library_id },
     { key: 'kind', label: '类型', children: kinds[material.kind] },
-    { key: 'agent', label: '提交者', children: overview.keys.find(k => k.id === row.submitted_by.id)?.agent_name || row.submitted_by.id },
+    { key: 'agent', label: '提交者', children: row.submitted_by.type === 'user' ? `用户 · ${row.submitted_by.id}` : overview.keys.find(k => k.id === row.submitted_by.id)?.agent_name || row.submitted_by.id },
     { key: 'time', label: '提交时间', children: date(row.created_at) },
   ]} /><div className="material-content">{material.content.text}</div>
   <Collapse ghost items={[{ key: 'source', label: '来源与场景', children: <JsonView value={{ submission_id: row.submission_id, source: material.source, context: material.context }} /> }]} /><LoadError error={resource.error || error} retry={resource.refresh} />

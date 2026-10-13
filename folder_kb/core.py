@@ -16,6 +16,7 @@ import regex
 
 
 from .errors import KnowledgeError
+from .filesystem import native_path, resolved_path
 from .streaming import Budget, FragmentReader, decode_cursor, encode_cursor, file_version, fingerprint
 
 
@@ -52,8 +53,8 @@ class KnowledgeFolder:
     extensions = {'.md', '.txt', '.rst', '.json', '.jsonl', '.yaml', '.yml', '.csv', '.toml', '.py', '.sql', '.log'}
 
     def __init__(self, root: str | Path, name: str = 'knowledge', limits: Limits | None = None):
-        self.root = Path(root).resolve(strict=True)
-        if not self.root.is_dir():
+        self.root = resolved_path(root, strict=True)
+        if not native_path(self.root).is_dir():
             raise ValueError('Knowledge root must be an existing directory')
         self.name, self.limits = name, limits or Limits()
 
@@ -76,9 +77,9 @@ class KnowledgeFolder:
         try:
             for part in p.parts:
                 current = current / part
-                if is_link(current.lstat()):
+                if is_link(native_path(current).lstat()):
                     raise KnowledgeError('link_forbidden', 'Symbolic links and reparse points are not accessible', 403)
-            if not current.resolve(strict=True).is_relative_to(self.root):
+            if not resolved_path(current, strict=True).is_relative_to(self.root):
                 raise KnowledgeError('forbidden_path', 'Path is outside the knowledge root', 403)
             return current
         except PermissionError:
@@ -109,7 +110,7 @@ class KnowledgeFolder:
                 value = '\\\\' + value[8:]
             elif value.startswith('\\\\?\\'):
                 value = value[4:]
-            actual = Path(value).resolve()
+            actual = resolved_path(value)
         elif Path('/proc/self/fd').exists():
             actual = Path(os.readlink(f'/proc/self/fd/{fd}')).resolve()
         else:
@@ -123,11 +124,11 @@ class KnowledgeFolder:
         if not self._readable(p):
             raise KnowledgeError('unsupported_file', 'Only supported knowledge text files can be read', 415)
         try:
-            st = p.lstat()
+            st = native_path(p).lstat()
             if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
                 raise KnowledgeError('unsafe_file', 'Only regular files without hard links can be read', 403)
             flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0)
-            fd = os.open(p, flags)
+            fd = os.open(native_path(p), flags)
             with os.fdopen(fd, 'rb') as stream:
                 self._verify_handle(stream.fileno())
                 before = os.fstat(stream.fileno())
@@ -136,7 +137,7 @@ class KnowledgeFolder:
                 version = file_version(before)
                 yield stream, before, version
                 after = os.fstat(stream.fileno())
-                if version != file_version(after) or version != file_version(self._path(value).stat()):
+                if version != file_version(after) or version != file_version(native_path(self._path(value)).stat()):
                     raise KnowledgeError('file_changed', 'File changed while reading; start again', 409)
         except OSError:
             raise KnowledgeError('unavailable_file', 'File is unavailable', 404) from None
@@ -165,7 +166,7 @@ class KnowledgeFolder:
 
     def _walk(self, path: str, recursive: bool) -> tuple[list[dict], bool]:
         base = self._path(path)
-        if not base.is_dir():
+        if not native_path(base).is_dir():
             raise KnowledgeError('not_directory', 'Expected a directory')
         entries, count, partial = [], 0, False
         deadline = time.monotonic() + self.limits.seconds
@@ -174,7 +175,7 @@ class KnowledgeFolder:
             directory = stack.pop()
             try:
                 directory = self._path(directory.relative_to(self.root).as_posix())
-                with os.scandir(directory) as listing:
+                with os.scandir(native_path(directory)) as listing:
                     children = []
                     for item in listing:
                         count += 1
@@ -185,7 +186,7 @@ class KnowledgeFolder:
                             continue
                         p = directory / item.name
                         # DirEntry's Windows cache reports st_nlink=0; use full lstat.
-                        st = p.lstat()
+                        st = native_path(p).lstat()
                         if is_link(st):
                             continue
                         rel = p.relative_to(self.root).as_posix()

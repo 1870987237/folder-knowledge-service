@@ -8,7 +8,7 @@ import type { RepoList, Repository, RepositoryJob } from '../types';
 
 const jobLabels: Record<string, string> = { queued: '等待同步', running: '同步中', succeeded: '已发布', unchanged: '已是最新', failed: '同步失败' };
 export function RepositoriesPage() {
-  const { api, refresh } = useSession(), { message } = App.useApp();
+  const { api, refresh } = useSession(), { message, modal } = App.useApp();
   const resource = useResource<RepoList>('/repositories', 10000);
   const [formRepo, setFormRepo] = useState<Repository | 'new'>(), [binding, setBinding] = useState<string>(), [history, setHistory] = useState<Repository>();
   const [syncing, setSyncing] = useState<string>();
@@ -17,14 +17,16 @@ export function RepositoriesPage() {
     {resource.data && !resource.data.worker_online && <Alert className="block-gap" type="warning" showIcon title="同步进程未在线，更新任务将保留在队列中。" />}
     <Surface><Table<Repository> rowKey="id" loading={resource.loading} pagination={false} dataSource={resource.data?.repositories} scroll={{ x: 950 }} columns={[
       { title: '仓库', width: 300, render: (_, r) => <NameCell name={<Typography.Text strong>{r.name}</Typography.Text>} id={r.url || r.import_path} /> },
-      { title: '分支 / 版本', render: (_, r) => <NameCell name={r.branch || '待识别分支'} id={r.current_commit?.slice(0, 12) || '尚未发布'} /> },
+      { title: '分支 / 版本', render: (_, r) => <NameCell name={r.branch || '待识别分支'} id={r.published_branch && r.published_branch !== r.branch ? `仍发布 ${r.published_branch} · ${r.current_commit?.slice(0, 12)}` : r.current_commit?.slice(0, 12) || '尚未发布'} /> },
       { title: '关联知识库', render: (_, r) => <Space wrap>{r.libraries.map(l => <Tag key={l.library_id}>{l.name}</Tag>)}</Space> },
       { title: '同步状态', render: (_, r) => <div className="name-cell"><span><Tag color={r.job?.status === 'failed' ? 'error' : ['queued', 'running'].includes(r.job?.status || '') ? 'processing' : 'success'}>{jobLabels[r.job?.status || ''] || '尚未同步'}</Tag></span><Typography.Text type="secondary">{!r.enabled ? '自动更新已暂停' : r.interval_seconds ? `每 ${r.interval_seconds / 60} 分钟` : '手动更新'}</Typography.Text>{r.next_sync && r.enabled && <Typography.Text type="secondary">下次 {date(r.next_sync * 1000)}</Typography.Text>}{r.last_error && <Typography.Text type="danger">{r.last_error}</Typography.Text>}</div> },
       { title: '操作', width: 190, render: (_, r) => <Space size={0} wrap={false}><Button type="link" icon={<SyncOutlined />} loading={syncing === r.id} disabled={['queued', 'running'].includes(r.job?.status || '')} onClick={async () => { setSyncing(r.id); try { await api.request(`/repositories/${r.id}/sync`, 'POST'); refresh(); message.success('已加入同步队列'); } catch (e) { message.error(errorMessage(e)); } finally { setSyncing(undefined); } }}>更新</Button><Dropdown trigger={['click']} menu={{ items: [
         { key: 'bind', label: '关联知识库', disabled: !r.release_path },
         { key: 'settings', label: '仓库设置' },
         { key: 'history', label: '同步记录' },
-      ], onClick: ({ key }) => { if (key === 'bind') setBinding(r.id); else if (key === 'settings') setFormRepo(r); else if (key === 'history') setHistory(r); } }}><Button type="link">更多 <DownOutlined /></Button></Dropdown></Space> },
+        { type: 'divider' },
+        { key: 'remove', label: '移除仓库', danger: true, disabled: r.job?.status === 'running' },
+      ], onClick: ({ key }) => { if (key === 'bind') setBinding(r.id); else if (key === 'settings') setFormRepo(r); else if (key === 'history') setHistory(r); else if (key === 'remove') modal.confirm({ title: `移除仓库“${r.name}”？`, content: '移除登记与同步记录，取消等待中的任务，保留知识文件和 Git 缓存。有关联知识库时需先解除关联。', okText: '移除仓库', okButtonProps: { danger: true }, onOk: async () => { try { await api.request(`/repositories/${r.id}`, 'DELETE'); refresh(); message.success('仓库已移除，文件已保留'); } catch (e) { message.error(errorMessage(e)); throw e; } } }); } }}><Button type="link">更多 <DownOutlined /></Button></Dropdown></Space> },
     ]} /></Surface>
     <Modal title={formRepo === 'new' ? '添加 Git 仓库' : '仓库设置'} open={!!formRepo} onCancel={() => setFormRepo(undefined)} footer={null} destroyOnHidden width={600}>{formRepo && <RepositoryForm key={formRepo === 'new' ? 'new' : formRepo.id} repository={formRepo === 'new' ? undefined : formRepo} done={() => setFormRepo(undefined)} />}</Modal>
     <Drawer closable={{ placement: 'end' }} title={'关联知识库 · ' + (boundRepo?.name || '')} open={!!boundRepo} onClose={() => setBinding(undefined)} destroyOnHidden size={620}>{boundRepo && <RepositoryBindings repository={boundRepo} />}</Drawer>
@@ -36,12 +38,13 @@ function RepositoryForm({ repository: r, done }: { repository?: Repository; done
   const { api, refresh } = useSession(), { message } = App.useApp(), [form] = Form.useForm<RepoValues>();
   const mode = Form.useWatch('mode', form);
   return <AsyncForm form={form} initial={{ mode: 'remote', branch: 'main', interval: (r?.interval_seconds || 0) / 60, ...r }} submitText={r ? '保存设置' : '添加并同步'} submit={async values => {
-    const body = { name: values.name, credential: values.credential?.trim() || '', interval_seconds: (values.interval || 0) * 60, ...(r ? { enabled: values.enabled } : values.mode === 'import' ? { import_path: values.import_path } : { url: values.url.trim(), branch: values.branch.trim() }) };
-    await api.request('/repositories' + (r ? '/' + r.id : ''), r ? 'PUT' : 'POST', body); refresh(); done(); message.success(r ? '设置已保存' : '仓库已加入同步队列');
+    const branch = values.branch?.trim();
+    const body = { name: values.name, credential: values.credential?.trim() || '', interval_seconds: (values.interval || 0) * 60, ...(r ? { enabled: values.enabled, ...(branch ? { branch } : {}) } : values.mode === 'import' ? { import_path: values.import_path } : { url: values.url.trim(), branch }) };
+    await api.request('/repositories' + (r ? '/' + r.id : ''), r ? 'PUT' : 'POST', body); refresh(); done(); message.success(r ? branch && branch !== r.branch ? '分支已修改，已加入同步队列' : '设置已保存' : '仓库已加入同步队列');
   }}>
     {!r && <Form.Item name="mode" label="来源"><Select options={[{ value: 'remote', label: '拉取远端仓库' }, { value: 'import', label: '接管已有目录' }]} /></Form.Item>}
     <Form.Item name="name" label="名称" rules={required}><Input maxLength={80} /></Form.Item>
-    {r ? <Typography.Paragraph type="secondary" className="path-text">{r.url || r.import_path} · {r.branch}</Typography.Paragraph> : mode === 'import' ? <Form.Item name="import_path" label="已有 Git 目录" rules={required}><PathInput /></Form.Item> : <><Form.Item name="url" label="仓库地址" rules={required}><Input placeholder="https://git.example.com/team/knowledge.git" /></Form.Item><Form.Item name="branch" label="分支" rules={required}><Input /></Form.Item></>}
+    {r ? <><Typography.Paragraph type="secondary" className="path-text">{r.url || r.import_path}</Typography.Paragraph><Form.Item name="branch" label="分支" rules={r.branch ? required : undefined} extra="修改后自动同步，成功前保留已发布版本。"><Input disabled={r.job?.status === 'running'} placeholder={r.import_path ? '留空识别已有目录分支' : undefined} /></Form.Item></> : mode === 'import' ? <Form.Item name="import_path" label="已有 Git 目录" rules={required}><PathInput /></Form.Item> : <><Form.Item name="url" label="仓库地址" rules={required}><Input placeholder="https://git.example.com/team/knowledge.git" /></Form.Item><Form.Item name="branch" label="分支" rules={required}><Input /></Form.Item></>}
     <Form.Item name="credential" label="凭据配置名（公开仓库可留空）" rules={[{ pattern: /^[a-z0-9][a-z0-9_-]{0,63}$/, message: '使用小写字母、数字、- 或 _' }]}><Input placeholder="team-readonly" /></Form.Item>
     <Form.Item name="interval" label="自动更新间隔（分钟，0 表示手动）" rules={[{ required: true }]}><InputNumber min={0} max={43200} precision={0} className="full-width" /></Form.Item>
     {r && <Form.Item name="enabled" label="启用自动更新" valuePropName="checked"><Switch /></Form.Item>}
@@ -59,7 +62,7 @@ function RepositoryBindings({ repository }: { repository: Repository }) {
 function SyncHistory({ repository }: { repository: Repository }) {
   const resource = useResource<{ jobs: RepositoryJob[] }>(`/repositories/${repository.id}/jobs`, 10000);
   return <><LoadError error={resource.error} retry={resource.refresh} /><Table<RepositoryJob> rowKey="id" loading={resource.loading} pagination={false} dataSource={resource.data?.jobs} columns={[
-    { title: '时间', render: (_, j) => <NameCell name={date(j.finished_at || j.created_at)} id={({ initial: '首次同步', manual: '手动更新', scheduled: '定时更新' } as Record<string, string>)[j.trigger]} /> },
+    { title: '时间', render: (_, j) => <NameCell name={date(j.finished_at || j.created_at)} id={({ initial: '首次同步', manual: '手动更新', scheduled: '定时更新', branch_change: '切换分支' } as Record<string, string>)[j.trigger]} /> },
     { title: '结果', render: (_, j) => <div className="name-cell"><span><Tag color={j.status === 'failed' ? 'error' : 'default'}>{jobLabels[j.status]}</Tag></span><Typography.Text code>{j.after_commit?.slice(0, 12) || j.before_commit?.slice(0, 12) || '—'}</Typography.Text>{j.error && <Typography.Text type="danger">{j.error}</Typography.Text>}</div> },
   ]} /></>;
 }
