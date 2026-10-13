@@ -12,7 +12,7 @@ import time
 
 from .core import is_link
 from .errors import KnowledgeError
-from .git_worker import worker_lock
+from .worker_runtime import worker_lock, worker_heartbeat
 from .management import Registry
 from .storage import now
 from .template_protocol import JobRequest, Record, prepare_job, tree_digest, validate_result
@@ -232,15 +232,12 @@ def main():
     def stop(signum, frame):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM, stop)
-    with worker_lock(registry.directory, 'template-worker.lock'):
+    with worker_lock(registry.directory, 'template-worker.lock'), worker_heartbeat(registry.store, 'updates'):
         worker.recover()
-        try:
-            while True:
-                if not worker.tick():
-                    time.sleep(2)
-        finally:
-            with registry.store.transaction(write=True) as db:
-                db.execute("DELETE FROM metadata WHERE name='template_worker_heartbeat'")
+        while True:
+            if not worker.tick():
+                time.sleep(2)
+
 
 
 if __name__ == '__main__':

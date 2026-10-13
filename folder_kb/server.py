@@ -469,6 +469,8 @@ class RepositoryBinding(BaseModel):
 
 
 def add_admin_routes(app: FastAPI, registry: Registry):
+    from .workers import add_worker_routes
+    add_worker_routes(app, registry)
     from .governance import add_governance_routes
     add_governance_routes(app, registry)
     from .collaboration import add_collaboration_routes

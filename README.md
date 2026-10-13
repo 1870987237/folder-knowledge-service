@@ -441,3 +441,16 @@ python -m pytest -q
 部门管理范围、详细权限来源和组织服务账号仍待后续实现。管理数据库已升级到 v10，升级前备份。
 
 检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/simple-rag-python`。
+
+
+## 本机统一启动与后台进程
+
+配置 `KB_ROOT`、`KB_STATE_DIR`、`KB_ADMIN_TOKEN` 后执行：
+
+```bash
+python -m folder_kb.service --host 127.0.0.1 --port 8791
+```
+
+同时启动 HTTP、Git 同步和知识更新三个独立进程。已有实例占用端口或 worker 锁时拒绝重复启动；任一子进程意外退出会停止其他子进程并返回失败。日志在 `KB_STATE_DIR/service-logs/`，修复配置后重新启动即可。更新程序信任和模型凭据仍需显式配置，启动器不自动授予执行权限。
+
+管理台“服务管理 → 后台进程”可查看心跳、任务数量、最近失败并重试；在线表示进程存活，不表示任务一定取得进展。Docker 继续使用 Compose 启停各组件。职责划分及知识库配置权限建议见 [Worker 与知识库配置边界](docs/worker-and-library-management.md)。

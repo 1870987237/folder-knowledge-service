@@ -209,7 +209,7 @@ def test_jobs_coalesce_schedule_pause_recovery_and_process_lock(setup):
     repo=c.create('Docs',URL,'main',interval_seconds=60);rid=repo['id']
     assert c.enqueue(rid)['id']==c.enqueue(rid)['id']
     with worker_lock(r.directory):
-        with pytest.raises(SyncError):
+        with pytest.raises(RuntimeError):
             with worker_lock(r.directory):
                 pass
     assert w.claim()

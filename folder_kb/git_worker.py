@@ -17,6 +17,7 @@ import tempfile
 import time
 import uuid
 
+from .worker_runtime import worker_lock, worker_heartbeat
 from .core import is_link
 from .errors import KnowledgeError
 from .filesystem import native_path, resolved_path
@@ -41,32 +42,6 @@ def sync_error(exc):
     return 'sync_failed: 同步程序发生异常，请管理员检查 Git worker 日志'
 
 
-@contextmanager
-def worker_lock(directory, filename='git-worker.lock'):
-    """OS lock dies with the process; no second worker can recover live jobs."""
-    with (directory / filename).open('a+b') as handle:
-        handle.seek(0)
-        if os.name == 'nt':
-            import msvcrt
-            if os.fstat(handle.fileno()).st_size == 0:
-                handle.write(b'0'); handle.flush()
-            handle.seek(0)
-            try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
-                raise SyncError('已有 Git 同步进程正在运行') from None
-        else:
-            import fcntl
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError:
-                raise SyncError('已有 Git 同步进程正在运行') from None
-        try:
-            yield
-        finally:
-            if os.name == 'nt':
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
 
 class GitWorker:
@@ -376,15 +351,12 @@ def main():
     def stop(signum, frame):
         raise SystemExit(0)
     signal.signal(signal.SIGTERM,stop)
-    with worker_lock(registry.directory):
+    with worker_lock(registry.directory), worker_heartbeat(registry.store, 'git'):
         worker.recover()
-        try:
-            while True:
-                if not worker.tick():
-                    time.sleep(2)
-        finally:
-            with registry.store.transaction(write=True) as db:
-                db.execute("DELETE FROM metadata WHERE name='git_worker_heartbeat'")
+        while True:
+            if not worker.tick():
+                time.sleep(2)
+
 
 
 if __name__ == '__main__':

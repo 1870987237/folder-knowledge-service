@@ -98,7 +98,8 @@ class RepositoryCatalog:
                 job = db.execute('SELECT * FROM repository_jobs WHERE repository_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1', (row['id'],)).fetchone()
                 row['job'] = dict(job) if job else None
             heartbeat = db.execute("SELECT value FROM metadata WHERE name='git_worker_heartbeat'").fetchone()
-        return {'repositories': rows, 'worker_online': bool(heartbeat and time.time()-float(heartbeat[0]) < 30)}
+        from .worker_runtime import liveness
+        return {'repositories': rows, 'worker_online': liveness(heartbeat[0] if heartbeat else None)['status'] == 'online'}
 
     def _queue(self, db, rid, trigger):
         active = db.execute("SELECT * FROM repository_jobs WHERE repository_id=? AND status IN ('queued','running')", (rid,)).fetchone()
