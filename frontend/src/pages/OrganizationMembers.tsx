@@ -95,8 +95,18 @@ export function OrganizationMembers({ api, oid, onChanged }: { api: Client; oid:
     return rows.map(u => ({ key: u.id, title: <span className="organization-tree-label"><span title={u.name}>{u.name}</span><Dropdown trigger={['click']} menu={unitMenu(u)}><Button type="text" size="small" aria-label={`${u.name}菜单`} icon={<MoreOutlined />} onClick={e => e.stopPropagation()} /></Dropdown></span>, children: u.children && treeData(u.children) }));
   }
   function membershipNames(id: string, kind: Unit['kind']) {
-    const names = units.filter(u => u.kind === kind && u.member_ids.includes(id)).map(u => unitPath(u, units));
-    return <Typography.Text className="full-width" ellipsis={{ tooltip: names.join('、') }}>{names.join('、') || '—'}</Typography.Text>;
+    const memberships = units.filter(u => u.kind === kind && u.member_ids.includes(id));
+    const byId = new Map(units.map(u => [u.id, u]));
+    const ancestors = new Set<string>();
+    for (const unit of memberships) {
+      let parent = unit.parent_id;
+      while (parent && !ancestors.has(parent)) {
+        ancestors.add(parent);
+        parent = byId.get(parent)?.parent_id || null;
+      }
+    }
+    const specific = memberships.filter(u => !ancestors.has(u.id));
+    return <Typography.Text className="full-width" ellipsis={{ tooltip: specific.map(u => unitPath(u, units)).join('、') }}>{specific.map(u => u.name).join('、') || '—'}</Typography.Text>;
   }
   const memberTable = <Table<Member> size="small" className="organization-member-table" rowKey="id" loading={busy} dataSource={rows} pagination={{ current: page, onChange: setPage, pageSize: 15, hideOnSinglePage: true }} scroll={{ x: 660 }} columns={[
     { title: '成员', dataIndex: 'username', width: 150, render: (name, m) => <Button type="link" className="name-link" onClick={() => void openMember(m.id)}>{name}</Button> },
