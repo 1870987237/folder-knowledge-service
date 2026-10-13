@@ -37,6 +37,32 @@ def answer_check(execution, expected):
             and (not expected.get('source') or any(expected['source'] in str(s) for s in sources)))
 
 
+def evidence_check(execution, calls, documents, expected):
+    """A correct value needs a citation to content actually returned to the agent."""
+    if not answer_check(execution, expected):
+        return False
+    returned = set()
+    for call in calls:
+        tool = call.get('tool')
+        if call.get('is_error') or tool not in ('read_file', 'grep', 'search'):
+            continue
+        result = call.get('result', {})
+        value = result.get('structuredContent')
+        if value is None:
+            try:
+                value = json.loads('\n'.join(c.get('text', '') for c in result.get('content', []) if c.get('type') == 'text'))
+            except ValueError:
+                continue
+        if not isinstance(value, dict):
+            continue
+        items = ([value] if value.get('lines') else []) if tool == 'read_file' else value.get('matches' if tool == 'grep' else 'results', [])
+        for item in items:
+            if isinstance(item, dict) and (item.get('text') or item.get('lines')) and item.get('path') in documents:
+                returned.add(item['path'])
+    sources = final_payload(execution['final'])['sources']
+    return any(str(expected['value']) in documents[p] and any(p in str(s) for s in sources) for p in returned)
+
+
 def render(data):
     rows = data['episodes']
     lines = ['# 平台业务 Agent 评测', '',
@@ -56,6 +82,7 @@ class Workflow:
         self.suite, self.recorder, self.admin, self.args = suite, recorder, admin, args
         self.tasks, self.expectations, self.data = tasks, expectations, data
         self.keys = []
+        self.library_ids = []
 
     def save(self):
         (self.args.output/'results.json').write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -76,6 +103,7 @@ class Workflow:
             db.execute('UPDATE libraries SET name=? WHERE id=?', (name, lid))
         documents = read_tree(self.args.dataset/'knowledge'/seed)
         seed_knowledge(root, documents)
+        self.library_ids.append(lid)
         return lid, documents
 
     def files(self, lid):
@@ -93,8 +121,12 @@ class Workflow:
         name = f'{identifier}-{repeat}'
         directory = self.args.output/'episodes'/name
         directory.mkdir(parents=True)
+        before = {lid: self.files(lid) for lid in self.library_ids}
+        (directory/'before-files.json').write_text(json.dumps(before, ensure_ascii=False, indent=2), encoding='utf-8')
         execution, calls = await solve(self.suite, self.recorder, key, directory,
                                       self.tasks[identifier]['prompt'], self.args, revoke=False)
+        after = {lid: self.files(lid) for lid in self.library_ids}
+        (directory/'after-files.json').write_text(json.dumps(after, ensure_ascii=False, indent=2), encoding='utf-8')
         checks = check(execution, calls)
         checks['valid_execution'] = execution['valid_run'] and execution['returncode'] == 0 and not execution['timed_out']
         checks['only_platform_tools'] = not execution['unexpected_agent_tools']
@@ -103,7 +135,8 @@ class Workflow:
         checks['completion_status_consistent'] = bool(payload) and payload.get('completed') is (identifier != 'R_DENIED')
         protocol = {'structured_final','completion_status_consistent'}
         row = {'episode': name, 'checks': checks, 'success': all(checks.values()),
-               'outcome_success':all(v for k,v in checks.items() if k not in protocol), 'execution': execution}
+               'outcome_success':all(v for k,v in checks.items() if k not in protocol), 'execution': execution,
+               'before_sha256': fingerprint(before), 'after_sha256': fingerprint(after)}
         self.data['episodes'].append(row)
         self.save()
         print(json.dumps({'episode': name, 'success': row['success'], 'failed': [k for k,v in checks.items() if not v]}), flush=True)
@@ -152,8 +185,9 @@ class Workflow:
             raise RuntimeError('Expected stale index after write; phase prerequisite failed')
         self.operation('manual_index_rebuild', lambda: self.admin.post(f'/admin/api/libraries/{lid}/index/build'))
         key = self.issue({lid: {'grep':False, 'search':True}})
-        await self.agent('R_INDEX', repeat, key, lambda e,c: {'fresh_answer':answer_check(e,self.expectations['R_INDEX']),
-            'read_only':canonical(self.files(lid).get(exp['path'],''))==canonical(exp['exact'])})
+        rebuilt = self.files(lid)
+        await self.agent('R_INDEX', repeat, key, lambda e,c: {'fresh_answer':evidence_check(e,c,rebuilt,self.expectations['R_INDEX']),
+            'read_only':self.files(lid)==rebuilt})
 
     async def update(self, repeat):
         # A real logged-in owner acts as reviewer. Its token is never given to OMP.
@@ -179,6 +213,7 @@ class Workflow:
         library=self.operation('owner_create_with_template',lambda:self.admin.post('/portal/api/libraries',headers=headers,json={
             'name':'待审核知识库','organization_id':org['id'],'template':{'plugin_id':'reference-docs','plugin_version':'0.2.0','enabled':True}}))
         lid=library['id']; base=f'/portal/api/libraries/{lid}'
+        self.library_ids.append(lid)
         seed_knowledge(self.suite.current(lid),read_tree(self.args.dataset/'knowledge'/'update'))
         before=self.files(lid)
         key=self.issue({lid:{'grep':True,'write_policy':'submit'}},submit=[lid])
@@ -210,7 +245,9 @@ class Workflow:
         if not completed:
             raise RuntimeError('Publication did not complete inbox receipts')
         key=self.issue({lid:{'grep':True}})
-        await self.agent('R_PUBLISHED',repeat,key,lambda e,c:{'published_fact':answer_check(e,self.expectations['R_PUBLISHED']),
+        published = self.files(lid)
+        await self.agent('R_PUBLISHED',repeat,key,lambda e,c:{'published_fact':evidence_check(e,c,published,self.expectations['R_PUBLISHED']),
+            'read_only':self.files(lid)==published,
             'preserved_previous_files':all(self.files(lid).get(p)==v for p,v in before.items())})
 
 
@@ -233,7 +270,7 @@ async def run(args):
     recorder=Recorder(); suite=Suite(args.output,app_wrapper=recorder.wrap,short_fixture=True)
     saved={k:os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON','KB_SEARCH_PLUGIN_ALLOWLIST','KB_TEMPLATE_TRUSTED_PYTHON')}
     admin=None; workflow=None
-    data={'model':args.model,'omp_version':subprocess.check_output([args.omp,'--version'],text=True).strip(),
+    data={'grader_version':'workflow-1.1','model':args.model,'omp_version':subprocess.check_output([args.omp,'--version'],text=True).strip(),
           'source_snapshot':freeze_source(args.output),
           'environment':suite.result['environment'],'planned_episodes':len(tasks)*args.repeats,
           'dataset_sha256':fingerprint(read_tree(args.dataset)),

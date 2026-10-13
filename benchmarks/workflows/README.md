@@ -20,3 +20,5 @@ python -m benchmarks.workflows.run --output data/workflow-smoke --plugin-definit
 更新管线使用确定性 reference-docs 测试模板，仅验证协议和人工审核边界，不评价 LLM 记忆整理质量。当前权限用例覆盖逐库 Key 隔离和组织管理员配置，不能代表已覆盖全部部门/用户组继承、授权撤销或并发冲突。
 
 结果分目标达成与严格通过；合法拒绝但 completed=true 是协议失败，不等于泄露。每个会话记录原始模型事件、工具轨迹、实际工具目录、耗时和 Token，运行目录保存数据和源码指纹。测试结束撤销 Key，清理隔离库及临时模型配置。前置流程失败保留已完成任务，明确标注 scenario_failed，不补造后续成绩。
+
+每个任务另保存合成库的 before-files.json / after-files.json 及指纹，便于复核副作用。只读问答必须引用实际检索返回过正文、且包含目标事实的文件；仅猜对值或列出文件名不能通过。

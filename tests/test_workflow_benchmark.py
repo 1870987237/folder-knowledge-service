@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import httpx
 
 from benchmarks.agent.runner import Recorder
-from benchmarks.workflows.run import Workflow, answer_check, intact
+from benchmarks.workflows.run import Workflow, answer_check, evidence_check, intact
 from tools.benchmark_file_tools import Suite
 
 
@@ -15,6 +15,18 @@ def test_oracles_reject_unrelated_changes_and_wrong_answers():
     assert intact({'a':'old','b':'keep'}, {'a':'new','b':'keep'}, ['a'])
     assert not intact({'a':'old','b':'keep'}, {'a':'new'}, ['a'])
     assert not answer_check({'final':json.dumps({'answer':'done','completed':True,'facts':{'x':31},'sources':['a']})}, {'field':'x','value':30})
+
+
+def test_citation_requires_returned_content_and_real_source():
+    execution={'final':json.dumps({'answer':'30','completed':True,'facts':{'x':30},'sources':['settings.md']})}
+    expected={'field':'x','value':30}
+    documents={'settings.md':'timeout 30'}
+    call={'tool':'search','is_error':False,'result':{'structuredContent':{'results':[{'path':'settings.md','text':'timeout 30'}]}}}
+    assert evidence_check(execution,[call],documents,expected)
+    assert not evidence_check(execution,[],documents,expected)
+    assert not evidence_check(execution,[dict(call,is_error=True)],documents,expected)
+    assert not evidence_check(execution,[dict(call,tool='list_directory')],documents,expected)
+    assert not evidence_check(execution,[call],{'different.md':'timeout 30'},expected)
 
 
 def test_review_scenario_contract_uses_real_server_and_worker(tmp_path, monkeypatch):
@@ -33,6 +45,7 @@ def test_review_scenario_contract_uses_real_server_and_worker(tmp_path, monkeypa
         flow=Workflow(suite,recorder,admin,args,tasks,expected,data)
         async def simulated_agent(identifier, repeat, key, oracle):
             async with suite.client(key) as probe:
+                calls=[]
                 if identifier=='W_SUBMIT':
                     libs=await probe.call('list_libraries')
                     lid=libs['libraries'][0]['id']
@@ -40,8 +53,10 @@ def test_review_scenario_contract_uses_real_server_and_worker(tmp_path, monkeypa
                     assert '_error' not in result
                     final={}
                 else:
-                    final={'answer':'WF-9527','facts':{'receipt':'WF-9527'},'sources':['demo-inbox/INDEX.md'],'completed':True}
-                checks=oracle({'final':json.dumps(final)},[])
+                    result=await probe.call('grep',query='WF-9527')
+                    calls=[{'tool':'grep','is_error':False,'result':{'structuredContent':result}}]
+                    final={'answer':'WF-9527','facts':{'receipt':'WF-9527'},'sources':[result['matches'][0]['path']],'completed':True}
+                checks=oracle({'final':json.dumps(final)},calls)
                 assert all(checks.values()),checks
                 return {'checks':checks}
         flow.agent=simulated_agent
