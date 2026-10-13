@@ -53,6 +53,7 @@ def analyze(run, dataset, judgments=None):
         raise ValueError('Expected a BrowseComp-Plus dataset')
     judge_by_episode = {}
     judge_metadata = None
+    human_review = None
     if judgments:
         judged = json.loads(Path(judgments).read_text(encoding='utf-8'))
         if judged['run_sha256'] != hashlib.sha256(raw).hexdigest():
@@ -61,6 +62,7 @@ def analyze(run, dataset, judgments=None):
         if len(judge_by_episode) != len(judged['episodes']):
             raise ValueError('Duplicate judgments')
         judge_metadata = {k: judged.get(k) for k in ('judge_model', 'same_model_as_solver', 'prompt_sha256')}
+        human_review = judged.get('human_review')
     rows, identifiers = [], set()
     for row in data['episodes']:
         if row['episode'] in identifiers:
@@ -72,6 +74,8 @@ def analyze(run, dataset, judgments=None):
         status = execution_status(row)
         judgment = judge_by_episode.get(row['episode'], {})
         correct = judgment.get('correct') if status in ('completed', 'incomplete_answer') else None
+        if correct is not None and type(correct) is not bool:
+            raise ValueError('Judge correct must be boolean or null')
         rows.append({'episode': row['episode'], 'task_id': row['task_id'], 'variant': row['variant'],
             'repeat': row['repeat'], 'status': status, 'answer_correct': correct,
             'judge_error': judgment.get('error'), 'answer_exact_match_proxy': row['evaluation']['answer_exact_match'],
@@ -98,7 +102,7 @@ def analyze(run, dataset, judgments=None):
                'timeout_seconds': plan.get('timeout_seconds'),
                'plugin_sha256': data.get('plugin', {}).get('package_sha256'),
                'plugin_indexing': data.get('plugin', {}).get('definition', {}).get('plugin', {}).get('indexing'),
-               'run_sha256': hashlib.sha256(raw).hexdigest(), 'judge': judge_metadata,
+               'run_sha256': hashlib.sha256(raw).hexdigest(), 'judge': judge_metadata,'human_review':human_review,
                'planned_episodes': plan.get('planned_episodes'), 'executed_episodes': len(rows),
                'missing_episodes': max(0, plan.get('planned_episodes', len(rows)) - len(rows)),
                'episodes': rows}
@@ -126,6 +130,8 @@ def render(summary):
               '索引构建在任务计时之外；逐题指标另外记录构建耗时、服务端工具延迟和模型 Token。']
     if summary['judge']:
         lines += [f"内部判分模型：{summary['judge']['judge_model']}；与被测模型相同：{summary['judge']['same_model_as_solver']}。同模型判分存在偏差，需要抽检。"]
+    if summary.get('human_review'):
+        lines += [f"人工复核记录：{summary['human_review']}。原机器判分保留在独立文件中。"]
     lines += ['', '## 每项任务使用了什么工具', '',
               '| 任务 / 配置 / 重复 | 状态 | 工具调用统计 | 服务端工具成功/调用 | 答案 | 证据召回 | 秒 |',
               '|---|---|---|---:|---|---:|---:|']

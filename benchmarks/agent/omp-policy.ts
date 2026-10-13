@@ -3,6 +3,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 
 export default function (pi: any) {
   const allowed = JSON.parse(process.env.FKB_BENCHMARK_TOOLS || '[]') as string[];
+  const closedBook = process.env.FKB_BENCHMARK_MODE === 'closed_book';
   const trace = process.env.FKB_BENCHMARK_POLICY_TRACE!;
   const record = (event: object) => appendFileSync(trace, JSON.stringify(event) + '\n', 'utf8');
   const catalog = JSON.parse(readFileSync(process.env.FKB_BENCHMARK_CATALOG!, 'utf8'));
@@ -39,7 +40,7 @@ export default function (pi: any) {
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline) {
       const registered = new Set(pi.getAllTools().map((t: any) => t.name));
-      if (allowed.length && allowed.every(name => registered.has(name))) {
+      if ((allowed.length || closedBook) && allowed.every(name => registered.has(name))) {
         const active = pi.getActiveTools();
         if (active.length !== allowed.length || active.some((n: string) => !allowed.includes(n))) {
           await pi.setActiveTools(allowed);
@@ -53,6 +54,7 @@ export default function (pi: any) {
     throw new Error('Benchmark MCP tools did not become ready');
   }
   pi.on('session_start', async () => {
+    if (closedBook) { await activate(); return; }
     await rpc('initialize', {protocolVersion: '2025-11-25', capabilities: {}, clientInfo: {name: 'folder-kb-omp-benchmark', version: '1.0'}});
     await fetch(process.env.FKB_BENCHMARK_URL!, {method: 'POST',
       headers: {'Content-Type': 'application/json', Accept: 'application/json, text/event-stream',
@@ -62,7 +64,7 @@ export default function (pi: any) {
   });
   pi.on('before_agent_start', async (event: any) => {
     await activate();
-    return {systemPrompt: event.systemPrompt + '\n\nMCP Server Instructions (server-provided):\n' + instructions};
+    return {systemPrompt: closedBook ? event.systemPrompt : event.systemPrompt + '\n\nMCP Server Instructions (server-provided):\n' + instructions};
   });
   pi.on('before_provider_request', (event: any) => {
     const names = (event.payload.tools || []).map((t: any) => t.function?.name || t.name);

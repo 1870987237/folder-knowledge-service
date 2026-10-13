@@ -18,8 +18,8 @@ async def run(args):
         raise ValueError('Output must be new/empty; previous experiments are immutable')
     root.mkdir(parents=True, exist_ok=True)
     shared = dict(omp=args.omp, model=args.model, models_config=args.models_config, dataset=args.dataset)
-    experiment = SimpleNamespace(**shared, output=root / 'execution', tasks=None, variants=args.variants,
-        repeats=args.repeats, timeout=args.timeout, fail_fast=True, trust_plugin=args.trust_plugin,
+    experiment = SimpleNamespace(**shared, output=root / 'execution', tasks=getattr(args,'tasks',None), variants=args.variants,
+        repeats=args.repeats, timeout=args.timeout, fail_fast=False, trust_plugin=args.trust_plugin,
         plugin_definition=args.plugin_definition, plugin_source=args.plugin_source)
     status = {'stage': 'execution', 'completed': False, 'error_type': None}
     try:
@@ -57,9 +57,10 @@ def main():
     parser.add_argument('--models-config', type=Path, default=Path.home() / '.omp/agent/models.yml')
     parser.add_argument('--judge-model', help='Independent judge model; default uses the solver model with a bias notice')
     parser.add_argument('--no-judge', action='store_true')
-    parser.add_argument('--variants', nargs='+', choices=['grep', 'search', 'hybrid'], default=['grep', 'search', 'hybrid'])
+    parser.add_argument('--variants', nargs='+', choices=['closed_book', 'grep', 'search', 'hybrid'], default=['closed_book', 'grep', 'search', 'hybrid'])
     parser.add_argument('--timeout', type=int, default=180)
     parser.add_argument('--repeats', type=int, default=1)
+    parser.add_argument('--tasks',nargs='+',help='Frozen subset of task IDs; recorded in the plan')
     parser.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/simple-rag/definition.json'))
     parser.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/simple-rag/package'))
     parser.add_argument('--trust-plugin', action='store_true')

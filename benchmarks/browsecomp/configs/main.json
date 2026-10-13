@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "model": "hyper-op/GLM-5.3-Flash",
+  "judge_model": "hyper-op/GLM-5.3-Flash",
+  "repeats": 3,
+  "timeout": 180,
+  "plugins": [
+    {
+      "name": "program-bm25",
+      "definition": "examples/plugins/simple-rag-python/definition.json",
+      "source": "examples/plugins/simple-rag-python/package",
+      "trust_plugin": true,
+      "variants": ["grep", "search", "hybrid"]
+    }
+  ]
+}
