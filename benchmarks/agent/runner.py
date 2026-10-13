@@ -180,6 +180,80 @@ def install_index_plugin(suite, args):
     return client
 
 
+async def solve(suite, recorder, key, directory, prompt, args, *, revoke=True):
+    """One isolated model session; scenario setup/verification remain outside."""
+    async with suite.client(key) as probe:
+        catalog = await probe.session.list_tools()
+    tool_names = [t.name for t in catalog.tools]
+    (directory / 'tool-catalog.json').write_text(catalog.model_dump_json(indent=2), encoding='utf-8')
+    work = directory / 'work'
+    work.mkdir()
+    profile = directory / 'profile'
+    prepare_profile(profile, args.models_config, suite.url + '/mcp', key['token'])
+    # The explicit adapter registers the unchanged MCP schemas. Disable native
+    # discovery to avoid duplicate tools and client startup races.
+    (profile / 'mcp.json').write_text('{"mcpServers":{}}', encoding='utf-8')
+    # The adapter activates MCP-derived tools before the model runs and records
+    # the actual provider-facing inventory. Native discovery is disabled above.
+    env = dict(os.environ, PI_CODING_AGENT_DIR=str(profile), OMP_MCP_STARTUP_TIMEOUT_MS='0',
+               FKB_BENCHMARK_TOOLS=json.dumps(['mcp__folderkb_' + n for n in tool_names]),
+               FKB_BENCHMARK_CATALOG=str(directory / 'tool-catalog.json'),
+               FKB_BENCHMARK_INSTRUCTIONS=recorder.instructions[-1],
+               FKB_BENCHMARK_URL=suite.url + '/mcp', FKB_BENCHMARK_KEY=key['token'],
+               FKB_BENCHMARK_POLICY_TRACE=str(directory / 'policy.jsonl'))
+    command = [args.omp, '--cwd', str(work), '-e', str(Path('benchmarks/agent/omp-policy.ts').resolve()),
+               '--auto-approve', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp',
+               '--no-title', '--no-session', '--model', args.model, '--thinking', 'off', '--mode', 'json',
+               '--max-time', str(args.timeout), '--system-prompt', getattr(args, 'system_prompt', SYSTEM), '-p', prompt]
+    index = len(recorder.calls)
+    catalog_index = len(recorder.catalogs)
+    started = time.perf_counter()
+    timed_out = False
+    try:
+        process = await asyncio.create_subprocess_exec(*command, env=env, cwd=work, stdout=asyncio.subprocess.PIPE,
+                                                      stderr=asyncio.subprocess.PIPE,
+                                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=args.timeout + 20)
+    except asyncio.TimeoutError:
+        timed_out = True
+        stdout, stderr = await stop_process(process)
+    finally:
+        if revoke:
+            suite.registry.revoke_key(key['key']['id'])
+        # OMP can cache configuration in SQLite. Remove the entire generated
+        # profile after process exit, checking its resolved boundary first.
+        if profile.resolve().parent != directory.resolve() or profile.name != 'profile':
+            raise RuntimeError('Refusing to clean a profile outside this episode')
+        shutil.rmtree(profile)
+    elapsed = (time.perf_counter() - started) * 1000
+    decoded = stdout.decode('utf-8', errors='replace')
+    errtext = stderr.decode('utf-8', errors='replace')
+    # Agent messages contain only synthetic task data; redact any accidental key echo.
+    decoded, errtext = decoded.replace(key['token'], '[REDACTED]'), errtext.replace(key['token'], '[REDACTED]')
+    (directory / 'agent.jsonl').write_text(decoded, encoding='utf-8')
+    (directory / 'stderr.log').write_text(errtext, encoding='utf-8')
+    analysis = parse_events(decoded)
+    calls = recorder.calls[index:]
+    execution = {'returncode': process.returncode, 'timed_out': timed_out,
+                 'wall_ms': round(elapsed, 3), **analysis,
+                 'tool_calls': len(calls), 'tool_errors': sum(c['is_error'] for c in calls),
+                 'tool_ms': round(sum(c['duration_ms'] for c in calls), 3),
+                 'enabled_agent_tools': ['mcp__folderkb_' + n for n in tool_names],
+                 'tools_used': dict(Counter(c['tool'] for c in calls)),
+                 'available_tools': recorder.catalogs[catalog_index:]}
+    unexpected = [name for name in analysis['agent_tool_names'] if name not in execution['enabled_agent_tools']]
+    execution['unexpected_agent_tools'] = unexpected
+    # Wrong tool names and exhausted task budgets are solver failures, not excluded runs.
+    policy = [json.loads(line) for line in (directory / 'policy.jsonl').read_text(encoding='utf-8').splitlines()] if (directory / 'policy.jsonl').exists() else []
+    exposed = [e['names'] for e in policy if e['type'] == 'provider_tools']
+    execution['provider_tool_sets'] = exposed
+    execution['valid_run'] = bool(exposed) and all(set(n) == set(execution['enabled_agent_tools']) for n in exposed) and analysis['model_response_messages'] > 0
+    execution['adapter_handshake'] = len(recorder.instructions) > 0
+    (directory / 'tool-trace.json').write_text(json.dumps(calls, ensure_ascii=False, indent=2), encoding='utf-8')
+    (directory / 'execution.json').write_text(json.dumps(execution, ensure_ascii=False, indent=2), encoding='utf-8')
+    return execution, calls
+
+
 async def episode(suite, recorder, admin, task, variant, repeat, args):
     name = f'{task.id}-{variant}-{repeat}'
     directory = suite.output / 'episodes' / name
@@ -199,82 +273,18 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
         'library_id': lid, 'grep': variant in ('grep', 'hybrid'), 'search': variant in ('search', 'hybrid'),
         'write_policy': 'readonly' if task.readonly else 'direct'}]))
     before = read_tree(root)
-    async with suite.client(key) as probe:
-        catalog = await probe.session.list_tools()
-    tool_names = [t.name for t in catalog.tools]
-    (directory / 'tool-catalog.json').write_text(catalog.model_dump_json(indent=2), encoding='utf-8')
     before_hash = hashlib.sha256(json.dumps(before, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-    work = directory / 'work'
-    work.mkdir()
-    profile = directory / 'profile'
-    prepare_profile(profile, args.models_config, suite.url + '/mcp', key['token'])
-    # The explicit adapter registers the unchanged MCP schemas. Disable native
-    # discovery to avoid duplicate tools and client startup races.
-    (profile / 'mcp.json').write_text('{"mcpServers":{}}', encoding='utf-8')
-    # The adapter activates MCP-derived tools before the model runs and records
-    # the actual provider-facing inventory. Native discovery is disabled above.
-    env = dict(os.environ, PI_CODING_AGENT_DIR=str(profile), OMP_MCP_STARTUP_TIMEOUT_MS='0',
-               FKB_BENCHMARK_TOOLS=json.dumps(['mcp__folderkb_' + n for n in tool_names]),
-               FKB_BENCHMARK_CATALOG=str(directory / 'tool-catalog.json'),
-               FKB_BENCHMARK_INSTRUCTIONS=recorder.instructions[-1],
-               FKB_BENCHMARK_URL=suite.url + '/mcp', FKB_BENCHMARK_KEY=key['token'],
-               FKB_BENCHMARK_POLICY_TRACE=str(directory / 'policy.jsonl'))
-    command = [args.omp, '--cwd', str(work), '-e', str(Path('benchmarks/agent/omp-policy.ts').resolve()),
-               '--auto-approve', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp',
-               '--no-title', '--no-session', '--model', args.model, '--thinking', 'off', '--mode', 'json',
-               '--max-time', str(args.timeout), '--system-prompt', getattr(args, 'system_prompt', SYSTEM), '-p', task.prompt]
-    index = len(recorder.calls)
-    catalog_index = len(recorder.catalogs)
-    started = time.perf_counter()
-    timed_out = False
-    try:
-        process = await asyncio.create_subprocess_exec(*command, env=env, cwd=work, stdout=asyncio.subprocess.PIPE,
-                                                      stderr=asyncio.subprocess.PIPE,
-                                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=args.timeout + 20)
-    except asyncio.TimeoutError:
-        timed_out = True
-        stdout, stderr = await stop_process(process)
-    finally:
-        suite.registry.revoke_key(key['key']['id'])
-        # OMP can cache configuration in SQLite. Remove the entire generated
-        # profile after process exit, checking its resolved boundary first.
-        if profile.resolve().parent != directory.resolve() or profile.name != 'profile':
-            raise RuntimeError('Refusing to clean a profile outside this episode')
-        shutil.rmtree(profile)
-    elapsed = (time.perf_counter() - started) * 1000
-    decoded = stdout.decode('utf-8', errors='replace')
-    errtext = stderr.decode('utf-8', errors='replace')
-    # Agent messages contain only synthetic task data; redact any accidental key echo.
-    decoded, errtext = decoded.replace(key['token'], '[REDACTED]'), errtext.replace(key['token'], '[REDACTED]')
-    (directory / 'agent.jsonl').write_text(decoded, encoding='utf-8')
-    (directory / 'stderr.log').write_text(errtext, encoding='utf-8')
-    analysis = parse_events(decoded)
-    calls = recorder.calls[index:]
+    execution, calls = await solve(suite, recorder, key, directory, task.prompt, args)
     after = read_tree(suite.current(lid))
     result = {'episode': name, 'task_id': task.id, 'kind': task.kind, 'variant': variant, 'repeat': repeat,
-              'prompt': task.prompt, 'initial_sha256': before_hash, 'returncode': process.returncode,
-              'timed_out': timed_out, 'wall_ms': round(elapsed, 3), **analysis,
-              'tool_calls': len(calls), 'tool_errors': sum(c['is_error'] for c in calls),
-              'tool_ms': round(sum(c['duration_ms'] for c in calls), 3),
+              'prompt': task.prompt, 'initial_sha256': before_hash, **execution,
               'index_build_ms': round(index_build_ms, 3),
               'index_metadata': index_response.json(),
-              'enabled_agent_tools': ['mcp__folderkb_' + n for n in tool_names],
-              'tools_used': dict(Counter(c['tool'] for c in calls)),
-              'available_tools': recorder.catalogs[catalog_index:],
-              'evaluation': grade(task, before, after, analysis['final'], calls)}
-    unexpected = [name for name in analysis['agent_tool_names'] if name not in result['enabled_agent_tools']]
-    result['unexpected_agent_tools'] = unexpected
-    # Wrong tool names and exhausted task budgets are solver failures, not excluded runs.
-    policy = [json.loads(line) for line in (directory / 'policy.jsonl').read_text(encoding='utf-8').splitlines()] if (directory / 'policy.jsonl').exists() else []
-    exposed = [e['names'] for e in policy if e['type'] == 'provider_tools']
-    result['provider_tool_sets'] = exposed
-    result['valid_run'] = bool(exposed) and all(set(n) == set(result['enabled_agent_tools']) for n in exposed) and analysis['model_response_messages'] > 0
-    result['adapter_handshake'] = len(recorder.instructions) > 0
-    if not result['valid_run'] or timed_out or process.returncode != 0:
+              'evaluation': grade(task, before, after, execution['final'], calls)}
+    if not result['valid_run'] or result['timed_out'] or result['returncode'] != 0:
         result['evaluation']['success'] = False
         result['evaluation']['outcome_success'] = False
-    result['evaluation']['error_recovered'] = result['evaluation']['success'] and bool(analysis['agent_tool_errors'])
+    result['evaluation']['error_recovered'] = result['evaluation']['success'] and bool(result['agent_tool_errors'])
     fingerprints = Counter((c['tool'], json.dumps(c['arguments'], sort_keys=True)) for c in calls if c['is_error'])
     result['repeated_identical_errors'] = sum(max(0, count - 1) for count in fingerprints.values())
     with suite.registry.store.transaction() as db:
