@@ -11,6 +11,10 @@ export const SessionContext = createContext<{
 export function useSession() { const value = useContext(SessionContext); if (!value) throw new Error('Missing session'); return value; }
 export function useResource<T>(path: string | null, pollMs = 0) {
   const { api, revision } = useSession();
+  return useApiResource<T>(api, path, pollMs, revision);
+}
+
+export function useApiResource<T>(api: Api, path: string | null, pollMs = 0, revision = 0) {
   const [data, setData] = useState<T>();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);

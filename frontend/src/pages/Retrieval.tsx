@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Alert, App, Button, Empty, Form, Input, List, Space, Spin, Tag, Typography } from 'antd';
-import { useResource, useSession } from '../context';
+import { useApiResource, useSession } from '../context';
 import { date, LoadError, required } from '../components';
-import { errorMessage } from '../api';
+import { type Api, errorMessage } from '../api';
 import type { Library } from '../types';
 
 interface IndexState { status: string; message?: string; files?: number; chunks?: number; built_at?: string; supports_path_filter?: boolean }
@@ -11,9 +11,14 @@ interface Result { results: Hit[]; notice: string; has_more?: boolean }
 const statuses: Record<string, string> = { ready: '已就绪', stale: '需要重建', missing: '尚未构建', unconfigured: '未配置', unsupported: '暂不支持', unavailable: '不可用' };
 
 export function RetrievalSettings({ library }: { library: Library }) {
-  const { api } = useSession(), { message } = App.useApp();
-  const base = `/libraries/${encodeURIComponent(library.id)}`;
-  const state = useResource<IndexState>(base + '/index');
+  const { api } = useSession();
+  return <RetrievalPanel api={api} libraryId={library.id} />;
+}
+
+export function RetrievalPanel({ api, libraryId, searchPath = '/search' }: { api: Api; libraryId: string; searchPath?: string }) {
+  const { message } = App.useApp();
+  const base = `/libraries/${encodeURIComponent(libraryId)}`;
+  const state = useApiResource<IndexState>(api, base + '/index');
   const [busy, setBusy] = useState(false), [searching, setSearching] = useState(false), [error, setError] = useState('');
   const [result, setResult] = useState<Result>();
   const blocked = !state.data || ['unconfigured', 'unsupported'].includes(state.data.status);
@@ -33,7 +38,7 @@ export function RetrievalSettings({ library }: { library: Library }) {
     {state.data?.status === 'unavailable' && <Alert className="block-gap" type="warning" title={state.data.message || '索引不可用'} />}
     <Form layout="vertical" className="block-gap" onFinish={async ({ query, path }: { query: string; path?: string }) => {
       setSearching(true); setError(''); setResult(undefined);
-      try { setResult(await api.request<Result>(base + '/search?query=' + encodeURIComponent(query) + '&limit=5&path=' + encodeURIComponent(state.data?.supports_path_filter ? path?.trim() || '.' : '.'))); }
+      try { setResult(await api.request<Result>(base + searchPath + '?query=' + encodeURIComponent(query) + '&limit=5&path=' + encodeURIComponent(state.data?.supports_path_filter ? path?.trim() || '.' : '.'))); }
       catch (e) { setError(errorMessage(e)); state.refresh(); } finally { setSearching(false); }
     }}>
       <Form.Item name="query" label="检索测试" rules={required}><Input maxLength={200} placeholder="输入关键词或问题" /></Form.Item>

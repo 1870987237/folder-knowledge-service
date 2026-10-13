@@ -145,7 +145,7 @@ def test_depth_and_v9_migration(env):
         db.execute('PRAGMA user_version=9')
     new=Registry(str(r.pool.root),str(r.directory))
     with new.store.transaction() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0]==10
+        assert db.execute('PRAGMA user_version').fetchone()[0]==11
         assert db.execute('SELECT count(*) FROM organization_units').fetchone()[0]==0
     assert read(c,a,lid)==200 and read(c,u,lid)==403
 
