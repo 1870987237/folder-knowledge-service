@@ -40,7 +40,8 @@ async def run(args):
     root.mkdir(parents=True,exist_ok=True)
     manifest={'query_policy':'one question-only model-generated query; no tools/corpus/answers; frozen before plugin comparison',
         'source_model':args.model,'labels':args.labels,'dataset':metadata,'system_prompt_sha256':fingerprint(SYSTEM),
-        'source_snapshot':freeze_source(root),'status':'running','planned_queries':len(tasks),'queries':[]}
+        'source_snapshot':freeze_source(root),'status':'running','planned_queries':len(tasks),'queries':[],
+        'max_format_attempts':3,'attempts':[]}
     def save():(root/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     save();health=await check_model(args)
     (root/'preflight.json').write_text(json.dumps(health,indent=2),encoding='utf-8')
@@ -49,13 +50,23 @@ async def run(args):
     rows=[];qrels={}
     try:
         for task in tasks:
-            directory=root/'episodes'/task.id;directory.mkdir(parents=True)
-            execution,_=await solve(SimpleNamespace(url='http://127.0.0.1:1/unused'),Recorder(),None,directory,
-                task.prompt,args,closed_book=True,system_prompt=SYSTEM)
-            query=query_from(execution)
+            for attempt in range(1,4):
+                directory=root/'episodes'/task.id/f'attempt-{attempt}';directory.mkdir(parents=True)
+                system=SYSTEM if attempt==1 else SYSTEM+'\nA prior formatting attempt was invalid. Return a complete JSON object with correctly escaped strings and a query shorter than 160 characters. Do not add explanation outside JSON.'
+                execution,_=await solve(SimpleNamespace(url='http://127.0.0.1:1/unused'),Recorder(),None,directory,
+                    task.prompt,args,closed_book=True,system_prompt=system)
+                entry={'id':task.id,'attempt':attempt,'valid_query':False,'execution_sha256':fingerprint(execution)}
+                manifest['attempts'].append(entry)
+                try:query=query_from(execution)
+                except ValueError:
+                    save()
+                    if attempt==3 or not execution['valid_run'] or execution['returncode']!=0 or execution['timed_out']:
+                        raise
+                    continue
+                entry['valid_query']=True;break
             rows.append({'id':task.id,'query':query})
             qrels[task.id]=[f'documents/{did}.md' for did in task.reference[args.labels+'_docids']]
-            manifest['queries'].append({'id':task.id,'query_sha256':fingerprint(query),'execution_sha256':fingerprint(execution)})
+            manifest['queries'].append({'id':task.id,'query_sha256':fingerprint(query),'execution_sha256':fingerprint(execution),'format_attempts':attempt})
             save()
     except Exception as exc:
         manifest.update(status='failed',error_type=type(exc).__name__);save();raise

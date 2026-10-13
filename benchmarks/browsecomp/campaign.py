@@ -56,6 +56,7 @@ def read_config(path, dataset):
         'planned_agent_episodes':len(selected)*config['repeats']*sum(len(j['variants']) for j in jobs),
         'planned_judge_attempts_at_most':len(selected)*config['repeats']*sum(len(j['variants']) for j in jobs),
         'planned_query_generations':len(selected) if config['retrieval'] else 0,
+        'planned_query_attempts_at_most':3*len(selected) if config['retrieval'] else 0,
         'question_selection':'frozen task IDs; no result-based retries or filtering',
         'execution_order':'control then configured plugins; tool variants rotate within task/repeat',
         'data_bytes':sum(len(v.encode()) for v in documents.values())}

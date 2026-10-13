@@ -68,6 +68,24 @@ def test_query_validation_never_truncates_or_accepts_tools():
     with pytest.raises(ValueError):query_from(value)
 
 
+def test_query_format_retry_is_bounded_logged_and_never_uses_answers(review_fixture,tmp_path,monkeypatch):
+    from benchmarks.retrieval import queries
+    _,dataset,_=review_fixture
+    async def healthy(_):return {'ok':True}
+    seen=[]
+    async def fake_solve(suite,recorder,key,directory,prompt,args,**kwargs):
+        assert key is None and kwargs['closed_book'] and 'Example-42' not in prompt
+        seen.append(prompt)
+        final='not json' if len(seen)==1 else json.dumps({'facts':{'query':'sample release current'}})
+        return {'final':final,'valid_run':True,'returncode':0,'timed_out':False,'agent_tool_attempts':0},[]
+    monkeypatch.setattr(queries,'check_model',healthy);monkeypatch.setattr(queries,'solve',fake_solve)
+    args=SimpleNamespace(dataset=dataset,output=tmp_path/'queries',model='test',labels='evidence')
+    result=asyncio.run(queries.run(args))
+    assert result['status']=='completed' and result['queries'][0]['format_attempts']==2
+    assert [a['valid_query'] for a in result['attempts']]==[False,True]
+    assert seen[0]==seen[1]
+
+
 @pytest.fixture
 def review_fixture(tmp_path):
     dataset=tmp_path/'dataset';write_dataset(dataset,[record()],1,42,{'repository':'synthetic'})
