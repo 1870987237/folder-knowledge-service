@@ -410,6 +410,8 @@ python -m pytest -q
 
 工具与索引的任务效果使用[通用 Agent Benchmark](benchmarks/agent/README.md)评测：让 OMP 自主完成自然语言读写任务，独立核验答案和文件结果，对比 grep、Search 及混合配置，并记录调用成功率、错误恢复、耗时和 tokens。
 
+[评测总入口](benchmarks/README.md)汇总基础任务、平台业务流程、固定查询 Recall@K/nDCG@K 和独立并发负载测试。各层结果分开统计，参见 [10 月 13 日扩展报告](docs/reports/2026-10-13-benchmark-expansion.md)。
+
 公开检索任务可用 [BrowseComp-Plus 适配器](benchmarks/browsecomp/README.md)：导入官方问题、完整证据和干扰文档，经相同 MCP 工具运行，统计证据召回并独立判分。当前为缩小语料的内部测试，不能直接对比官方全量榜单。
 
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。
