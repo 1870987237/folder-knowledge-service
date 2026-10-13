@@ -32,3 +32,15 @@ python -m benchmarks.retrieval.run --dataset data/baseline-20261012/dataset-bcp 
 ```
 
 同一查询文件可以交给不同插件；manifest 保存原运行/轨迹指纹及标签口径。不能把首次查询指标与 Agent 多轮累计召回直接视为同一种分数。
+
+## 从问题独立准备查询
+
+主基准使用 `queries.py`：在任何插件检索之前，让无工具会话仅根据原问题生成一个短查询，既不读知识库也不看答案。生成结果先验证再冻结，所有插件复用同一 CSV。保留生成轨迹和模型版本；生成失败不自动替换成答案关键词。
+
+```powershell
+python -m benchmarks.retrieval.queries --dataset data/bcp-holdout --output data/bcp-queries --labels evidence
+python -m benchmarks.retrieval.run --dataset data/bcp-holdout --queries data/bcp-queries/queries.csv `
+  --qrels data/bcp-queries/qrels.json --output data/bcp-query-results
+```
+
+`--labels gold` 可另生成 gold 标签，不能与 evidence 结果混合。查询准备是评测前处理，不计入 Agent 解题调用次数。无工具模型仍可能包含先验知识，因此记录并冻结这种查询生成方法，不将其描述成官方原题直接检索。
