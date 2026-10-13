@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Modal, Popover, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
+import { Alert, App, Breadcrumb, Button, Card, Dropdown, Form, Input, Layout, Modal, Select, Space, Table, Tabs, Tag, Tooltip, Typography, theme } from 'antd';
 import { ArrowLeftOutlined, DownOutlined, FolderOutlined, KeyOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined, ReloadOutlined, SearchOutlined, TeamOutlined } from '@ant-design/icons';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -117,20 +117,38 @@ function KnowledgeEditor({ api, identity, library, back, onChanged, onDirtyChang
   function switchView(t: string) { navigate(() => { setText(doc?.content || ''); setEditorRevision(v => v + 1); setTab(t); if (t === 'drafts') void loadDrafts(); if (t === 'documents' && !directory) void browse(path); }); }
   return <div className="workspace-browser">
     <Modal title="知识库设置" open={agentSettings} footer={null} onCancel={() => setAgentSettings(false)} destroyOnHidden><LibrarySettings api={api} library={library} onChanged={onChanged} /></Modal>
+    <Modal title="搜索文档" open={searchOpen} footer={null} onCancel={() => setSearchOpen(false)} destroyOnHidden>
+      <Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear enterButton="搜索" onSearch={q => { setSearchOpen(false); void find(q); }} />
+    </Modal>
     <div className="workspace-topbar">
       <Tooltip title={doc && tab === 'documents' ? '返回列表' : '上一级'}><Button size="small" type="text" aria-label={doc && tab === 'documents' ? '返回列表' : '上一级'} icon={<ArrowLeftOutlined />} disabled={busy} onClick={() => navigate(() => {
         if (tab !== 'documents') switchView('documents'); else if (doc) { setDoc(undefined); } else if (path === '.') back(); else void browse(path.split('/').slice(0, -1).join('/') || '.');
       })} /></Tooltip>
       <Breadcrumb className="explorer-breadcrumb" items={crumbs} />
       <div className="workspace-actions">
-        {library.can_configure && <Button size="small" type="text" onClick={() => setAgentSettings(true)}>知识库设置</Button>}
-        {library.can_configure && library.organization_id && <Button size="small" type="text" onClick={() => switchView('members')}>成员权限</Button>}
         <span ref={setEditorTools} className="workspace-editor-tools" />
-        {tab === 'documents' && !doc && <><Popover trigger="click" open={searchOpen} onOpenChange={setSearchOpen} content={<Input.Search autoFocus placeholder="搜索库内正文" aria-label="搜索文档内容" allowClear onSearch={q => { setSearchOpen(false); void find(q); }} />}><Button size="small" type="text" aria-label="搜索" icon={<SearchOutlined />} /></Popover><Tooltip title="刷新"><Button size="small" type="text" aria-label="刷新" icon={<ReloadOutlined />} disabled={busy} onClick={() => { void browse(path); }} /></Tooltip>{canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}</>}
+        {tab === 'documents' && !doc && canEdit && <Button size="small" type="primary" onClick={() => { setFilename(''); setNewFile(true); }}>新建文档</Button>}
         {tab === 'documents' && doc && canEdit && <>{text !== doc.content && <Button size="small" disabled={busy} onClick={() => navigate(() => { setText(doc.content); setEditorRevision(v => v + 1); })}>撤销修改</Button>}<Button size="small" type="primary" loading={busy} disabled={text === doc.content} onClick={async () => {
             setBusy(true); setError(''); try { const d = await api.request<{ id: string }>(base + '/drafts', 'POST', { path: doc.path, content: text, expected_version: doc.version }); setText(doc.content); setEditorRevision(v => v + 1); setTab('drafts'); await loadDrafts(); await openDraft(d.id); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
           }}>保存为草稿</Button></>}
-        <Dropdown trigger={['click']} menu={{ selectedKeys: [tab], onClick: ({ key }) => switchView(key), items: [{ key: 'documents', label: '文档' }, { key: 'drafts', label: '草稿与版本' }, ...(library.can_configure && library.organization_id ? [{ key: 'members', label: '成员权限' }] : []), { type: 'divider' }, { key: 'role', label: `当前权限：${roles[library.role]}`, disabled: true }] }}><Button size="small" type="text" className="workspace-view-switch" aria-label="切换视图">{{ documents: '文档', drafts: '草稿与版本', members: '成员权限' }[tab]} <DownOutlined /></Button></Dropdown>
+        <Dropdown trigger={['click']} menu={{ selectedKeys: [tab], onClick: ({ key }) => {
+          if (key === 'settings') setAgentSettings(true);
+          else if (key === 'search') setSearchOpen(true);
+          else if (key === 'refresh') void browse(path);
+          else switchView(key);
+        }, items: [
+          { key: 'documents', label: '文档' }, { key: 'drafts', label: '草稿与版本' },
+          ...(tab === 'documents' && !doc ? [
+            { type: 'divider' as const },
+            { key: 'search', label: '搜索', icon: <SearchOutlined />, disabled: busy },
+            { key: 'refresh', label: '刷新', icon: <ReloadOutlined />, disabled: busy },
+          ] : []),
+          ...(library.can_configure ? [
+            { type: 'divider' as const }, { key: 'settings', label: '知识库设置' },
+            ...(library.organization_id ? [{ key: 'members', label: '成员权限' }] : []),
+          ] : []),
+          { type: 'divider' }, { key: 'role', label: `当前权限：${roles[library.role]}`, disabled: true },
+        ] }}><Button size="small" type="text" className="workspace-view-switch" aria-label="视图与操作">{{ documents: '文档', drafts: '草稿与版本', members: '成员权限' }[tab]} <DownOutlined /></Button></Dropdown>
       </div>
     </div>
     {error && <Alert className="block-gap" type="error" title={error} closable onClose={() => setError('')} />}
