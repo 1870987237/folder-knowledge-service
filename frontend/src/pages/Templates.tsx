@@ -4,6 +4,7 @@ import { PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import { useResource, useSession } from '../context';
 import { errorMessage, parseObject } from '../api';
 import { AsyncForm, JsonView, LoadError, PageHeader, PathInput, required, Surface } from '../components';
+import { ResourceAccess } from '../ResourceAccess';
 import type { PluginBindingValue, Library, Template, Workspace } from '../types';
 
 const url = (t: Template) => `/plugins/${encodeURIComponent(t.definition.id)}/versions/${encodeURIComponent(t.definition.version)}`;
@@ -59,7 +60,7 @@ export function TemplatesPage() {
         try { if (file.size > 32 * 1024 * 1024) throw new Error('ZIP 不能超过 32 MiB。'); const result = await api.request<Template>(url(target) + '/package', 'PUT', file); setSelected(current => current && url(current) === url(target) ? result : current); refresh(); message.success('程序包已安装'); }
         catch (e) { setUploadError(errorMessage(e)); } finally { setUploading(false); } return false;
       }}><Button type="primary" icon={<UploadOutlined />} loading={uploading}>上传 package.zip</Button></Upload>}
-      {current && <><PluginDetails plugin={current} /><Typography.Title level={5}>绑定知识库</Typography.Title>
+      {current && <><PluginDetails plugin={current} /><Collapse className="block-gap" items={[{ key: "access", label: "使用授权", children: <ResourceAccess api={api} kind="plugin" resourceId={current.definition.id + "@" + current.definition.version} /> }]} /><Typography.Title level={5}>绑定知识库</Typography.Title>
         {current.libraries?.length ? <Space wrap>{current.libraries.map(l => <Tag key={l.id}>{l.name}</Tag>)}</Space> : <Typography.Text type="secondary">尚未绑定</Typography.Text>}
         <Typography.Paragraph className="block-gap">在知识库的“插件配置”中绑定；更新程序需另行启用并审核发布。</Typography.Paragraph></>}
       <Collapse className="block-gap" items={[{ key: 'definition', label: '完整定义与校验摘要', children: <JsonView value={selected} /> }]} /></>}

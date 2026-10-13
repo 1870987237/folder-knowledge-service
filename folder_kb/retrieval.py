@@ -53,6 +53,8 @@ class Retrieval:
             binding = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()
             if not binding:
                 raise KnowledgeError('index_not_configured', 'Bind an indexing plugin first', 409)
+            from .resource_access import check_binding_access
+            check_binding_access(db, library_id, binding)
             installed = self.catalog.require(db, binding['template_id'], binding['template_version'])
             definition = json.loads(installed['metadata_json'])
             index = (definition.get('plugin') or {}).get('indexing')

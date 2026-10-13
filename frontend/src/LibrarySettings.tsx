@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, App, Button, Form, Input, Tabs } from 'antd';
 import { type Api, errorMessage } from './api';
 import { LibraryAgentSettings } from './KeyPolicy';
+import { LibraryPluginSettings } from './LibraryUpdates';
 import { RetrievalPanel } from './pages/Retrieval';
 
 export function LibrarySettings({ api, library, onChanged }: {
@@ -9,6 +10,7 @@ export function LibrarySettings({ api, library, onChanged }: {
 }) {
   return <Tabs destroyOnHidden items={[
     { key: 'basic', label: '基本信息', children: <BasicSettings api={api} library={library} onChanged={onChanged} /> },
+    { key: 'plugin', label: '模板与更新', children: <LibraryPluginSettings api={api} libraryId={library.id} onChanged={() => onChanged(library.name)} /> },
     { key: 'agent', label: 'Agent 接入', children: <LibraryAgentSettings api={api} id={library.id} /> },
     { key: 'index', label: '检索索引', children: <RetrievalPanel api={api} libraryId={library.id} searchPath="/index/search" /> },
   ]} />;

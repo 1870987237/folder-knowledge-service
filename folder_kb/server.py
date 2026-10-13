@@ -486,6 +486,10 @@ def add_admin_routes(app: FastAPI, registry: Registry):
     add_retrieval_routes(app, registry)
     from .updates import add_update_routes
     add_update_routes(app, registry)
+    from .resource_access import add_resource_routes
+    from .library_updates import add_library_update_routes
+    add_resource_routes(app, registry)
+    add_library_update_routes(app, registry)
     repositories = RepositoryCatalog(registry)
     assets = Path(__file__).parent / 'web'
     app.mount('/admin/assets', StaticFiles(directory=assets), name='admin-assets')

@@ -83,6 +83,8 @@ class SqliteStore:
         with self.connection() as db:
             if db.execute('PRAGMA journal_mode').fetchone()[0] != 'wal':
                 db.execute('PRAGMA journal_mode=WAL')
+            # Table rebuild in migration 12 preserves existing referencing tables.
+            db.execute('PRAGMA foreign_keys=OFF')
             db.execute('BEGIN IMMEDIATE')
             version = db.execute('PRAGMA user_version').fetchone()[0]
             if version == 0:
@@ -93,7 +95,7 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
+            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
                 raise ValueError('Unsupported management database version')
             if version in (0, 1):
                 from .repositories import REPOSITORY_SCHEMA
@@ -147,6 +149,28 @@ class SqliteStore:
                     db.execute('ALTER TABLE repositories ADD COLUMN published_branch TEXT')
                     db.execute('UPDATE repositories SET published_branch=branch WHERE current_commit IS NOT NULL')
                 db.execute('PRAGMA user_version=11')
+            if version < 12:
+                from .resource_access import RESOURCE_SCHEMA
+                from .inbox import INBOX_SCHEMA
+                for statement in RESOURCE_SCHEMA:
+                    db.execute(statement)
+                if 'approved_by' not in {r['name'] for r in db.execute('PRAGMA table_info(update_jobs)')}:
+                    db.execute('ALTER TABLE update_jobs ADD COLUMN approved_by TEXT REFERENCES users(id)')
+                if 'user_id' not in {r['name'] for r in db.execute('PRAGMA table_info(inbox_items)')}:
+                    definition = INBOX_SCHEMA[1].replace('IF NOT EXISTS inbox_items', 'inbox_items_new')
+                    definition = definition.replace('key_id TEXT NOT NULL REFERENCES', 'key_id TEXT REFERENCES')
+                    definition = definition.replace('UNIQUE(key_id,library_id,submission_id)',
+                        '''user_id TEXT REFERENCES users(id),
+                           CHECK((key_id IS NULL) != (user_id IS NULL)),
+                           UNIQUE(user_id,library_id,submission_id), UNIQUE(key_id,library_id,submission_id)''')
+                    db.execute(definition)
+                    db.execute('INSERT INTO inbox_items_new SELECT *,NULL FROM inbox_items')
+                    db.execute('DROP TABLE inbox_items')
+                    db.execute('ALTER TABLE inbox_items_new RENAME TO inbox_items')
+                    db.execute(INBOX_SCHEMA[2])
+                db.execute('PRAGMA user_version=12')
+                if db.execute('PRAGMA foreign_key_check').fetchone():
+                    raise ValueError('Management database contains invalid references')
             db.commit()
 
     @contextmanager

@@ -4,6 +4,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import hmac
+from contextlib import nullcontext
 import json
 import os
 import secrets
@@ -265,9 +266,9 @@ class Collaboration:
                 return False
         return True
 
-    def create_library(self, actor, name, oid):
+    def create_library(self, actor, name, oid, db=None):
         lid = uuid.uuid4().hex
-        with self.store.transaction(write=True) as db:
+        with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
             if oid:
                 self.org_check(db, actor, oid)
             elif actor.get('platform'):
@@ -445,8 +446,12 @@ class Scope(Input):
     organization_id: str
 
 
+from .library_updates import LibraryPluginSettings
+
+
 class NewLibrary(Name):
     organization_id: str | None = None
+    template: LibraryPluginSettings | None = None
 
 
 class Grant(Input):
@@ -565,6 +570,9 @@ def add_collaboration_routes(app, registry):
 
     @app.post('/portal/api/libraries', status_code=201)
     def create_library(value: NewLibrary, request: Request):
+        if value.template is not None:
+            from .library_updates import LibraryUpdates
+            return LibraryUpdates(registry).create(actor(request), value)
         return service.create_library(actor(request), value.name, value.organization_id)
 
     @app.put('/portal/api/libraries/{lid}/settings')

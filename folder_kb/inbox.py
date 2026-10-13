@@ -189,7 +189,8 @@ class Inbox:
     def record(row, include_material=True):
         value = {key: row[key] for key in ('id', 'library_id', 'submission_id', 'created_at',
                                           'updated_at', 'status', 'attempts', 'lease_until')}
-        value['submitted_by'] = {'type': 'agent_key', 'id': row['key_id']}
+        value['submitted_by'] = ({'type': 'user', 'id': row['user_id']} if row['user_id']
+                                 else {'type': 'agent_key', 'id': row['key_id']})
         value['result'] = json.loads(row['result']) if row['result'] else None
         material = json.loads(row['payload'])
         value['title'], value['kind'] = material['title'], material['kind']

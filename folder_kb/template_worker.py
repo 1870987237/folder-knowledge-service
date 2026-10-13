@@ -76,6 +76,9 @@ class TemplateWorker:
         return False
 
     def current(self, db, job):
+        if job['approved_by']:
+            from .library_updates import LibraryUpdates
+            LibraryUpdates(self.registry).workspace_access(db, {'id': job['approved_by']}, job['library_id'], job=job)
         context = self.updates.context(db, job['library_id'])
         if encode(context) != job['context_json']:
             raise KnowledgeError('stale_update_context', 'Workspace configuration changed', 409)
