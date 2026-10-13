@@ -23,6 +23,15 @@ def test_empty_and_short_rankings_keep_fixed_denominator():
     assert ranking_metrics(['a'], [], 5)['recall'] is None
 
 
+def test_freeze_does_not_select_successful_or_post_evidence_queries():
+    from benchmarks.retrieval.prepare import first_query
+    calls=[{'tool':'list_libraries'},{'tool':'search','arguments':{'query':'first'},'is_error':True},
+           {'tool':'search','arguments':{'query':'later success'}}]
+    assert first_query(calls)=='first'
+    with pytest.raises(ValueError):first_query([{'tool':'read_file'},*calls])
+    with pytest.raises(ValueError):first_query([{'tool':'search','arguments':{'query':'a'*201}}])
+
+
 def test_supplied_synthetic_labels_resolve_to_real_documents():
     queries, qrels = load_queries('benchmarks/datasets/basic/retrieval-queries.csv',
         'benchmarks/datasets/basic/retrieval-qrels.json', corpus())

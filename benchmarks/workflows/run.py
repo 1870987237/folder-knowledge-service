@@ -1,7 +1,6 @@
 """Natural-language multi-library, freshness and reviewed-update scenarios."""
 import argparse
 import asyncio
-from collections import Counter
 import csv
 import hashlib
 import json
@@ -17,6 +16,7 @@ from benchmarks.agent.evaluate import canonical, final_payload, same_fact
 from benchmarks.agent.preflight import check_model
 from benchmarks.agent.runner import Recorder, SYSTEM, install_index_plugin, read_tree, seed_knowledge, solve
 from benchmarks.agent.tasks import fingerprint
+from benchmarks.provenance import freeze_source
 from folder_kb.capabilities import Capabilities, Policy
 from folder_kb.inbox import Inbox
 from folder_kb.template_package import build_package
@@ -234,6 +234,7 @@ async def run(args):
     saved={k:os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON','KB_SEARCH_PLUGIN_ALLOWLIST','KB_TEMPLATE_TRUSTED_PYTHON')}
     admin=None; workflow=None
     data={'model':args.model,'omp_version':subprocess.check_output([args.omp,'--version'],text=True).strip(),
+          'source_snapshot':freeze_source(args.output),
           'environment':suite.result['environment'],'planned_episodes':len(tasks)*args.repeats,
           'dataset_sha256':fingerprint(read_tree(args.dataset)),
           'source_sha256':fingerprint({str(p):p.read_text(encoding='utf-8') for p in (Path(__file__),Path('benchmarks/agent/runner.py'),Path('benchmarks/agent/omp-policy.ts'))}),

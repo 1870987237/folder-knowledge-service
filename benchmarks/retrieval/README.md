@@ -21,3 +21,14 @@ python -m benchmarks.retrieval.run --output data/retrieval-program --plugin-defi
 这不是完整文档 Top-K 候选集：同一文档的多个片段可能占满返回预算。报告必须注明“Top-10 片段内文档去重”；不能宣称官方 Recall@100/1000。若接入 BrowseComp，使用固定任务 ID，qrels 分别选择 evidence 或 gold 并保留出处，不合并两个不同标签口径。
 
 产物有 plan.json、setup.json、results.json 和 report.md，记录语料/查询/qrels/插件/源码指纹及构建和查询耗时。结果含查询，公开基准产物应留在忽略的 data 目录。比较插件时固定同一语料、查询和 qrels；耗时比较还需要多次重复和负载控制。
+
+## 从已有公开基准轨迹冻结查询
+
+可选择固定轮次 Search 组的第一次查询，要求此前没有成功读取/检索正文；允许列库和目录发现。不看该次查询是否成功、不挑答对的样本、不重写关键词。任何题不满足条件则整组拒绝导出。这样避免截断官方长问题，也避免利用标准答案选择词；仍属于“固定 Agent 生成查询”，不是官方原问题直接检索。
+
+```powershell
+python -m benchmarks.retrieval.prepare --dataset data/baseline-20261012/dataset-bcp --run data/baseline-20261012/browsecomp/execution --output data/bcp-fixed-queries --repeat 1 --labels evidence
+python -m benchmarks.retrieval.run --dataset data/baseline-20261012/dataset-bcp --queries data/bcp-fixed-queries/queries.csv --qrels data/bcp-fixed-queries/qrels.json --output data/bcp-fixed-retrieval --plugin-definition examples/plugins/simple-rag-python/definition.json --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+```
+
+同一查询文件可以交给不同插件；manifest 保存原运行/轨迹指纹及标签口径。不能把首次查询指标与 Agent 多轮累计召回直接视为同一种分数。

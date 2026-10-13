@@ -13,6 +13,7 @@ import time
 
 from benchmarks.agent.runner import install_index_plugin, seed_knowledge
 from benchmarks.agent.tasks import corpus, fingerprint
+from benchmarks.provenance import freeze_source
 from folder_kb.capabilities import Capabilities, Policy
 from tools.benchmark_file_tools import Suite
 
@@ -91,6 +92,10 @@ async def run(args):
             'chunk_budget': 10, 'relevance': 'binary-document',
             'ranking': 'first-occurrence deduplication within top 10 returned chunks',
             'source_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    query_manifest=args.queries.parent/'manifest.json'
+    if query_manifest.is_file():
+        plan['query_provenance']=json.loads(query_manifest.read_text(encoding='utf-8'))
+    plan['source_snapshot']=freeze_source(args.output)
     (args.output / 'plan.json').write_text(json.dumps(plan, indent=2), encoding='utf-8')
     suite = Suite(args.output, short_fixture=True)
     saved_env = {k: os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON', 'KB_SEARCH_PLUGIN_ALLOWLIST')}
