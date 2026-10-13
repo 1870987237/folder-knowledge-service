@@ -100,6 +100,8 @@ async def run(args):
         return
     config=plan['configuration'];plugins={p['name']:p for p in config['plugins']}
     for job in plan['jobs']:
+        if source_hash()!=plan['execution_source_sha256']:
+            raise ValueError('Execution source changed during campaign; stop instead of mixing versions')
         name=job['name'];destination=root/name
         if status['jobs'].get(name,{}).get('state')=='completed':
             if outputs_hash(destination,job['kind'])!=status['jobs'][name]['outputs_sha256']:
@@ -121,6 +123,8 @@ async def run(args):
                 else:
                     await run_experiment(SimpleNamespace(**common,judge_model=config['judge_model'],no_judge=False,
                         variants=job['variants'],repeats=config['repeats']))
+            if source_hash()!=plan['execution_source_sha256']:
+                raise ValueError('Execution source changed during stage; start a frozen run')
             artifact_hash=outputs_hash(destination,job['kind'])
             status['jobs'][name]={'state':'completed','outputs_sha256':artifact_hash};save(root,status)
         except Exception as exc:

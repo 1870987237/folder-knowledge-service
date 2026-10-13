@@ -7,7 +7,6 @@ from pathlib import Path
 import shutil
 from types import SimpleNamespace
 
-from benchmarks.agent.evaluate import final_payload
 from benchmarks.agent.preflight import check_model
 from benchmarks.agent.runner import Recorder, solve
 from benchmarks.agent.tasks import fingerprint, load_dataset
@@ -18,7 +17,11 @@ Return only JSON: {"answer":"query prepared", "facts":{"query":"your search quer
 
 
 def query_from(execution):
-    value=final_payload(execution['final'])
+    # Query preparation has no task-completion verdict. Validate its own output
+    # contract rather than requiring the answer grader's completed field.
+    try:value=json.loads(execution['final'])
+    except ValueError:value=None
+    if not isinstance(value,dict):value=None
     query=value.get('facts',{}).get('query') if value and isinstance(value.get('facts'),dict) else None
     if (not execution['valid_run'] or execution['returncode']!=0 or execution['timed_out']
             or execution['agent_tool_attempts'] or not isinstance(query,str) or not 1<=len(query.strip())<=200):

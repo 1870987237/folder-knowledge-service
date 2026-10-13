@@ -59,6 +59,9 @@ def test_query_validation_never_truncates_or_accepts_tools():
     value={'final':json.dumps({'answer':'query','completed':True,'facts':{'query':'known terms'}}),
            'valid_run':True,'returncode':0,'timed_out':False,'agent_tool_attempts':0}
     assert query_from(value)=='known terms'
+    without_completed=copy.deepcopy(value)
+    without_completed['final']=json.dumps({'facts':{'query':'known terms'}})
+    assert query_from(without_completed)=='known terms'
     with pytest.raises(ValueError):query_from(dict(value,agent_tool_attempts=1))
     with pytest.raises(ValueError):query_from(dict(value,valid_run=False))
     value['final']=json.dumps({'answer':'query','completed':True,'facts':{'query':'x'*201}})
