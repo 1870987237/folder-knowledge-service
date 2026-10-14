@@ -168,21 +168,26 @@ async def run(args):
     (root/'execution/episodes').mkdir(parents=True,exist_ok=True)
     (root/'judge').mkdir(exist_ok=True)
     print(json.dumps({'stage':'verify_corpus','documents':len(corpus),'questions':len(selected)}),flush=True)
-    corpus.verify()
     recorder=Recorder();service=None
     saved={k:os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON','KB_SEARCH_PLUGIN_ALLOWLIST')}
+    stage='verify_corpus'
     try:
+        atomic_json(root/'status.json',dict(state='preparing',stage=stage,planned=len(selected),completed=0))
+        corpus.verify()
+        stage='prepare_service'
         service=FullService(args.dataset,root,recorder);service.install()
         atomic_json(root/'service.json',dict(state_dir=str(service.registry.directory),url=service.url))
         retrieval=Retrieval(service.registry)
         state=retrieval.state('benchmark-corpus')
         if state['status']!='ready':
+            stage='build_full_index'
             print(json.dumps({'stage':'build_full_index'}),flush=True)
             started=time.perf_counter();state=await asyncio.to_thread(retrieval.build,'benchmark-corpus')
             atomic_json(root/'index.json',dict(state,build_seconds=time.perf_counter()-started))
         if args.prepare_only:
             atomic_json(root/'status.json',dict(state='index_ready',planned=len(selected),completed=0))
             print(json.dumps({'stage':'index_ready','files':state['files']}),flush=True);return
+        stage='model_preflight'
         health=await check_model(args);atomic_json(root/'preflight.json',health)
         if not health['ok']:
             raise RuntimeError('Model preflight failed; no answers attempted')
@@ -199,6 +204,7 @@ async def run(args):
             prompt_sha256=hashlib.sha256(JUDGE_SYSTEM.encode()).hexdigest(),episodes=[])
         rows={e['episode']:e for e in data['episodes']};judged={e['episode'] for e in judgments['episodes']}
         known={name:entry['sha256'] for name,entry in corpus.entries.items()}
+        stage='evaluate'
         for task in selected:
             if source_hash()!=plan['source_sha256']:
                 raise ValueError('Source changed during execution; refusing to mix versions')
@@ -241,12 +247,13 @@ async def run(args):
             print(json.dumps({'episode':name,'completed':len(rows),'planned':len(selected),'calls':row['tool_calls'],
                 'seconds':round(row['wall_ms']/1000,2),'correct':next(j['correct'] for j in judgments['episodes'] if j['episode']==name)}),flush=True)
             recorder.calls.clear();recorder.catalogs.clear();recorder.instructions.clear()
+        stage='verify_corpus_after'
         corpus.verify()
         if not (root/'official-format').exists():
             export(data,root/'official-format')
         atomic_json(root/'status.json',dict(state='completed',planned=len(selected),completed=len(rows),corpus_verified_after=True))
     except Exception as exc:
-        atomic_json(root/'status.json',dict(state='interrupted',error_type=type(exc).__name__,planned=len(selected)))
+        atomic_json(root/'status.json',dict(state='interrupted',stage=stage,error_type=type(exc).__name__,planned=len(selected)))
         raise
     finally:
         if service:

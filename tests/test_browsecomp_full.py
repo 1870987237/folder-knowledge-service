@@ -126,6 +126,25 @@ def test_corpus_excerpt_preserves_source_lines(body):
     assert validate_hits(hits,[('a.md',body,'hash','version')],5,'.')
 
 
+def test_unreadable_corpus_records_failure_before_starting_service(tmp_path,monkeypatch):
+    import benchmarks.browsecomp.full_run as runner
+    root=dataset(tmp_path/'dataset');out=tmp_path/'run'
+    args=SimpleNamespace(dataset=root,output=out,allow_fixture=True,tasks=None,model='test/solver',judge_model='test/solver',
+        timeout=10,omp='omp',models_config=Path('unused'),resume=False,prepare_only=True)
+    def blocked(self):
+        raise OSError(22,'Corpus access blocked')
+    def unexpected_service(*args):
+        pytest.fail('Service must not start with an unreadable corpus')
+    monkeypatch.setattr(DiskCorpus,'verify',blocked)
+    monkeypatch.setattr(runner,'FullService',unexpected_service)
+    with pytest.raises(OSError):asyncio.run(runner.run(args))
+    status=json.loads((out/'status.json').read_text(encoding='utf-8'))
+    assert status['state']=='interrupted'
+    assert status['stage']=='verify_corpus'
+    assert status['error_type']=='OSError'
+    assert not (out/'execution/results.json').exists()
+
+
 def test_persistent_runner_resume_and_direct_ranking(tmp_path,monkeypatch):
     import benchmarks.browsecomp.full_run as runner
     from benchmarks.browsecomp.full_retrieval import run as rank
