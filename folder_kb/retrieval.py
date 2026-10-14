@@ -28,7 +28,7 @@ MAX_CHUNKS = 16000
 
 
 def supported(index):
-    return bool(index and (index.get('search_protocol') == '1.0' and index.get('entrypoint') or
+    return bool(index and (index.get('search_protocol') in ('1.0', '1.1') and index.get('entrypoint') or
                 index.get('mode') == 'fulltext' and index.get('splitter') in ('document', 'markdown_sections') and not index.get('entrypoint')))
 
 
@@ -61,7 +61,7 @@ class Retrieval:
             if not index:
                 raise KnowledgeError('index_not_configured', 'The bound plugin does not define an index', 409)
             if not supported(index):
-                raise KnowledgeError('index_unsupported', 'Plugin must declare search_protocol 1.0 or legacy fulltext indexing', 409)
+                raise KnowledgeError('index_unsupported', 'Plugin must declare search_protocol 1.0/1.1 or legacy fulltext indexing', 409)
             identity = digest([ENGINE, row['path'], definition, json.loads(binding['config_json'])])
             if index.get('search_protocol'):
                 identity = digest([row['path'], definition, installed['package_sha256'], json.loads(binding['config_json'])])
@@ -114,6 +114,9 @@ class Retrieval:
     def state(self, library_id):
         try:
             _, folder, index, identity = self.context(library_id)
+            if index.get('search_protocol') == '1.1':
+                from .search_large import LargeSearch
+                return LargeSearch(self).state(library_id, folder, index, identity)
             if index.get('search_protocol'):
                 search_plugin.approved(index, self.catalog)
                 meta, _ = self.plugin_generation(library_id)
@@ -133,6 +136,9 @@ class Retrieval:
 
     def build(self, library_id):
         row, folder, index, identity = self.context(library_id)
+        if index.get('search_protocol') == '1.1':
+            from .search_large import LargeSearch
+            return LargeSearch(self).build(library_id, folder, index, identity)
         files, version = self.snapshot(folder, index)
         if index.get('search_protocol'):
             return self.build_plugin(library_id, index, identity, files, version)
@@ -252,6 +258,9 @@ class Retrieval:
             except (TypeError, ValueError):
                 raise KnowledgeError('invalid_path', 'Search path must be a canonical relative directory', 422) from None
         _, folder, index, identity = self.context(library_id)
+        if index.get('search_protocol') == '1.1':
+            from .search_large import LargeSearch
+            return LargeSearch(self).search(library_id, query, limit, path, folder, index, identity)
         if index.get('search_protocol'):
             return self.search_plugin(library_id, query, limit, path, folder, index, identity)
         try:

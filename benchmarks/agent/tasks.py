@@ -1,5 +1,6 @@
 """Load editable dataset files; only knowledge/ is exposed through the platform."""
 import csv
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
@@ -43,6 +44,9 @@ def _is_link(path):
 
 
 def corpus(dataset=DEFAULT_DATASET):
+    manifest = Path(dataset) / 'manifest.json'
+    if manifest.exists() and json.loads(manifest.read_text(encoding='utf-8')).get('corpus_format') == 'path-sha256-v1':
+        return DiskCorpus(dataset)
     root = Path(dataset).resolve() / 'knowledge'
     if not root.is_dir() or _is_link(root):
         raise ValueError(f'Knowledge must be a regular directory: {root}')
@@ -56,6 +60,72 @@ def corpus(dataset=DEFAULT_DATASET):
     if not files:
         raise ValueError(f'Knowledge directory has no UTF-8 text files: {root}')
     return files
+
+
+class DiskCorpus(Mapping):
+    """A verified catalogue with lazy UTF-8 reads; never materialize a full corpus."""
+    def __init__(self, dataset):
+        self.root = Path(dataset).resolve()/'knowledge'
+        if _is_link(self.root) or not self.root.is_dir():
+            raise ValueError('Knowledge must be a regular directory')
+        self.manifest = json.loads((Path(dataset)/'manifest.json').read_text(encoding='utf-8'))
+        for filename,key in (('tasks.csv','tasks_file_sha256'),('expectations.json','expectations_file_sha256')):
+            if hashlib.sha256((Path(dataset)/filename).read_bytes()).hexdigest()!=self.manifest[key]:
+                raise ValueError('Full dataset tasks/answers differ from import manifest')
+        raw = (Path(dataset)/'corpus-manifest.jsonl').read_bytes()
+        self.fingerprint = hashlib.sha256(raw).hexdigest()
+        if self.fingerprint != self.manifest['corpus_sha256']:
+            raise ValueError('Corpus catalogue differs from import manifest')
+        self.entries = {}
+        for line in raw.splitlines():
+            entry = json.loads(line); name = _relative_path(entry['path'])
+            if name in self.entries or type(entry['bytes']) is not int or entry['bytes'] < 0 or not re.fullmatch('[0-9a-f]{64}', entry['sha256']):
+                raise ValueError('Invalid/duplicate corpus catalogue entry')
+            self.entries[name] = entry
+        self.bytes = sum(e['bytes'] for e in self.entries.values())
+        if len(self) != self.manifest['documents'] or self.bytes != self.manifest['bytes']:
+            raise ValueError('Corpus catalogue counts differ from import manifest')
+
+    def __iter__(self):
+        return iter(self.entries)
+
+    def __len__(self):
+        return len(self.entries)
+
+    def __getitem__(self, name):
+        entry = self.entries[name]
+        path = self.root/name
+        for parent in [path, *path.parents]:
+            if parent == self.root.parent:
+                break
+            if _is_link(parent):
+                raise ValueError('Corpus contains a linked path')
+        raw = path.read_bytes()
+        if len(raw) != entry['bytes'] or hashlib.sha256(raw).hexdigest() != entry['sha256']:
+            raise ValueError('Corpus document differs from pinned input')
+        return raw.decode('utf-8')
+
+    def __contains__(self, name):
+        return name in self.entries
+
+    def verify(self):
+        actual = set()
+        for path in self.root.rglob('*'):
+            if _is_link(path):
+                raise ValueError('Corpus contains a linked path')
+            if path.is_file():
+                name = path.relative_to(self.root).as_posix()
+                if name not in self.entries:
+                    raise ValueError('Unexpected corpus document')
+                entry = self.entries[name]
+                with path.open('rb') as stream:
+                    sha = hashlib.file_digest(stream,'sha256').hexdigest()
+                if path.stat().st_nlink != 1 or path.stat().st_size != entry['bytes'] or sha != entry['sha256']:
+                    raise ValueError('Corpus document changed')
+                actual.add(name)
+        if actual != set(self.entries):
+            raise ValueError('Missing corpus document')
+        return self.fingerprint
 
 
 def _oracle(identifier, value):
@@ -151,7 +221,7 @@ def load_dataset(dataset=DEFAULT_DATASET):
     public = [{k: v for k, v in asdict(t).items() if k in ('id', 'kind', 'prompt', 'readonly')} for t in definitions]
     hidden = [{k: v for k, v in asdict(t).items() if k not in ('kind', 'prompt', 'readonly')} for t in definitions]
     metadata = {'name': Path(dataset).resolve().name, 'corpus_files': len(documents), 'task_count': len(definitions),
-                'corpus_sha256': fingerprint(documents), 'tasks_sha256': fingerprint(public),
+                'corpus_sha256': documents.fingerprint if isinstance(documents,DiskCorpus) else fingerprint(documents), 'tasks_sha256': fingerprint(public),
                 'expectations_sha256': fingerprint(hidden)}
     manifest = Path(dataset) / 'manifest.json'
     if manifest.is_file():

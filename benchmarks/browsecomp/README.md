@@ -2,9 +2,35 @@
 
 让现有 OMP + GLM 通过 Folder KB 的真实 MCP 工具完成公开基准问题，对比 grep、Search 和混合配置。复用现有 Agent runner，不改变工具 schema 或替 Agent 规划调用。
 
-**当前是缩小语料的内部适配版，不是官方全量复现。**原始问题、文档与答案不改写；所有选中问题共用一个文档池，包含全部对应 evidence/gold 文档及固定随机种子抽取的 hard negatives。每次使用独立只读知识库和会话。
+支持两种数据规模：`full_prepare/full_run` 使用 **全部 830 题、100,195 篇文档**；`prepare/campaign` 保留缩小语料的快速回归。两者结果不可直接混合。原问题、文档和答案不改写；判分仍按用户选择使用 Flash，不能直接当作采用上游 Qwen3-32B 的官方榜单成绩。
 
-## 主基准：配置、对照、检索和人工复核
+## 全量入口
+
+```powershell
+# 下载并校验官方 6 个问题分片和 7 个语料分片，导入全部文档；可从下载/导入中断处继续
+python -m benchmarks.browsecomp.full_prepare
+
+# 只构建共享的大语料索引，不调用模型
+python -m benchmarks.browsecomp.full_run --output data/bcp-full-search --prepare-only
+
+# 原题文档级检索，分别输出 evidence/gold Recall@5/100/1000 和 nDCG@10；无 LLM 调用
+python -m benchmarks.browsecomp.full_retrieval --run data/bcp-full-search --output data/bcp-full-retrieval
+
+# 全部 830 题，Search 配置每题一次，每题最多 300 秒；Flash 答题和判分
+python -m benchmarks.browsecomp.full_run --output data/bcp-full-search --resume
+```
+
+完整数据保存到 `data/browsecomp-plus-full/`，下载缓存为 `data/browsecomp-full-downloads/`。约 4.54 GB 压缩分片，另需语料、构建输入和索引空间。`manifest.json` 固定源版本、分片 SHA、全部题目/答案指纹、语料计数与逐文档指纹；不抽负例、不排除开发题、不截断长文档。标准答案只供判分器使用，Agent Key 仅挂载 `knowledge/`。
+
+`full_run` 的只读语料和磁盘索引共用，不逐题复制或重建。每题使用新 OMP 会话、新 Key，保留真实工具轨迹、错误、Token 和判分；源码或数据改变后拒绝混入同一轮。`--resume` 校验已完成记录并跳过；已开始但崩溃的题记为中断失败，不暗中重新作答。运行中可查看 `status.json`、`report.md`、`metrics.json`，结束后另有 `official-format/`。服务状态和索引保存在 `service.json` 指向的短路径中，结束后保留用于复核与续跑。
+
+全量检索使用独立 `sqlite-corpus` 插件，其协议、产物和算法见 [插件说明](../../examples/plugins/sqlite-corpus/package/README.md)。它是文档 BM25 基线，不等同于旧 Markdown 分块基线或上游 Pyserini 实现。平台继续提供相同 MCP 权限和工具接口；830 题中没有预设调用顺序。
+
+`full_retrieval` 直接调用该插件的文档排序入口，原题不经 LLM 改写，可返回 Top-1000；MCP Search 保持最多 10 条引用的上下文预算。这两层分别回答“索引能否召回”和“Agent 能否利用工具完成任务”，不会把片段 Top-10 冒充文档 Top-1000。`run.trec` 可交给官方 `trec_eval` 再核验。
+
+这是**官方全量数据 + 本平台工具 + OMP/Flash**的评测配置，仍需披露同模型判分偏差、工具预算和插件差异。公开原题可能已进入模型训练，也包含先前使用过的开发题；全量不等于模型未见过的数据。不得将题目、答案和原始轨迹推送到远端。
+
+## 缩小语料回归：配置、对照、检索和人工复核
 
 主入口是 `campaign.py`。先准备冻结数据，默认只生成计划；加 `--execute` 才开始调用模型。`configs/main.json` 配置模型、判分模型、重复次数、预算及插件列表，不包含密钥。默认 Flash 答题、Flash 判分，报告明确标记同模型偏差。
 

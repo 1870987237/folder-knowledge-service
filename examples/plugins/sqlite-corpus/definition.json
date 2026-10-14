@@ -1,0 +1,26 @@
+{
+  "id": "sqlite-corpus",
+  "version": "1.0.0",
+  "protocol_version": "1.1",
+  "name": "SQLite Corpus BM25",
+  "maintainer": "Folder KB",
+  "description": "Streaming document-level FTS5/BM25 index for large read-only text corpora; no embeddings or LLM calls.",
+  "capabilities": [],
+  "entrypoints": {},
+  "runtime": {"type": "trusted-python-demo", "timeout_seconds": 3600},
+  "output": {"directory": "workspace", "required_files": []},
+  "config_schema": {"type": "object", "additionalProperties": false},
+  "plugin": {
+    "manifest_version": "1.0",
+    "instructions": "Search for evidence and read the cited files for context. No result does not prove absence.",
+    "indexing": {
+      "mode": "fulltext",
+      "splitter": "custom",
+      "entrypoint": ["python", "search.py"],
+      "search_protocol": "1.1",
+      "supports_path_filter": true,
+      "include": ["**/*.md", "**/*.txt"],
+      "exclude": []
+    }
+  }
+}

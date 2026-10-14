@@ -95,7 +95,7 @@ def analyze(run, dataset, judgments=None):
     if set(judge_by_episode) - identifiers:
         raise ValueError('Unknown episode in judgments')
     plan = data.get('plan', {})
-    summary = {'scope': 'reduced-corpus-internal-adaptation', 'official_leaderboard_comparable': False,
+    summary = {'scope': metadata.get('provenance',{}).get('scope','reduced-corpus-internal-adaptation'), 'official_leaderboard_comparable': False,
                'model': data['model'], 'omp_version': data.get('omp_version'),
                'dataset': metadata, 'source_sha256': data.get('source_sha256'),
                'system_prompt_sha256': hashlib.sha256(data.get('system_prompt', '').encode()).hexdigest(),
@@ -111,7 +111,8 @@ def analyze(run, dataset, judgments=None):
 
 def render(summary):
     lines = ['# BrowseComp-Plus Agent 评测', '',
-        '缩小语料的内部测试，不与官方榜单比较。执行失败、未判分和回答错误分别统计。', '',
+        ('全量语料的平台工具评测，使用内部判分，不直接与官方榜单比较。' if summary['scope']=='full-corpus-platform-adaptation'
+         else '缩小语料的内部测试，不与官方榜单比较。') + '执行失败、未判分和回答错误分别统计。', '',
         f"模型：{summary['model']}；OMP：{summary['omp_version']}；文档：{summary['dataset'].get('corpus_files')}；"
         f"计划执行：{summary['planned_episodes']}；已执行：{summary['executed_episodes']}；未执行：{summary['missing_episodes']}。",
         f"索引包 SHA-256：`{summary['plugin_sha256']}`。", '',

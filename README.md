@@ -414,6 +414,8 @@ python -m pytest -q
 
 [BrowseComp-Plus 主基准](docs/reports/2026-10-13-browsecomp-main.md)提供无知识库对照、配置式插件矩阵、开发集排除、固定查询指标和人工抽检，默认正式计划为 50 题、四组各三次。
 
+[全量 BrowseComp-Plus](benchmarks/browsecomp/README.md#全量入口)另提供全部 830 题、100,195 篇文档的导入与执行：流式磁盘索引、共享只读语料、逐题续跑，以及原始问题的文档 Recall@5/100/1000 和 nDCG@10。全量数据评测仍使用本平台工具和 Flash 判分，需披露其与官方评测配置的差异。
+
 公开检索任务可用 [BrowseComp-Plus 适配器](benchmarks/browsecomp/README.md)：导入官方问题、完整证据和干扰文档，经相同 MCP 工具运行，统计证据召回并独立判分。当前为缩小语料的内部测试，不能直接对比官方全量榜单。
 
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。

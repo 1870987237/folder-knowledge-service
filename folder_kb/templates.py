@@ -112,7 +112,7 @@ class IndexDefinition(StrictModel):
     exclude: list[str] = Field(default_factory=list, max_length=32)
     metadata_fields: list[str] = Field(default_factory=list, max_length=32)
     entrypoint: list[str] | None = None
-    search_protocol: Literal['1.0'] | None = None
+    search_protocol: Literal['1.0', '1.1'] | None = None
     supports_path_filter: bool = False
 
     @model_validator(mode='after')
