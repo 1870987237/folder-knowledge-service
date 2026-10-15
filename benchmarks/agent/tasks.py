@@ -108,7 +108,7 @@ class DiskCorpus(Mapping):
     def __contains__(self, name):
         return name in self.entries
 
-    def verify(self):
+    def verify(self, *, progress=None):
         actual = set()
         for path in self.root.rglob('*'):
             if _is_link(path):
@@ -123,8 +123,12 @@ class DiskCorpus(Mapping):
                 if path.stat().st_nlink != 1 or path.stat().st_size != entry['bytes'] or sha != entry['sha256']:
                     raise ValueError('Corpus document changed')
                 actual.add(name)
+                if progress and len(actual) % 5000 == 0:
+                    progress(dict(stage='verify_corpus',files_completed=len(actual),files_total=len(self)))
         if actual != set(self.entries):
             raise ValueError('Missing corpus document')
+        if progress:
+            progress(dict(stage='verify_corpus',files_completed=len(actual),files_total=len(self)))
         return self.fingerprint
 
 

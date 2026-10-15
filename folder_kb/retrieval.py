@@ -134,11 +134,11 @@ class Retrieval:
         except sqlite3.DatabaseError:
             return {'status': 'unavailable', 'error': 'index_unavailable', 'message': 'Index cannot be read; rebuild it'}
 
-    def build(self, library_id):
+    def build(self, library_id, *, progress=None):
         row, folder, index, identity = self.context(library_id)
         if index.get('search_protocol') == '1.1':
             from .search_large import LargeSearch
-            return LargeSearch(self).build(library_id, folder, index, identity)
+            return LargeSearch(self).build(library_id, folder, index, identity, progress=progress)
         files, version = self.snapshot(folder, index)
         if index.get('search_protocol'):
             return self.build_plugin(library_id, index, identity, files, version)

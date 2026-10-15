@@ -131,7 +131,7 @@ def test_unreadable_corpus_records_failure_before_starting_service(tmp_path,monk
     root=dataset(tmp_path/'dataset');out=tmp_path/'run'
     args=SimpleNamespace(dataset=root,output=out,allow_fixture=True,tasks=None,model='test/solver',judge_model='test/solver',
         timeout=10,omp='omp',models_config=Path('unused'),resume=False,prepare_only=True)
-    def blocked(self):
+    def blocked(self,**kwargs):
         raise OSError(22,'Corpus access blocked')
     def unexpected_service(*args):
         pytest.fail('Service must not start with an unreadable corpus')

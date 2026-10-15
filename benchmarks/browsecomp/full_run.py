@@ -171,23 +171,39 @@ async def run(args):
     recorder=Recorder();service=None
     saved={k:os.environ.get(k) for k in ('KB_SEARCH_TRUSTED_PYTHON','KB_SEARCH_PLUGIN_ALLOWLIST')}
     stage='verify_corpus'
+    def preparing(progress=None):
+        atomic_json(root/'status.json',dict(state='preparing',stage=stage,planned=len(selected),completed=0,
+            progress=progress,worker_pid=os.getpid(),updated_at=time.time()))
     try:
-        atomic_json(root/'status.json',dict(state='preparing',stage=stage,planned=len(selected),completed=0))
-        corpus.verify()
+        preparing()
+        corpus.verify(progress=preparing)
         stage='prepare_service'
+        preparing()
         service=FullService(args.dataset,root,recorder);service.install()
         atomic_json(root/'service.json',dict(state_dir=str(service.registry.directory),url=service.url))
         retrieval=Retrieval(service.registry)
         state=retrieval.state('benchmark-corpus')
         if state['status']!='ready':
+            if any((root/'execution/episodes').iterdir()):
+                raise ValueError('Index unavailable after answers started; refusing to rebuild within this run')
             stage='build_full_index'
+            preparing()
             print(json.dumps({'stage':'build_full_index'}),flush=True)
-            started=time.perf_counter();state=await asyncio.to_thread(retrieval.build,'benchmark-corpus')
+            started=time.perf_counter();state=await asyncio.to_thread(retrieval.build,'benchmark-corpus',progress=preparing)
             atomic_json(root/'index.json',dict(state,build_seconds=time.perf_counter()-started))
+        elif (root/'index.json').exists():
+            recorded_index=json.loads((root/'index.json').read_text(encoding='utf-8'))
+            if any(recorded_index[k]!=state[k] for k in ('generation','artifact_sha256','content_version','identity')):
+                raise ValueError('Prepared index generation differs from this run')
+        else:
+            if any((root/'execution/episodes').iterdir()):
+                raise ValueError('Missing index record after answers started')
+            atomic_json(root/'index.json',dict(state,build_seconds=None))
         if args.prepare_only:
             atomic_json(root/'status.json',dict(state='index_ready',planned=len(selected),completed=0))
             print(json.dumps({'stage':'index_ready','files':state['files']}),flush=True);return
         stage='model_preflight'
+        preparing()
         health=await check_model(args);atomic_json(root/'preflight.json',health)
         if not health['ok']:
             raise RuntimeError('Model preflight failed; no answers attempted')

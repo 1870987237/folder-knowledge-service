@@ -72,6 +72,7 @@ def run(args):
         dataset=metadata,engine=index['engine'],planned_queries=len(tasks),query_policy=plan['query_policy'],queries=[])
     (root/'episodes').mkdir(exist_ok=True)
     completed={r['id'] for r in data['queries']}
+    atomic_json(root/'status.json',dict(state='running',queries=len(completed),planned=len(tasks)))
     for task in tasks:
         if source_hash()!=plan['source_sha256']:
             raise ValueError('Source changed during retrieval experiment')
@@ -95,6 +96,7 @@ def run(args):
             relevant=[f'documents/{d}.md' for d in task.reference[label+'_docids']]
             row['metrics'][label]={str(k):ranking_metrics(paths,relevant,k) for k in (5,10,100,1000)}
         atomic_json(file,row);data['queries'].append(row);atomic_json(root/'results.json',data)
+        atomic_json(root/'status.json',dict(state='running',queries=len(data['queries']),planned=len(tasks)))
         if len(data['queries'])%10==0:
             print(json.dumps({'ranked':len(data['queries']),'planned':len(tasks)}),flush=True)
             (root/'report.md').write_text(render(data),encoding='utf-8')

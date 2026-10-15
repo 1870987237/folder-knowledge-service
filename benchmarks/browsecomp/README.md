@@ -6,6 +6,19 @@
 
 ## 全量入口
 
+长实验建议使用统一入口，它依次执行模型连通性检查、索引准备、实际 MCP 检查、830 条文档检索和 830 题 Agent 测评。运行器每五秒更新心跳，状态查询会把过期的“运行中”标为中断；各阶段标准输出和错误日志分别保留。请在独立终端或操作系统任务中运行，普通工具终端进程可能随会话退出。
+
+```powershell
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full --status
+# 源码、模型和数据相同才可续跑；已开始的中断答题保留为失败，不重新答题
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full --resume
+```
+
+统一入口的 `workflow.json` 和阶段日志在根输出目录，Agent 记录位于 `agent/`，独立检索记录位于 `retrieval/`。Windows 本机采用无定时触发器的任务计划程序任务手动启动，以当前用户的普通权限执行；它不依赖工具终端，也不会周期性发起新测评。
+
+以下分步入口仍可用于调试和独立实验：
+
 ```powershell
 # 下载并校验官方 6 个问题分片和 7 个语料分片，导入全部文档；可从下载/导入中断处继续
 python -m benchmarks.browsecomp.full_prepare

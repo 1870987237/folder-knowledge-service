@@ -6,6 +6,8 @@ are not copied or hashed in full on every query. Source and artifact stat tokens
 are checked before/after calls; returned evidence is re-read and verified.
 """
 from contextlib import contextmanager
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 import hashlib
 import json
@@ -30,6 +32,31 @@ MAX_FILES = 150000
 MAX_BYTES = 8 * 1024 ** 3
 MAX_FILE_BYTES = 128 * 1024 ** 2
 MAX_ARTIFACT_BYTES = 24 * 1024 ** 3
+
+
+def source_documents(folder, files):
+    """Read at most four sources ahead, preserving order and handle checks."""
+    def read(item):
+        name, expected, _ = item
+        with folder._open_text(name) as (stream, _, token):
+            raw = stream.read(MAX_FILE_BYTES+1)
+        if token != expected or len(raw)>MAX_FILE_BYTES:
+            raise KnowledgeError('index_source_changed', 'Source changed during index preparation', 409)
+        text = raw.decode('utf-8-sig')
+        if '\x00' in text:
+            raise KnowledgeError('index_encoding', 'Index requires UTF-8 without NUL', 415)
+        return dict(path=name, text=text, sha256=hashlib.sha256(raw).hexdigest(), version=token)
+
+    # Executor.map eagerly queues every file in Python 3.11. A bounded queue
+    # prevents the full corpus from accumulating in completed futures.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        pending = deque()
+        for item in files:
+            pending.append(pool.submit(read, item))
+            if len(pending) == 4:
+                yield pending.popleft().result()
+        while pending:
+            yield pending.popleft().result()
 
 
 def guarded(function):
@@ -167,7 +194,7 @@ class LargeSearch:
                     supports_path_filter=index.get('supports_path_filter', False))
 
     @guarded
-    def build(self, lid, folder, index, identity):
+    def build(self, lid, folder, index, identity, *, progress=None):
         approved(index, self.service.catalog)
         files, version = scan(folder, index)
         self.service.directory.mkdir(parents=True, exist_ok=True)
@@ -178,17 +205,16 @@ class LargeSearch:
         generation = uuid.uuid4().hex; target = generations/generation
         with self.runtime() as root:
             documents = root/'documents.jsonl'
+            if progress:
+                progress(dict(stage='index_prepare',files_completed=0,files_total=len(files)))
             with documents.open('w', encoding='utf-8', newline='\n') as out:
-                for name, expected, _ in files:
-                    with folder._open_text(name) as (stream, _, token):
-                        raw = stream.read(MAX_FILE_BYTES+1)
-                    if token != expected or len(raw)>MAX_FILE_BYTES:
-                        raise KnowledgeError('index_source_changed', 'Source changed during index preparation', 409)
-                    text = raw.decode('utf-8-sig')
-                    if '\x00' in text:
-                        raise KnowledgeError('index_encoding', 'Index requires UTF-8 without NUL', 415)
-                    out.write(json.dumps(dict(path=name, text=text, sha256=hashlib.sha256(raw).hexdigest(), version=token),ensure_ascii=False)+'\n')
+                for count, document in enumerate(source_documents(folder, files), 1):
+                    out.write(json.dumps(document,ensure_ascii=False)+'\n')
+                    if progress and count % 1000 == 0:
+                        progress(dict(stage='index_prepare',files_completed=count,files_total=len(files)))
             output = root/'output'
+            if progress:
+                progress(dict(stage='plugin_build',files_completed=len(files),files_total=len(files)))
             result = execute(root, self.service.catalog, index,
                 dict(operation='build', library_id=lid, content_version=version, documents_path=str(documents)), output=output)
             if (set(result) != {'protocol_version','engine','chunks'} or not isinstance(result['engine'],str)
