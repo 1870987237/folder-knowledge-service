@@ -79,6 +79,24 @@ SQLite v14 新增 `library_bootstrap`，记录新库初始化授权的创建者�
 
 程序包批准摘要、模型环境变量映射由平台授权派生，工作区请求不能传入这些字段，也不能指定服务器工作目录。材料沿用 [标准信封](inbox-api.md)，`submitted_by.type` 为 `user` 或 `agent_key`。
 
+插件可用顶层 `model_binding` 声明条件性模型依赖。平台按声明生成资源授权与更新策略的默认映射，保存授权时验证变量对应字段；启用策略、入队和执行时检查当前模式是否需要模型。`required_when` 按配置字段全部相等判定，遗漏的字段使用 `config_schema` 默认值；空条件表示始终需要模型。`required_fields` 控制执行时哪些连接值不得为空，默认 `base_url` 和 `model`。未声明的旧插件保持原有行为。
+
+```json
+{
+  "model_binding": {
+    "required_when": {"mode": "llm"},
+    "environment": {
+      "KNOWLEDGE_LLM_BASE_URL": "base_url",
+      "KNOWLEDGE_LLM_MODEL": "model",
+      "KNOWLEDGE_LLM_API_KEY": "api_key"
+    },
+    "required_fields": ["base_url", "model"]
+  }
+}
+```
+
+这是变量接线声明，不包含密钥，不替代资源授权和 worker 凭据白名单。注册定义不可变，已有通用知识库应升级绑定到 `general-knowledge@1.1.2` 并重新保存更新设置，无需重新初始化。`tests/test_plugin_model_binding.py` 验证默认映射、错误配置拒绝，以及 HTTP 配置 → worker 子进程 → 模型 HTTP → 候选审核发布的完整链路。
+
 索引仍需在「检索索引」中显式构建，没有新增自动建索引。
 
 ## 验证

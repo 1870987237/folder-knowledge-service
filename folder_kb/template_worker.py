@@ -107,6 +107,13 @@ class TemplateWorker:
             injected = {name: values[field] for name, field in context['policy']['model_environment'].items()}
         if any(not injected.get(name) for name in definition['required_secrets']):
             raise KnowledgeError('template_secrets_unavailable', 'Required template credentials are not mapped', 409)
+        from .model_contract import model_required, validate_model_config
+        config = json.loads(context['binding']['config_json'])
+        validate_model_config(definition, config, context['policy']['model_connection_id'], context['policy']['model_environment'])
+        if model_required(definition, config):
+            binding = definition['model_binding']
+            if any(not injected.get(name) for name, field in binding['environment'].items() if field in binding['required_fields']):
+                raise KnowledgeError('model_parameters_unavailable', '插件所需的模型连接参数不完整，请检查更新进程配置', 409)
         env.update(injected)
         return env
 

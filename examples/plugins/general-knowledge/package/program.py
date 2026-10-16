@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timezone
 from urllib import error, request as http, parse
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 META = "metadata/general-knowledge"
 TYPES = {"guide", "concept", "reference", "decision"}
 ACTIONS = {"create", "merge", "revise", "duplicate", "defer", "skip"}

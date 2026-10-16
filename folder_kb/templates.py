@@ -22,6 +22,7 @@ from pydantic import Field, field_validator, model_validator
 from .core import is_link
 from .errors import KnowledgeError
 from .inbox import StrictModel
+from .model_contract import ModelBinding
 from .storage import now
 from .template_protocol import tree_digest, write_json
 from .workspaces import WorkspaceSpec, resolve_workspace
@@ -167,6 +168,7 @@ class TemplateRegistration(StrictModel):
     runtime: Runtime
     config_schema: dict = Field(default_factory=lambda: {'type': 'object', 'additionalProperties': False})
     required_secrets: list[str] = Field(default_factory=list, max_length=16)
+    model_binding: ModelBinding | None = None
     output: OutputSpec = Field(default_factory=OutputSpec)
     plugin: PluginFeatures | None = None
 
@@ -200,6 +202,10 @@ class TemplateRegistration(StrictModel):
         if any(not re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', key) for key in self.required_secrets):
             raise ValueError("Secret declarations must be uppercase names")
         validate_config_schema(self.config_schema)
+        if self.model_binding:
+            properties = self.config_schema.get('properties', {})
+            if any(key not in properties for key in self.model_binding.required_when):
+                raise ValueError('Model conditions must reference declared configuration properties')
         return self
 
 
@@ -254,6 +260,8 @@ class TemplateCatalog:
 
     def register(self, value: TemplateRegistration):
         metadata = value.model_dump()
+        if value.model_binding is None:
+            metadata.pop('model_binding')
         if value.plugin is None:
             metadata.pop('plugin')  # Preserve legacy registration equality and worker contracts.
         else:

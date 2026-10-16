@@ -15,6 +15,7 @@ from .errors import KnowledgeError
 from .inbox import StrictModel
 from .storage import now
 from .templates import TemplateCatalog
+from .model_contract import default_mapping, validate_model_config
 from .workspaces import WorkspaceSpec, resolve_workspace, workspace_files
 
 UPDATE_SCHEMA = (
@@ -105,10 +106,16 @@ class Updates:
         return value.model_dump()
 
     def policy(self, library_id):
-        self.catalog.binding(library_id)
+        binding = self.catalog.binding(library_id)['binding']
         with self.store.transaction() as db:
             row = db.execute('SELECT definition FROM update_policies WHERE library_id=?', (library_id,)).fetchone()
-            return json.loads(row[0]) if row else UpdatePolicy().model_dump()
+            if row:
+                return json.loads(row[0])
+            value = UpdatePolicy().model_dump()
+            if binding:
+                definition = json.loads(self.catalog.require(db, binding['template_id'], binding['template_version'])['metadata_json'])
+                value['model_environment'] = default_mapping(definition, value['model_environment'])
+            return value
 
     def save_policy(self, library_id, policy, db=None):
         with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
@@ -123,6 +130,7 @@ class Updates:
                     raise KnowledgeError('package_approval_required', 'Approve the installed package digest before enabling execution', 409)
                 if template['definition']['protocol_version'] != '1.1':
                     raise KnowledgeError('protocol_unsupported', 'Updates require protocol 1.1', 409)
+                validate_model_config(template['definition'], binding['config'], policy.model_connection_id, policy.model_environment)
             if policy.model_connection_id and not db.execute('SELECT 1 FROM model_connections WHERE id=?', (policy.model_connection_id,)).fetchone():
                 raise KnowledgeError('unknown_model', 'Model connection does not exist', 404)
             db.execute('INSERT INTO update_policies VALUES (?,?) ON CONFLICT(library_id) DO UPDATE SET definition=excluded.definition',
@@ -142,6 +150,7 @@ class Updates:
         if access and access['model_environment'] != policy['model_environment']:
             raise KnowledgeError('model_mapping_changed', '平台模型映射已变化，请重新保存知识库更新设置', 409)
         template = self.catalog.public(self.catalog.require(db, binding['template_id'], binding['template_version']))
+        validate_model_config(template['definition'], json.loads(binding['config_json']), policy['model_connection_id'], policy['model_environment'])
         if 'update' not in template['definition']['capabilities']:
             raise KnowledgeError('operation_unsupported', 'This plugin does not provide knowledge updates', 409)
         if template['package_sha256'] != policy['approved_package_sha256']:
