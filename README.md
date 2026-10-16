@@ -13,6 +13,7 @@
   <a href="#外部-agent-接入">接入 Agent</a> ·
   <a href="#web-管理台">管理平台</a> ·
   <a href="docs/inbox-api.md">增量收件箱</a> ·
+  <a href="examples/plugins/README.md">插件目录</a> ·
   <a href="https://github.com/oh-my-harness/folder-kb-memory-template">记忆模板</a>
 </p>
 
@@ -24,7 +25,7 @@
 
 ## 文件即知识
 
-以**文件夹和文档作为正式知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite，知识内容不建向量索引、不调用 LLM；维护者更新文件后，下次访问即可读到变化。
+以**文件夹和文档作为正式知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite。基础文件读取无需索引或 LLM；可选插件提供索引检索和模型驱动的知识整理，索引是可重建的派生数据。
 
 服务部署在 Linux Docker 中。HTTP/MCP 容器只读挂载知识目录，独立 Git 同步进程负责拉取与发布。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
@@ -58,7 +59,7 @@ flowchart LR
 
 用户打开 `/workspace` 注册，管理员在 `/admin` 的“账号与组织”中审批。工作区支持个人私有库、组织成员及库权限、Markdown 阅读与搜索、草稿送审和人工发布，以及随用户权限收缩的 Agent Key。
 
-普通文档库可编辑，现有模板库与 Git 库先支持查看，更新仍走原有流程。Linux 部署需为普通文档的发布目录增加专用可写挂载；[设计、使用和迁移说明](docs/human-workspace.md)。
+普通文档库可编辑；插件库是否支持直接编辑由插件声明，通用知识库 1.1.0 起支持人工编辑与管线更新共存，Git 库仍走同步流程。Linux 部署需为普通文档的发布目录增加专用可写挂载；[设计、使用和迁移说明](docs/human-workspace.md)、[插件组合与编辑](docs/plugin-composition-and-editing.md)。
 
 ## 收件箱：提交待整理材料
 
@@ -66,7 +67,20 @@ flowchart LR
 
 [标准内容、授权与调用说明](docs/inbox-api.md) · [材料 JSON Schema](docs/schemas/material-v1.schema.json)。已接入模型连接、独立更新进程和人工审核发布；见[模型驱动更新](docs/template-updates.md)。
 
-## 知识库模板原型
+## 知识插件与更新模板
+
+插件分别管理知识结构、材料更新和检索索引；一个库可独立选择知识管理插件与检索插件。当前源码提供：
+
+| 插件 | 主要用途 |
+|---|---|
+| [BM25 Markdown 1.0.1](examples/plugins/bm25-markdown/package/README.md) | 已有 Markdown/文本目录的全文检索，无模型依赖 |
+| [通用知识库 1.1.2](examples/plugins/general-knowledge/package/README.md) | 分类模板、精确去重、模型语义合并建议、候选审核；内含 BM25，支持人工编辑 |
+| [Memory Files](https://github.com/oh-my-harness/folder-kb-memory-template) | 独立仓库维护的个人记忆更新插件，整理偏好、反馈与项目约定 |
+| [SQLite Corpus 1.0.0](examples/plugins/sqlite-corpus/package/README.md) | 大规模语料的文档级 BM25 评测基线 |
+
+另保留 `simple-rag`、`simple-rag-python` 两个兼容实现，以及 `personal-memory-guide` 声明示例。名称中的 RAG 不代表向量检索或答案生成，声明示例也不等于可运行的记忆更新器。完整版本、源码入口、安装流程与处理结果解释见[插件目录与使用指南](examples/plugins/README.md)。源码提供不代表服务器已安装或已授权。
+
+新建模板库启用更新后，由 worker 初始化并发布未修改的初始结构；增量材料始终生成待人工审核的候选。已有库手动初始化仍需审核。检索索引需显式构建，发布或人工修改后手动重建，详见[模板与更新流程](docs/library-template-workflow.md)。
 
 模板元数据由平台保存，程序由知识库开发者提供并在平台资源上运行。已提供不调用大模型的测试模板，可执行 `python -m folder_kb.template_demo`，在独立演示目录跑通注册、绑定、收件箱材料处理及候选知识生成。正式知识不会自动更新。
 
