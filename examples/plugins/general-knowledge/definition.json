@@ -1,6 +1,6 @@
 {
   "id": "general-knowledge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "protocol_version": "1.1",
   "name": "通用 Markdown 知识库",
   "maintainer": "Folder KB",
@@ -60,6 +60,10 @@
         "minimum": 4000,
         "maximum": 160000,
         "default": 80000
+      },
+      "use_system_proxy": {
+        "type": "boolean",
+        "default": false
       }
     }
   },
@@ -81,7 +85,8 @@
       ],
       "exclude": [
         "drafts/**",
-        "archive/**"
+        "archive/**",
+        "INDEX.md"
       ]
     }
   }

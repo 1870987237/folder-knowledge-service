@@ -14,8 +14,8 @@
 ## 打包安装
 
 ```powershell
-python -m folder_kb.plugin_package --source examples/plugins/bm25-markdown/package --definition examples/plugins/bm25-markdown/definition.json --output dist/bm25-markdown-1.0.0
-python -m folder_kb.plugin_package --source examples/plugins/general-knowledge/package --definition examples/plugins/general-knowledge/definition.json --output dist/general-knowledge-1.0.0
+python -m folder_kb.plugin_package --source examples/plugins/bm25-markdown/package --definition examples/plugins/bm25-markdown/definition.json --output dist/bm25-markdown-1.0.1
+python -m folder_kb.plugin_package --source examples/plugins/general-knowledge/package --definition examples/plugins/general-knowledge/definition.json --output dist/general-knowledge-1.0.1
 ```
 
 管理台“插件 → 安装插件”上传各目录的 `plugin.json` 和 `package.zip`。注册版本不可原地替换，升级应使用新版本。已有库绑定旧插件不会自动迁移。

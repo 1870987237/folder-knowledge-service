@@ -31,7 +31,9 @@ workspace/
 
 ## 配置
 
-默认 `{"mode":"llm","default_scope":"general","max_documents":500,"max_context_chars":80000}`。
+默认 `{"mode":"llm","default_scope":"general","max_documents":500,"max_context_chars":80000,"use_system_proxy":false}`。
+
+1.0.1 起模型请求默认直接连接，不隐式继承 Windows 系统代理。部署确实需要代理时将 `use_system_proxy` 设为 `true`，由运行环境配置代理。
 
 平台模型连接使用 OpenAI 兼容 Chat Completions JSON object 接口，环境映射：
 
@@ -54,3 +56,7 @@ workspace/
 `python program.py initialize|update --input <input> --work <work> --output <output>`，遵循平台工作区协议 1.1。检索入口为 `search.py`，Search 协议 1.0。模板需绑定完整工作根，`knowledge_subpath` 指向 `knowledge`，不能指向根目录或 metadata。
 
 更新器基于 `oh-my-harness/folder-kb-memory-template` 的协议校验、来源记录和候选处理实现，独立随包运行，不导入平台内部代码；检索来自同仓库 `bm25-markdown`。本地可信 Python 执行器不提供第三方程序沙箱。
+
+## 1.0.1 实测修复
+
+模型若对非 correction 材料提出 revise，在目标、范围、结构和引文都合法时转为冲突待审，不允许模型改变材料类型。其他非法决策仍使任务失败。索引跳过文首来源元数据和总目录 INDEX.md，优先返回当前知识正文；来源审计仍可通过授权后的文件阅读追溯，metadata 不属于检索挂载。

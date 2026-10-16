@@ -1,6 +1,6 @@
 {
   "id": "bm25-markdown",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "protocol_version": "1.1",
   "name": "BM25 Markdown 检索",
   "maintainer": "Folder KB",

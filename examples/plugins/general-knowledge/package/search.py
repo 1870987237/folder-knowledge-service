@@ -20,8 +20,19 @@ def tokens(text):
 
 def chunks(text, splitter):
     """Source-preserving blocks with line citations, bounded to 1200 characters."""
+    lines = text.splitlines(keepends=True)
+    metadata_end = 0
+    if lines and lines[0].lstrip('\ufeff').strip() == '---':
+        for index, line in enumerate(lines[1:], 1):
+            if line.strip() in ('---', '...'):
+                # Do not mistake a Markdown horizontal rule pair for frontmatter.
+                if any(re.match(r'^[A-Za-z_][\w-]*\s*:', item) for item in lines[1:index]):
+                    metadata_end = index + 1
+                break
     block, size, start, title, fence = [], 0, 1, '', False
-    for number, line in enumerate(text.splitlines(keepends=True), 1):
+    for number, line in enumerate(lines, 1):
+        if number <= metadata_end:
+            continue
         heading = re.match(r'^#{1,6}\s+(.+)', line) if not fence and splitter == 'markdown_sections' else None
         if block and (heading or size + len(line) > 1200):
             yield start, number - 1, title, ''.join(block)
@@ -60,7 +71,7 @@ def build(request, output):
                     raise ValueError('Reference plugin supports at most 16000 chunks')
                 db.execute('INSERT INTO chunks VALUES(?,?,?,?,?,?)', (count, document['path'], first, last, title[:300], body))
                 db.execute('INSERT INTO terms(rowid,title,body) VALUES(?,?,?)', (count, ' '.join(tokens(title)), ' '.join(tokens(body))))
-    return {'protocol_version': '1.0', 'engine': 'bm25-markdown-v1', 'chunks': count}
+    return {'protocol_version': '1.0', 'engine': 'bm25-markdown-v2', 'chunks': count}
 
 
 def search(request):
