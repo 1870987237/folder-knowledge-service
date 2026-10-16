@@ -1,4 +1,6 @@
-# 简易 RAG 插件
+# BM25 全文检索（原“简易 RAG”）
+
+新安装使用 [`bm25-markdown`](../examples/plugins/bm25-markdown/package/README.md)。本文保留旧 `simple-rag/1.0.0` 的配置说明；它只有词法检索能力，不包含向量检索或答案生成。
 
 本版打通插件安装、绑定、分段建索引、REST/MCP 检索。插件负责返回证据，调用它的 Agent 负责生成回答。
 

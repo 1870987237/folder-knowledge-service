@@ -125,7 +125,7 @@ flowchart LR
 
 - **收件箱**：按知识库和状态筛选，查看正文、来源与场景；领取后回填处理结论，或放回待处理。领取凭证仅保存在当前页面内存中，刷新或退出后需等待租约到期重新领取；完成处理不等于知识已发布。
 - **Agent 与密钥 → 权限设置**：按知识库勾选“允许访问”和“允许提交”，一次保存；提交需先允许访问，取消访问会同时取消提交。
-- **插件**：点击“安装插件”，导入 `plugin.json`（兼容 `registration.json`）并选择 `package.zip`；查看能力、版本、校验摘要和绑定知识库。全文索引已支持构建与 REST/MCP 检索；其他索引类型及 Agent 指引仍为声明。详见[简易 RAG 插件](docs/simple-rag.md)。
+- **插件**：点击“安装插件”，导入 `plugin.json`（兼容 `registration.json`）并选择 `package.zip`；查看能力、版本、校验摘要和绑定知识库。全文索引已支持构建与 REST/MCP 检索；其他索引类型及 Agent 指引仍为声明。基础插件包括 [BM25 Markdown 检索与通用 Markdown 知识库](examples/plugins/README.md)。
 - **知识库 → 插件配置**：在详情抽屉的“插件与工作范围”选择已安装的版本，填写实例 JSON 配置。默认仅使用检索目录，也可指定完整本地或 Git 工作目录、检索子目录及额外排除路径；可随时解除绑定。
 
 模板安装和绑定不会运行更新程序。在知识库“更新设置”中明确启用后，独立 worker 自动处理新材料，候选经管理员审核后发布。配置方法见[更新流程](docs/template-updates.md)。
@@ -446,7 +446,7 @@ python -m pytest -q
 
 部门管理范围、详细权限来源和组织服务账号仍待后续实现。管理数据库已升级到 v10，升级前备份。
 
-检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/simple-rag-python`。
+检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/bm25-markdown`；带更新管线的通用知识库见 `examples/plugins/general-knowledge`。
 
 
 ## 本机统一启动与后台进程

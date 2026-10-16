@@ -138,3 +138,8 @@ python -m folder_kb.plugin_package \
 参见 [Search 插件协议](search-plugin-protocol.md)。平台按库路由到绑定程序，程序自行存储索引与查询；返回规范的原文片段、路径和行号。平台校验来源、范围及内容版本，不对结果重排。
 
 旧 [简易 RAG 插件](simple-rag.md) 保留兼容。新的 `examples/plugins/simple-rag-python` 是独立可执行示例；插件可以选择全文、语义或混合算法，但只有实际提供协议程序、批准并构建成功后才可检索。
+
+
+## 标准基础插件
+
+新安装推荐 `bm25-markdown`（独立 BM25 全文检索）或 `general-knowledge`（分类 Markdown 模板＋增量更新＋BM25）。两者均可通过现有插件安装、库绑定、更新审核和检索接口使用，详见[基础插件目录](../examples/plugins/README.md)。原 `simple-rag` / `simple-rag-python` 是兼容 ID，已安装版本保持不变，避免破坏绑定与历史评测的可复现性。
