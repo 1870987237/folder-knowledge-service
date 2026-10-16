@@ -33,7 +33,7 @@ def run(tmp_path, source=None, records=(), planner=None, config=None):
         source.mkdir(exist_ok=True)
     request = JobRequest(job_id=job.name, operation='update' if records else 'initialize',
         library_id='demo', base_version=program.workspace_digest(source),
-        template=TemplateRef(id='general-knowledge', version='1.0.1', package_sha256='a'*64),
+        template=TemplateRef(id='general-knowledge', version='1.1.0', package_sha256='a'*64),
         knowledge_subpath='knowledge', workspace_key='test', config=config or {'mode': 'structured'})
     prepare_job(job, request, list(records), source)
     before = program.workspace_digest(job/'input/workspace')
@@ -139,9 +139,53 @@ def test_unmanaged_files_preserved_and_managed_external_edits_not_overwritten(tm
     (base/'metadata/extra.txt').write_text('auxiliary')
     result = run(tmp_path, base, [material('b')])
     assert (result/'metadata/extra.txt').read_text(encoding='utf-8') == 'auxiliary'
-    next((result/'knowledge/reference').glob('*.md')).write_text('User edited this')
-    with pytest.raises(program.Invalid, match='externally'):
-        run(tmp_path, result, [material('c')])
+    path = next((result/'knowledge/reference').glob('*.md'))
+    text = path.read_text(encoding='utf-8').replace('The orchard opens at nine.', 'User edited this')
+    path.write_text(text, encoding='utf-8')
+    ident = next(iter(state(result)['documents']))
+    updated = run(tmp_path, result, [material('c', 'More details.', knowledge_action='merge', knowledge_target=ident)])
+    body = state(updated)['documents'][ident]['body']
+    assert body == 'User edited this\n\nMore details.'
+    assert path.read_text(encoding='utf-8') == text
+
+
+def test_manual_move_delete_new_document_and_invalid_metadata(tmp_path):
+    base = run(tmp_path, run(tmp_path), [material('a')])
+    path = next((base/'knowledge/reference').glob('*.md'))
+    ident = next(iter(state(base)['documents']))
+    moved = base/'knowledge/reference/moved.md'
+    path.rename(moved)
+    (base/'knowledge/handwritten.md').write_text('# Handmade\nKeep my formatting.\n', encoding='utf-8')
+    result = run(tmp_path, base, [material('b', 'Closed Sunday.', knowledge_action='merge', knowledge_target=ident)])
+    assert not (result/'knowledge'/path.relative_to(base/'knowledge')).exists()
+    assert 'Closed Sunday.' in (result/'knowledge/reference/moved.md').read_text(encoding='utf-8')
+    assert 'Keep my formatting.' in (result/'knowledge/handwritten.md').read_text(encoding='utf-8')
+    (result/'knowledge/reference/moved.md').unlink()
+    output = run(tmp_path, result, [material('c', 'Await confirmation.', kind='observation')])
+    assert ident not in state(output)['documents']
+    assert ident in state(output)['deleted_document_ids']
+    assert not (output/'knowledge/reference/moved.md').exists()
+    assert not list((output/'knowledge/reference').glob('*.md'))
+    doc = output/'knowledge/handwritten.md'
+    (output/'knowledge/duplicate.md').write_bytes(doc.read_bytes())
+    with pytest.raises(program.Invalid, match='Duplicate document ID'):
+        run(tmp_path, output, [material('d')])
+
+
+def test_manual_change_invalidates_dedup_and_preserves_unrelated_bytes(tmp_path):
+    base = run(tmp_path, run(tmp_path), [material('a')])
+    path = next((base/'knowledge/reference').glob('*.md'))
+    raw = path.read_text(encoding='utf-8').replace('The orchard opens at nine.', 'The orchard opens at ten.')
+    path.write_text(raw, encoding='utf-8')
+    calls = []
+    def defer(mat, notes, *args):
+        calls.append(notes)
+        assert next(iter(notes.values()))['body'] == 'The orchard opens at ten.'
+        return [dict(action='defer', reason='Conflict', evidence=[mat['content']['text']])]
+    result = run(tmp_path, base, [material('b')], defer)
+    assert len(calls) == 1
+    assert (result/path.relative_to(base)).read_bytes() == path.read_bytes()
+
 
 
 def test_model_http_semantic_merge_and_failure_without_fallback(tmp_path, monkeypatch):
@@ -199,8 +243,8 @@ def test_platform_install_initialize_submit_review_publish_and_search(tmp_path, 
     package = package_plugin(PACKAGE, PACKAGE.parent/'definition.json', tmp_path/'package')
     updates = Updates(registry)
     updates.catalog.register(TemplateRegistration(**json.loads(Path(package['manifest']).read_text(encoding='utf-8'))))
-    installed = updates.catalog.install('general-knowledge', '1.0.1', Path(package['package']).read_bytes())
-    updates.catalog.bind('demo', TemplateBinding(template_id='general-knowledge', template_version='1.0.1',
+    installed = updates.catalog.install('general-knowledge', '1.1.0', Path(package['package']).read_bytes())
+    updates.catalog.bind('demo', TemplateBinding(template_id='general-knowledge', template_version='1.1.0',
         config={'mode': 'structured'}, workspace=WorkspaceSpec(type='local', root_path='demo', knowledge_subpath='knowledge')))
     updates.save_policy('demo', UpdatePolicy(enabled=True, approved_package_sha256=installed['package_sha256']))
     monkeypatch.setenv('KB_TEMPLATE_TRUSTED_PYTHON', '1')

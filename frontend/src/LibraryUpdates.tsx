@@ -5,7 +5,7 @@ import { useApiResource } from './context';
 import { AsyncForm, date, JsonView, LoadError, required } from './components';
 import { UpdatesPanel } from './pages/Updates';
 
-interface Plugin { id: string; version: string; name: string; capabilities: string[]; config_schema: { properties?: Record<string, { default?: unknown }> } }
+interface Plugin { id: string; version: string; name: string; capabilities: string[]; plugin?: { document_editing?: string }; config_schema: { properties?: Record<string, { default?: unknown }> } }
 interface Resources { plugins: Plugin[]; models: { id: string; name: string }[] }
 interface PluginValues { template_choice?: string; config_text: string; enabled: boolean; auto_trigger: boolean; model_connection_id?: string; max_batch_size: number }
 interface Settings { binding: { plugin_id: string; plugin_version: string; config: object } | null; policy: Omit<PluginValues, 'template_choice' | 'config_text'>; unavailable?: string }
@@ -19,17 +19,18 @@ function pluginPayload(v: PluginValues) {
 function PluginFields({ resources, optional = false }: { resources: Resources; optional?: boolean }) {
   const form = Form.useFormInstance(), choice = Form.useWatch('template_choice', form);
   const plugin = resources.plugins.find(p => p.id + '@' + p.version === choice);
+  const management = resources.plugins.filter(p => p.capabilities.length || p.id + '@' + p.version === choice);
   const updates = plugin?.capabilities.includes('update');
   return <>
-    <Form.Item name="template_choice" label="知识库模板" rules={optional ? [] : required}><Select allowClear={optional} placeholder={optional ? '普通文档库' : '选择已授权插件'} options={resources.plugins.map(p => ({ value: p.id + '@' + p.version, label: `${p.name} · ${p.version}` }))} onChange={v => {
+    <Form.Item name="template_choice" label="知识管理插件" rules={optional ? [] : required}><Select allowClear={optional} placeholder={optional ? '普通文档库' : '选择已授权插件'} options={management.map(p => ({ value: p.id + '@' + p.version, label: `${p.name} · ${p.version}` }))} onChange={v => {
       const p = resources.plugins.find(p => p.id + '@' + p.version === v);
       const defaults = Object.fromEntries(Object.entries(p?.config_schema.properties || {}).filter(([, v]) => v.default !== undefined).map(([k, v]) => [k, v.default]));
       form.setFieldsValue({ config_text: JSON.stringify(defaults, null, 2), enabled: !!p?.capabilities.includes('update'), auto_trigger: false, model_connection_id: undefined });
     }} /></Form.Item>
-    {!resources.plugins.length && <Typography.Paragraph type="secondary">暂无可用模板，请平台管理员授权已安装的插件。</Typography.Paragraph>}
+    {!management.length && <Typography.Paragraph type="secondary">暂无可用知识管理插件，请平台管理员授权。</Typography.Paragraph>}
     {choice && <Collapse items={[{ key: 'config', label: '模板参数', forceRender: true, children: <><Form.Item name="config_text" rules={required}><Input.TextArea rows={5} aria-label="模板参数 JSON" /></Form.Item><JsonView value={plugin?.config_schema} /></> }]} />}
     {updates && <>
-      <Typography.Paragraph type="secondary" className="block-gap">由模板处理增量材料，候选需审核后发布；文档通过收件箱更新。</Typography.Paragraph>
+      <Typography.Paragraph type="secondary" className="block-gap">候选需审核后发布。{plugin?.plugin?.document_editing === 'allowed' ? '支持直接编辑正文，自动生成文件除外。' : '仅通过收件箱和更新管线修改文档。'}</Typography.Paragraph>
       <Form.Item name="enabled" label="启用更新程序" valuePropName="checked"><Switch /></Form.Item>
       <Form.Item name="model_connection_id" label="模型连接"><Select allowClear placeholder="不使用大模型" options={resources.models.map(m => ({ value: m.id, label: m.name }))} /></Form.Item>
       <Form.Item name="auto_trigger" label="收到材料后自动生成候选" valuePropName="checked"><Switch /></Form.Item>
@@ -72,7 +73,7 @@ export function LibraryPluginSettings({ api, libraryId, onChanged }: { api: Api;
     {(!available || settings.data.unavailable) && <Alert type="warning" title="当前绑定资源不可用，请重新选择授权资源或联系平台管理员。" />}
     <AsyncForm<PluginValues> key={JSON.stringify(settings.data)} initial={{ ...settings.data.policy, template_choice: choice, config_text: JSON.stringify(b?.config || {}, null, 2) }} submitText="保存模板与更新设置" submit={async v => {
       const save = async () => { await api.request(base, 'PUT', pluginPayload(v)); settings.refresh(); onChanged(); message.success('已保存'); };
-      if (choice !== v.template_choice) await new Promise<void>((resolve, reject) => modal.confirm({ title: '更换知识库模板？', content: '更新模板接管后，文档改由增量收件箱更新；已有未完成草稿需先处理。', onOk: async () => { await save(); resolve(); }, onCancel: () => reject(new Error('已取消')) }));
+      if (choice !== v.template_choice) await new Promise<void>((resolve, reject) => modal.confirm({ title: '更换知识库模板？', content: '请确认新模板兼容已有文档。编辑方式由新模板声明，已有未完成草稿需先处理。', onOk: async () => { await save(); resolve(); }, onCancel: () => reject(new Error('已取消')) }));
       else await save();
     }}><PluginFields resources={resource.data} /></AsyncForm>
   </>;

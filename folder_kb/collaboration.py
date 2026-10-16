@@ -54,7 +54,7 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def snapshot(root):
+def snapshot(root, *, allow_auxiliary=False):
     """Only native document trees; bounded reads verify opened handles and hard links."""
     folder = KnowledgeFolder(root)
     files, directories, total, count = {}, [], 0, 0
@@ -69,7 +69,7 @@ def snapshot(root):
             if path.is_dir():
                 directories.append(relative)
             else:
-                if path.suffix.lower() not in ('.md', '.txt'):
+                if not allow_auxiliary and path.suffix.lower() not in ('.md', '.txt'):
                     fail('native_content_unsupported', '普通文档库仅支持 Markdown / txt；其他内容请使用模板库', 409)
                 with folder._open_text(relative) as (stream, st, _):
                     if total + st.st_size > 32 * 1024 * 1024:
@@ -83,8 +83,8 @@ def snapshot(root):
     return version, files, directories
 
 
-def workspace_digest(root):
-    return snapshot(root)[0]
+def workspace_digest(root, *, allow_auxiliary=False):
+    return snapshot(root, allow_auxiliary=allow_auxiliary)[0]
 
 
 def copy_workspace(source, target, *, captured=None):
@@ -249,22 +249,12 @@ class Collaboration:
         return result
 
     def editable(self, db, lid, root):
-        scope = db.execute('SELECT native FROM library_ownership WHERE library_id=?', (lid,)).fetchone()
-        if not scope or not scope[0] or not root.startswith('document-releases/'):
+        from .document_policy import edit_scope
+        try:
+            edit_scope(self.registry, db, {'id': lid, 'path': root})
+            return True
+        except (KnowledgeError, OSError, ValueError):
             return False
-        binding = db.execute('SELECT t.metadata_json FROM library_templates b JOIN template_versions t '
-                             'ON t.id=b.template_id AND t.version=b.template_version WHERE b.library_id=?', (lid,)).fetchone()
-        if binding:
-            definition = json.loads(binding['metadata_json'])
-            if definition.get('capabilities') or not definition.get('plugin'):
-                return False
-        if db.execute('SELECT 1 FROM repository_libraries WHERE library_id=?', (lid,)).fetchone():
-            return False
-        # A native library must remain an independent publication unit.
-        for other in db.execute('SELECT id,path FROM libraries WHERE id<>?', (lid,)):
-            if root == other['path'] or root.startswith(other['path'].rstrip('/') + '/') or other['path'].startswith(root + '/') or other['path'] == '.':
-                return False
-        return True
 
     def create_library(self, actor, name, oid, db=None):
         lid = uuid.uuid4().hex
@@ -328,21 +318,30 @@ class Collaboration:
             row, _ = self.check(db, actor, lid)
             folder = self.registry.checked_folder(row)
             text = self.text(folder, path)
-            return {'path': path, 'content': text, 'version': digest(text)}
+            from .document_policy import require_path
+            writable = self.editable(db, lid, row['path'])
+            try:
+                require_path(db, lid, path)
+            except KnowledgeError:
+                writable = False
+            return {'path': path, 'content': text, 'version': digest(text), 'editable': writable}
 
     def create_draft(self, actor, lid, path, content, expected_version):
         if len(content.encode()) > TEXT_BYTES:
             fail('document_too_large', '文档过大', 413)
         with self.store.transaction(write=True) as db:
             row, _ = self.check(db, actor, lid, 2)
+            from .document_policy import edit_scope, require_path
+            require_path(db, lid, path)
             if actor.get('platform') or not self.editable(db, lid, row['path']):
                 fail('editing_unsupported', '请通过用户账号编辑平台文档库；挂载库使用其模板或 Git 更新流程', 409)
             folder = self.registry.checked_folder(row)
-            base = workspace_digest(folder.root)
+            scope = edit_scope(self.registry, db, row)
+            base = workspace_digest(scope['root'], allow_auxiliary=scope['managed'])
             original = self.text(folder, path, missing=True)
             if digest(original) != expected_version:
                 fail('document_changed', '文档已更新，请重新读取后编辑', 409)
-            if workspace_digest(folder.root) != base:
+            if workspace_digest(scope['root'], allow_auxiliary=scope['managed']) != base:
                 fail('document_changed', '知识库正在变化，请重试', 409)
             did, stamp = uuid.uuid4().hex, now()
             db.execute('INSERT INTO document_drafts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
@@ -376,6 +375,9 @@ class Collaboration:
                 fail('draft_unavailable', '草稿不可用', 404)
             d = dict(raw)
             row, _ = self.check(db, actor, d['library_id'], 3 if action in ('publish', 'reject') else 2)
+            from .document_policy import edit_scope, require_path, publish_pointer
+            if action != 'reject':
+                require_path(db, row['id'], d['path'])
             if d['revision'] != revision:
                 fail('draft_changed', '草稿状态已变化，请刷新', 409)
             if action in ('save', 'submit') and d['author_id'] != actor['id']:
@@ -393,7 +395,8 @@ class Collaboration:
                 if not self.editable(db, row['id'], row['path']) or user_role(db, d['author_id'], row['id']) < 2:
                     fail('editing_unsupported', '编辑能力或作者权限已变化', 409)
                 source = self.registry.checked_folder(row)
-                if row['path'] != d['base_root'] or workspace_digest(source.root) != d['base_version']:
+                scope = edit_scope(self.registry, db, row)
+                if row['path'] != d['base_root'] or workspace_digest(scope['root'], allow_auxiliary=scope['managed']) != d['base_version']:
                     fail('document_changed', '已有更新发布或文件发生变化，请重新整理草稿', 409)
             if action == 'publish':
                 release = self.registry.pool.root / 'document-releases'
@@ -401,18 +404,17 @@ class Collaboration:
                     fail('unsafe_path', '发布目录不安全')
                 target = release / uuid.uuid4().hex
                 try:
-                    copy_workspace(source.root, target)
-                    if workspace_digest(target) != d['base_version']:
+                    copy_workspace(scope['root'], target, captured=snapshot(scope['root'], allow_auxiliary=scope['managed']))
+                    if workspace_digest(target, allow_auxiliary=scope['managed']) != d['base_version']:
                         fail('document_changed', '复制期间原文档发生变化', 409)
-                    output = target / d['path']
+                    output = target / scope['spec'].knowledge_subpath / d['path']
                     output.write_text(d['content'], encoding='utf-8', newline='\n')
                 except OSError:
                     fail('document_storage_unavailable', '普通文档发布目录不可写', 503)
-                if workspace_digest(source.root) != d['base_version']:
+                if workspace_digest(scope['root'], allow_auxiliary=scope['managed']) != d['base_version']:
                     fail('document_changed', '发布期间原文件变化，请重试', 409)
                 # DB readers see either the old complete tree or the new one.
-                relative = target.relative_to(self.registry.pool.root).as_posix()
-                db.execute('UPDATE libraries SET path=?,updated_at=? WHERE id=?', (relative, now(), row['id']))
+                relative = publish_pointer(self.registry, db, row, scope, target)
                 target = relative
             db.execute('UPDATE document_drafts SET status=?,revision=revision+1,updated_at=?,reviewer_id=?,published_root=? WHERE id=?',
                        (status, now(), actor['id'] if action in ('publish', 'reject') else None, target, did))

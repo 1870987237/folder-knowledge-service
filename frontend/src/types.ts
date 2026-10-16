@@ -29,6 +29,7 @@ export interface Repository {
 export interface RepoList { repositories: Repository[]; worker_online: boolean }
 export interface PluginFeatures {
   manifest_version: string; instructions: string;
+  document_editing?: 'allowed' | 'forbidden'; generated_paths?: string[];
   indexing?: { mode: string; splitter: string; include: string[]; exclude: string[]; metadata_fields: string[]; entrypoint?: string[] | null } | null;
 }
 export interface TemplateDefinition {

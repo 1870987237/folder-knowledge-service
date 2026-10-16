@@ -135,6 +135,23 @@ class PluginFeatures(StrictModel):
     manifest_version: Literal['1.0'] = '1.0'
     instructions: str = Field(default='', max_length=8000)
     indexing: IndexDefinition | None = None
+    document_editing: Literal['allowed', 'forbidden'] | None = None
+    generated_paths: list[str] = Field(default_factory=list, max_length=64)
+    default_knowledge_subpath: str = '.'
+
+    @field_validator('default_knowledge_subpath')
+    @classmethod
+    def knowledge_path(cls, value):
+        if value != '.':
+            relative_path(value)
+        return value
+
+    @field_validator('generated_paths')
+    @classmethod
+    def generated_files(cls, value):
+        for path in value:
+            relative_path(path)
+        return sorted(set(value))
 
 
 class TemplateRegistration(StrictModel):
@@ -239,6 +256,10 @@ class TemplateCatalog:
         metadata = value.model_dump()
         if value.plugin is None:
             metadata.pop('plugin')  # Preserve legacy registration equality and worker contracts.
+        else:
+            for name, default in [('document_editing', None), ('generated_paths', []), ('default_knowledge_subpath', '.')]:
+                if metadata['plugin'][name] == default:
+                    metadata['plugin'].pop(name)
         payload = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
         with self.store.transaction(write=True) as db:
             row = db.execute('SELECT * FROM template_versions WHERE id=? AND version=?', (value.id, value.version)).fetchone()
@@ -376,14 +397,16 @@ class TemplateCatalog:
             definition = json.loads(row['metadata_json'])
             updates = bool(set(definition['capabilities']) & {'initialize', 'update'})
             native = db.execute('SELECT 1 FROM library_ownership WHERE library_id=? AND native=1', (library_id,)).fetchone()
-            if native and (updates or value.workspace is not None):
+            allows_editing = (definition.get('plugin') or {}).get('document_editing') == 'allowed'
+            if native and (updates or value.workspace is not None) and not allows_editing:
                 raise KnowledgeError('native_library_managed', '原生文档库只允许绑定检索定义或使用指引，不能运行更新程序或扩大工作范围', 409)
             if 'update' not in definition['capabilities'] and not definition.get('plugin'):
                 raise KnowledgeError('template_cannot_update', 'Knowledge binding requires update capability', 409)
             if value.workspace is not None and definition['protocol_version'] != '1.1':
                 raise KnowledgeError('workspace_protocol_required', 'Explicit workspaces require template protocol 1.1', 409)
             scope = resolve_workspace(self.registry, db, library, value.workspace)
-            scope_json = None if native else scope['spec'].model_dump_json()
+            keep_native_scope = bool(native and not updates and value.workspace is None)
+            scope_json = None if keep_native_scope else scope['spec'].model_dump_json()
             for other in db.execute('SELECT * FROM library_templates WHERE workspace_key=? AND library_id<>?',
                                     (scope['workspace_key'], library_id)):
                 old_scope = WorkspaceSpec.model_validate_json(other['workspace_json'])
@@ -411,7 +434,7 @@ class TemplateCatalog:
                 template_version=excluded.template_version,config_json=excluded.config_json,
                 workspace_json=excluded.workspace_json,workspace_key=excluded.workspace_key""",
                 (library_id, value.template_id, value.template_version, json.dumps(value.config, ensure_ascii=False),
-                 scope_json, None if native else scope['workspace_key']))
+                 scope_json, None if keep_native_scope else scope['workspace_key']))
             self.event(db, 'template_bind', value.template_id, value.template_version, library_id)
             return self.binding(library_id, db)
 

@@ -143,3 +143,7 @@ python -m folder_kb.plugin_package \
 ## 标准基础插件
 
 新安装推荐 `bm25-markdown`（独立 BM25 全文检索）或 `general-knowledge`（分类 Markdown 模板＋增量更新＋BM25）。两者均可通过现有插件安装、库绑定、更新审核和检索接口使用，详见[基础插件目录](../examples/plugins/README.md)。原 `simple-rag` / `simple-rag-python` 是兼容 ID，已安装版本保持不变，避免破坏绑定与历史评测的可复现性。
+
+## 编辑与组合扩展
+
+知识管理与检索现在支持独立绑定；管理插件可声明允许直接编辑或仅通过管线修改。契约、兼容行为与验收内容见 [插件组合与文档编辑](plugin-composition-and-editing.md)。

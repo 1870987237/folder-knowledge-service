@@ -4,6 +4,7 @@ import { useApiResource, useSession } from '../context';
 import { date, LoadError, required } from '../components';
 import { type Api, errorMessage } from '../api';
 import type { Library } from '../types';
+import { SearchPluginSettings } from '../SearchPluginSettings';
 
 interface IndexState { status: string; message?: string; files?: number; chunks?: number; built_at?: string; supports_path_filter?: boolean }
 interface Hit { path: string; start_line: number; end_line: number; title: string; text: string; score: number }
@@ -22,7 +23,7 @@ export function RetrievalPanel({ api, libraryId, searchPath = '/search' }: { api
   const [busy, setBusy] = useState(false), [searching, setSearching] = useState(false), [error, setError] = useState('');
   const [result, setResult] = useState<Result>();
   const blocked = !state.data || ['unconfigured', 'unsupported'].includes(state.data.status);
-  return <><LoadError error={state.error || error} retry={state.refresh} />
+  return <><SearchPluginSettings api={api} libraryId={libraryId} onChanged={() => { setResult(undefined); state.refresh(); }} /><LoadError error={state.error || error} retry={state.refresh} />
     {state.loading ? <Spin /> : <Space wrap>
       <Tag color={state.data?.status === 'ready' ? 'success' : 'default'}>{statuses[state.data?.status || ''] || '未知'}</Tag>
       {state.data?.built_at && <Typography.Text type="secondary">{state.data.files} 个文件 · {state.data.chunks} 个片段 · {date(state.data.built_at)}</Typography.Text>}

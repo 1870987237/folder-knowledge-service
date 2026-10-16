@@ -95,7 +95,7 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12):
+            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
                 raise ValueError('Unsupported management database version')
             if version in (0, 1):
                 from .repositories import REPOSITORY_SCHEMA
@@ -171,6 +171,15 @@ class SqliteStore:
                 db.execute('PRAGMA user_version=12')
                 if db.execute('PRAGMA foreign_key_check').fetchone():
                     raise ValueError('Management database contains invalid references')
+            if version < 13:
+                from .plugin_bindings import SCHEMA as SEARCH_BINDING_SCHEMA
+                db.execute(SEARCH_BINDING_SCHEMA)
+                db.execute('CREATE TABLE workspace_publications_new (workspace_key TEXT PRIMARY KEY, root_path TEXT NOT NULL, '
+                           'job_id TEXT REFERENCES update_jobs(id))')
+                db.execute('INSERT INTO workspace_publications_new SELECT * FROM workspace_publications')
+                db.execute('DROP TABLE workspace_publications')
+                db.execute('ALTER TABLE workspace_publications_new RENAME TO workspace_publications')
+                db.execute('PRAGMA user_version=13')
             db.commit()
 
     @contextmanager

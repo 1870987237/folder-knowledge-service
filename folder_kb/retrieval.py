@@ -50,7 +50,8 @@ class Retrieval:
             row = dict(row)
             if not row['enabled']:
                 raise KnowledgeError('library_disabled', 'Library is disabled', 409)
-            binding = db.execute('SELECT * FROM library_templates WHERE library_id=?', (library_id,)).fetchone()
+            from .plugin_bindings import search_binding
+            binding = search_binding(db, library_id)
             if not binding:
                 raise KnowledgeError('index_not_configured', 'Bind an indexing plugin first', 409)
             from .resource_access import check_binding_access

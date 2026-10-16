@@ -80,13 +80,16 @@ class LibraryUpdates:
         native = db.execute('SELECT native FROM library_ownership WHERE library_id=?', (lid,)).fetchone()[0]
         workspace = WorkspaceSpec(**old['workspace']) if old and old['workspace'] else None
         if native and update_capable:
+            if not old and (definition.get('plugin') or {}).get('default_knowledge_subpath', '.') != '.':
+                raise KnowledgeError('workspace_setup_required', '该模板需要独立知识子目录；请新建模板库，或由平台管理员配置完整工作范围', 409)
             if not self.collaboration.editable(db, lid, lib['path']):
                 raise KnowledgeError('workspace_not_independent', '模板更新需要独立知识库工作目录', 409)
             if db.execute("SELECT 1 FROM document_drafts WHERE library_id=? AND status IN ('draft','submitted')", (lid,)).fetchone():
                 raise KnowledgeError('drafts_pending', '请先处理未完成的文档草稿', 409)
-            # This dedicated publication becomes template-managed; direct edits remain disabled.
-            workspace = WorkspaceSpec(type='local', root_path=lib['path'])
-            db.execute('UPDATE library_ownership SET native=0 WHERE library_id=?', (lid,))
+            # Preserve the logical workspace after publications; editing policy belongs to the plugin.
+            workspace = workspace or WorkspaceSpec(type='local', root_path=lib['path'])
+            if (definition.get('plugin') or {}).get('document_editing') != 'allowed':
+                db.execute('UPDATE library_ownership SET native=0 WHERE library_id=?', (lid,))
         self.catalog.bind(lid, TemplateBinding(template_id=value.plugin_id, template_version=value.plugin_version,
                                              config=value.config, workspace=workspace), db)
         db.execute('INSERT OR IGNORE INTO delegated_libraries VALUES (?)', (lid,))
@@ -105,6 +108,17 @@ class LibraryUpdates:
         try:
             with self.store.transaction(write=True) as db:
                 result = self.collaboration.create_library(actor, value.name, value.organization_id, db)
+                definition = json.loads(self.catalog.require(db, value.template.plugin_id, value.template.plugin_version)['metadata_json'])
+                sub = (definition.get('plugin') or {}).get('default_knowledge_subpath', '.')
+                if sub != '.':
+                    root = 'document-releases/' + result['id']
+                    (self.registry.pool.root / root / sub).mkdir(parents=True)
+                    db.execute('UPDATE libraries SET path=? WHERE id=?', (root + '/' + sub, result['id']))
+                    # Binding must retain the complete root while exposing only knowledge/.
+                    db.execute('UPDATE library_ownership SET native=0 WHERE library_id=?', (result['id'],))
+                    self.catalog.bind(result['id'], TemplateBinding(template_id=value.template.plugin_id,
+                        template_version=value.template.plugin_version, config=value.template.config,
+                        workspace=WorkspaceSpec(type='local', root_path=root, knowledge_subpath=sub)), db)
                 self.configure(db, actor, result['id'], value.template)
                 return result
         except Exception:
@@ -113,8 +127,9 @@ class LibraryUpdates:
                 parent = (self.registry.pool.root / 'document-releases').resolve()
                 folder = (parent / result['id']).resolve()
                 if folder.parent == parent:
-                    (folder / 'README.md').unlink(missing_ok=True)
-                    folder.rmdir()
+                    import shutil
+                    if folder.is_dir():
+                        shutil.rmtree(folder)
             raise
 
     def settings(self, db, actor, lid):

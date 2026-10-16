@@ -58,7 +58,8 @@ def require_access(db, kind, resource_id, owner):
 
 def check_binding_access(db, library_id, binding, model_id=None):
     """Legacy platform bindings retain their explicit approval; delegated bindings recheck grants."""
-    if not db.execute('SELECT 1 FROM delegated_libraries WHERE library_id=?', (library_id,)).fetchone():
+    delegated = binding['delegated'] if 'delegated' in binding.keys() else db.execute('SELECT 1 FROM delegated_libraries WHERE library_id=?', (library_id,)).fetchone()
+    if not delegated:
         return
     owner = scope(db, library_id)
     access = require_access(db, 'plugin', plugin_key(binding['template_id'], binding['template_version']), owner)
@@ -139,7 +140,7 @@ def add_resource_routes(app, registry):
                 access = grant(db, 'plugin', plugin_key(row['id'], row['version']))
                 if allowed(access, owner) and access.get('package_sha256') == row['package_sha256']:
                     definition = json.loads(row['metadata_json'])
-                    plugins.append({k: definition[k] for k in ('id', 'version', 'name', 'description', 'capabilities', 'config_schema', 'required_secrets')})
+                    plugins.append({k: definition.get(k) for k in ('id', 'version', 'name', 'description', 'capabilities', 'config_schema', 'required_secrets', 'plugin')})
             models = []
             for row in db.execute('SELECT * FROM model_connections ORDER BY id'):
                 model = json.loads(row['definition'])

@@ -215,7 +215,7 @@ def test_v11_migration_preserves_agent_inbox_and_job_links(scenario):
         db.commit()
     migrated = SqliteStore(registry.directory)
     with migrated.transaction() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 12
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 13
         assert not db.execute('PRAGMA foreign_key_check').fetchall()
         row = db.execute('SELECT * FROM inbox_items WHERE id=?', (item['id'],)).fetchone()
         assert row['key_id'] == key['key']['id'] and row['user_id'] is None
