@@ -8,11 +8,8 @@
 | `general-knowledge@1.1.2` | 推荐知识管理插件；分类目录、初始化、精确去重、语义合并建议、纠错与冲突待审；内含 BM25 | 自然语言整理需要 LLM；structured 模式用于确定性验证 | [README](general-knowledge/package/README.md) · [定义](general-knowledge/definition.json) |
 | `memory-files`（独立仓库） | 跨会话个人记忆；整理用户偏好、反馈、项目约定与资料位置，生成候选并保留来源 | 自然语言整理需要 LLM | [源码与 README](https://github.com/oh-my-harness/folder-kb-memory-template) |
 | `sqlite-corpus@1.0.0` | 大规模语料评测基线；文档级 BM25，流式建库，提供评测用 rank 入口 | 无 | [README](sqlite-corpus/package/README.md) · [定义](sqlite-corpus/definition.json) |
-| `simple-rag@1.0.0` | 兼容插件；由平台内置 SQLite FTS5 适配器执行全文检索 | 无 | [README](simple-rag/package/README.md) · [定义](simple-rag/definition.json) |
-| `simple-rag-python@1.0.0` | 兼容程序插件；包内程序负责分块、索引与查询，是 BM25 Markdown 的前身 | 无 | [README](simple-rag-python/package/README.md) · [定义](simple-rag-python/definition.json) |
-| `personal-memory-guide@1.0.0` | 声明示例；目录名为 personal-memory，无初始化或更新程序，hybrid 索引仅为声明 | 无 | [README](personal-memory/package/README.md) · [定义](personal-memory/definition.json) |
 
-`simple-rag`、`simple-rag-python` 是旧 BM25 实现的兼容 ID，名称不代表向量检索或生成能力；冻结版本及既有绑定保留，新安装优先使用 `bm25-markdown`。`personal-memory-guide` 不能替代可运行的 memory-files 插件，也不能因声明 hybrid 就提供混合检索。各包内 README 保留相应版本说明，当前选型与平台接入以本页及链接的协议文档为准。
+旧 `simple-rag`、`simple-rag-python` 和 `personal-memory-guide` 示例已从当前源码删除。新的安装和 benchmark 使用上表插件；历史评测仍保留原 ID 与结果，不改写为新插件成绩。已有服务器安装记录不会因源码删除而自动卸载，迁移到 BM25 Markdown 后需重建索引。
 
 ## 如何选择与组合
 

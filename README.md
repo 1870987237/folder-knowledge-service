@@ -78,7 +78,7 @@ flowchart LR
 | [Memory Files](https://github.com/oh-my-harness/folder-kb-memory-template) | 独立仓库维护的个人记忆更新插件，整理偏好、反馈与项目约定 |
 | [SQLite Corpus 1.0.0](examples/plugins/sqlite-corpus/package/README.md) | 大规模语料的文档级 BM25 评测基线 |
 
-另保留 `simple-rag`、`simple-rag-python` 两个兼容实现，以及 `personal-memory-guide` 声明示例。名称中的 RAG 不代表向量检索或答案生成，声明示例也不等于可运行的记忆更新器。完整版本、源码入口、安装流程与处理结果解释见[插件目录与使用指南](examples/plugins/README.md)。源码提供不代表服务器已安装或已授权。
+旧兼容插件和声明示例已从当前源码删除；历史评测记录保留，已有服务器安装记录不自动变更。完整版本、源码入口、安装流程与处理结果解释见[插件目录与使用指南](examples/plugins/README.md)。源码提供不代表服务器已安装或已授权。
 
 新建模板库启用更新后，由 worker 初始化并发布未修改的初始结构；增量材料始终生成待人工审核的候选。已有库手动初始化仍需审核。检索索引需显式构建，发布或人工修改后手动重建，详见[模板与更新流程](docs/library-template-workflow.md)。
 

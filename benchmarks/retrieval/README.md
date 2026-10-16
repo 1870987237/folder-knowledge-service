@@ -1,10 +1,12 @@
 # 固定查询检索评测
 
+小规模评测默认使用 `bm25-markdown`，运行时需显式 `--trust-plugin`；历史旧插件成绩不改写。全量 BrowseComp-Plus 仍使用 `sqlite-corpus`。
+
 与 Agent 任务评测分开：不给模型自由改写和多轮查找，按固定 CSV 查询真实 MCP Search，衡量插件在当前工具返回预算下的文档排序。
 
 ```powershell
-python -m benchmarks.retrieval.run --output data/retrieval-baseline
-python -m benchmarks.retrieval.run --output data/retrieval-program --plugin-definition examples/plugins/simple-rag-python/definition.json --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+python -m benchmarks.retrieval.run --output data/retrieval-baseline --trust-plugin
+python -m benchmarks.retrieval.run --output data/retrieval-program --plugin-definition examples/plugins/bm25-markdown/definition.json --plugin-source examples/plugins/bm25-markdown/package --trust-plugin
 ```
 
 默认复用合成知识目录，使用独立 `retrieval-queries.csv`（id,query）和 `retrieval-qrels.json`（查询 ID 到相关文档相对路径列表）。8 个查询包含专有标识、中文词、同义表达和无答案查询，不代表真实业务分布。
@@ -28,7 +30,7 @@ python -m benchmarks.retrieval.run --output data/retrieval-program --plugin-defi
 
 ```powershell
 python -m benchmarks.retrieval.prepare --dataset data/baseline-20261012/dataset-bcp --run data/baseline-20261012/browsecomp/execution --output data/bcp-fixed-queries --repeat 1 --labels evidence
-python -m benchmarks.retrieval.run --dataset data/baseline-20261012/dataset-bcp --queries data/bcp-fixed-queries/queries.csv --qrels data/bcp-fixed-queries/qrels.json --output data/bcp-fixed-retrieval --plugin-definition examples/plugins/simple-rag-python/definition.json --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+python -m benchmarks.retrieval.run --dataset data/baseline-20261012/dataset-bcp --queries data/bcp-fixed-queries/queries.csv --qrels data/bcp-fixed-queries/qrels.json --output data/bcp-fixed-retrieval --plugin-definition examples/plugins/bm25-markdown/definition.json --plugin-source examples/plugins/bm25-markdown/package --trust-plugin
 ```
 
 同一查询文件可以交给不同插件；manifest 保存原运行/轨迹指纹及标签口径。不能把首次查询指标与 Agent 多轮累计召回直接视为同一种分数。
@@ -39,7 +41,7 @@ python -m benchmarks.retrieval.run --dataset data/baseline-20261012/dataset-bcp 
 
 ```powershell
 python -m benchmarks.retrieval.queries --dataset data/bcp-holdout --output data/bcp-queries --labels evidence
-python -m benchmarks.retrieval.run --dataset data/bcp-holdout --queries data/bcp-queries/queries.csv `
+python -m benchmarks.retrieval.run --dataset data/bcp-holdout --queries data/bcp-queries/queries.csv --trust-plugin `
   --qrels data/bcp-queries/qrels.json --output data/bcp-query-results
 ```
 

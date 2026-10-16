@@ -249,8 +249,8 @@ def main():
     p.add_argument('--files',type=int,default=32)
     p.add_argument('--file-bytes',type=int,default=4096)
     p.add_argument('--timeout',type=float,default=30)
-    p.add_argument('--plugin-definition',type=Path,default=Path('examples/plugins/simple-rag/definition.json'))
-    p.add_argument('--plugin-source',type=Path,default=Path('examples/plugins/simple-rag/package'))
+    p.add_argument('--plugin-definition',type=Path,default=Path('examples/plugins/bm25-markdown/definition.json'))
+    p.add_argument('--plugin-source',type=Path,default=Path('examples/plugins/bm25-markdown/package'))
     p.add_argument('--trust-plugin',action='store_true')
     args=p.parse_args();args.output=args.output.resolve();asyncio.run(run(args))
 

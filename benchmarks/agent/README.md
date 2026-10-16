@@ -1,5 +1,7 @@
 # 通用 Agent 任务 Benchmark
 
+小规模评测默认使用 `bm25-markdown`，运行时需显式 `--trust-plugin`；历史旧插件成绩不改写。全量 BrowseComp-Plus 仍使用 `sqlite-corpus`。
+
 衡量 Agent 能否通过 Folder KB 完成真实任务，以及不同工具、索引配置对结果的影响。
 与 `tools/benchmark_*_tools.py` 的接口微基准分开使用：这里不预先编排 Agent 的调用步骤。
 
@@ -32,13 +34,13 @@ flowchart LR
 python -m benchmarks.agent.preflight
 
 # 先验证接入，执行一个检索任务和一个嵌套写入任务
-python -m benchmarks.agent.runner --output data/agent-smoke --tasks R01 W01 --variants hybrid --fail-fast
+python -m benchmarks.agent.runner --output data/agent-smoke --tasks R01 W01 --variants hybrid --fail-fast --trust-plugin
 
 # 12 个任务 × 3 种配置；每次必须使用新目录
-python -m benchmarks.agent.runner --output data/agent-baseline --timeout 120
+python -m benchmarks.agent.runner --output data/agent-baseline --timeout 120 --trust-plugin
 
 # 稳定性对比：每个任务、配置独立重复 3 次
-python -m benchmarks.agent.runner --output data/agent-repeat3 --repeats 3 --timeout 120
+python -m benchmarks.agent.runner --output data/agent-repeat3 --repeats 3 --timeout 120 --trust-plugin
 
 # 根据实际结果生成报告
 python -m benchmarks.agent.report data/agent-baseline
@@ -71,13 +73,13 @@ OMP 从已有 `~/.omp/agent/models.yml` 复制模型配置到临时运行配置�
 所有库预先绑定相同索引插件并构建索引，仅 Key 的检索权限不同，避免“是否绑定插件”成为额外差异。
 插件中的使用说明统一为中性指引，不偏向指定检索工具。
 
-默认索引是示例 `simple-rag` 的 **Markdown 章节切分 + SQLite FTS5 / BM25**。
+默认索引是 `bm25-markdown` 的 **Markdown 章节切分 + SQLite FTS5 / BM25**。
 它是全文检索，不是 Embedding 向量检索；Search 组仍可以浏览目录、读取原文来补充证据。
 
 可用以下参数测试其他符合现有平台插件协议的检索插件定义/程序包（需兼容原生文档库直接写入，不含更新程序）：
 
 ```powershell
-python -m benchmarks.agent.runner --output data/other-index --variants search hybrid `
+python -m benchmarks.agent.runner --output data/other-index --variants search hybrid --trust-plugin `
   --plugin-definition path/to/definition.json --plugin-source path/to/package
 ```
 

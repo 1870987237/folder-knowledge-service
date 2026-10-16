@@ -1,10 +1,12 @@
 # 隔离并发负载测试
 
+小规模评测默认使用 `bm25-markdown`，运行时需显式 `--trust-plugin`；历史旧插件成绩不改写。全量 BrowseComp-Plus 仍使用 `sqlite-corpus`。
+
 这是接口/调度负载实验，与 Agent 自主任务 benchmark 分开。无需模型或 OMP。
 
 ```powershell
-python -m benchmarks.load.run --output data/load-smoke --clients 1 5 --requests 3 --files 8 --file-bytes 1024
-python -m benchmarks.load.run --output data/load-baseline --clients 1 5 10 25 50 100 --requests 10 --plugin-definition examples/plugins/simple-rag-python/definition.json --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+python -m benchmarks.load.run --output data/load-smoke --clients 1 5 --requests 3 --files 8 --file-bytes 1024 --trust-plugin
+python -m benchmarks.load.run --output data/load-baseline --clients 1 5 10 25 50 100 --requests 10 --plugin-definition examples/plugins/bm25-markdown/definition.json --plugin-source examples/plugins/bm25-markdown/package --trust-plugin
 ```
 
 - 每个场景、并发档位独立初始化合成库，各客户端使用不同 Key。

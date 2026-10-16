@@ -1,5 +1,7 @@
 # BrowseComp-Plus 接入
 
+小规模评测默认使用 `bm25-markdown`，运行时需显式 `--trust-plugin`；历史旧插件成绩不改写。全量 BrowseComp-Plus 仍使用 `sqlite-corpus`。
+
 让现有 OMP + GLM 通过 Folder KB 的真实 MCP 工具完成公开基准问题，对比 grep、Search 和混合配置。复用现有 Agent runner，不改变工具 schema 或替 Agent 规划调用。
 
 支持两种数据规模：`full_prepare/full_run` 使用 **全部 830 题、100,195 篇文档**；`prepare/campaign` 保留缩小语料的快速回归。两者结果不可直接混合。原问题、文档和答案不改写；判分仍按用户选择使用 Flash，不能直接当作采用上游 Qwen3-32B 的官方榜单成绩。
@@ -113,15 +115,15 @@ python -m benchmarks.browsecomp.prepare --source path/to/test-00000-of-00006.par
   --output data/bcp-local --questions 2 --negatives-per-question 20
 
 # 推荐：一次命令完成模型预检、Agent 执行、独立判分、报告和上游格式导出
-python -m benchmarks.browsecomp.run --dataset data/bcp-local `
+python -m benchmarks.browsecomp.run --dataset data/bcp-local --trust-plugin `
   --output data/bcp-experiment --timeout 180 --repeats 1
 
-# 比较独立程序插件：自然语言问题、模型、预算及工具权限保持一致
+# 显式指定同一个默认插件；替换路径可比较其他检索程序
 # --trust-plugin 仅对本次测试进程批准该包，使用前审阅插件源码
-python -m benchmarks.browsecomp.run --dataset data/bcp-local `
+python -m benchmarks.browsecomp.run --dataset data/bcp-local --trust-plugin `
   --output data/bcp-program --timeout 180 --repeats 1 `
-  --plugin-definition examples/plugins/simple-rag-python/definition.json `
-  --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+  --plugin-definition examples/plugins/bm25-markdown/definition.json `
+  --plugin-source examples/plugins/bm25-markdown/package
 ```
 
 一键运行默认同一模型在全新、无工具的会话中判分，报告标出同模型偏差。
@@ -133,7 +135,7 @@ python -m benchmarks.browsecomp.run --dataset data/bcp-local `
 ```powershell
 
 # 任务编号来自生成的 tasks.csv；省略 --tasks 执行全部导入的问题
-python -m benchmarks.agent.runner --dataset data/bcp-suite `
+python -m benchmarks.agent.runner --dataset data/bcp-suite --trust-plugin `
   --output data/bcp-run --variants grep search hybrid --timeout 180
 
 python -m benchmarks.agent.report data/bcp-run

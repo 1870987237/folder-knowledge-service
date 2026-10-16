@@ -7,17 +7,14 @@
   "plugins": [
     {
       "name": "program-bm25",
-      "definition": "examples/plugins/simple-rag-python/definition.json",
-      "source": "examples/plugins/simple-rag-python/package",
+      "definition": "examples/plugins/bm25-markdown/definition.json",
+      "source": "examples/plugins/bm25-markdown/package",
       "trust_plugin": true,
-      "variants": ["grep", "search", "hybrid"]
-    },
-    {
-      "name": "builtin-bm25",
-      "definition": "examples/plugins/simple-rag/definition.json",
-      "source": "examples/plugins/simple-rag/package",
-      "trust_plugin": false,
-      "variants": ["search"]
+      "variants": [
+        "grep",
+        "search",
+        "hybrid"
+      ]
     }
   ]
 }

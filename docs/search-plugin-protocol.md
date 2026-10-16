@@ -96,13 +96,13 @@ export KB_SEARCH_PLUGIN_ALLOWLIST=<安装后返回的package_sha256，多个用�
 
 ## 示例与验收
 
-完整可运行示例：`examples/plugins/simple-rag-python`。其程序自行完成 Markdown 分块、SQLite FTS5、BM25、目录过滤及 has_more；只依赖 Python 标准库，未宣称具备向量检索。
+完整可运行示例：`examples/plugins/bm25-markdown`。其程序自行完成 Markdown 分块、SQLite FTS5、BM25、目录过滤及 has_more；只依赖 Python 标准库，未宣称具备向量检索。
 
 ```bash
 python -m folder_kb.plugin_package \
-  --source examples/plugins/simple-rag-python/package \
-  --definition examples/plugins/simple-rag-python/definition.json \
-  --output /tmp/simple-rag-python
+  --source examples/plugins/bm25-markdown/package \
+  --definition examples/plugins/bm25-markdown/definition.json \
+  --output /tmp/bm25-markdown
 ```
 
 管理台安装、批准程序摘要、绑定知识库后，在“检索索引”构建和测试。旧声明式插件不用迁移即可使用；要采用程序版，应安装新插件并显式改绑、重建。

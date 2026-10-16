@@ -13,8 +13,8 @@ from tests.test_template_management import env, auth
 
 def install_program(env, tmp_path, monkeypatch, code=None, path_filter=True):
     app, client, key, settings = env
-    source = Path('examples/plugins/simple-rag-python/package')
-    definition = json.loads(Path('examples/plugins/simple-rag-python/definition.json').read_text(encoding='utf-8'))
+    source = Path('examples/plugins/bm25-markdown/package')
+    definition = json.loads(Path('examples/plugins/bm25-markdown/definition.json').read_text(encoding='utf-8'))
     definition['plugin']['indexing']['supports_path_filter'] = path_filter
     if code:
         source = tmp_path / 'source'
@@ -28,12 +28,12 @@ def install_program(env, tmp_path, monkeypatch, code=None, path_filter=True):
     response = client.post('/admin/api/plugins', headers=auth(), json=json.loads(Path(output['manifest']).read_text(encoding='utf-8')))
     assert response.status_code == 201, response.text
     assert response.json()['capabilities']['indexing']['integration'] == 'available'
-    installed = client.put('/admin/api/plugins/simple-rag-python/versions/1.0.0/package', headers=auth(),
+    installed = client.put('/admin/api/plugins/bm25-markdown/versions/1.0.1/package', headers=auth(),
                            content=Path(output['package']).read_bytes())
     assert installed.status_code == 200, installed.text
     for lid in ('alpha', 'beta'):
         r = client.put(f'/admin/api/libraries/{lid}/plugin', headers=auth(),
-                       json={'plugin_id': 'simple-rag-python', 'plugin_version': '1.0.0'})
+                       json={'plugin_id': 'bm25-markdown', 'plugin_version': '1.0.1'})
         assert r.status_code == 200, r.text
     monkeypatch.setenv('KB_SEARCH_TRUSTED_PYTHON', '1')
     monkeypatch.setenv('KB_SEARCH_PLUGIN_ALLOWLIST', installed.json()['package_sha256'])
@@ -52,7 +52,7 @@ def test_program_build_query_filter_and_authorization(env, tmp_path, monkeypatch
     service = install_program(env, tmp_path, monkeypatch)
     assert service.state('alpha')['status'] == 'missing'
     built = service.build('alpha')
-    assert built['engine'] == 'simple-rag-python-bm25-v1'
+    assert built['engine'] == 'bm25-markdown-v2'
     assert service.state('alpha')['status'] == 'ready'
     result = c.get('/api/v1/search', headers=auth(key['token']), params={
         'library_id': 'alpha', 'query': 'Apple', 'path': 'docs', 'limit': 1})

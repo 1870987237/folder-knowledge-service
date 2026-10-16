@@ -61,8 +61,8 @@ def main():
     parser.add_argument('--timeout', type=int, default=180)
     parser.add_argument('--repeats', type=int, default=1)
     parser.add_argument('--tasks',nargs='+',help='Frozen subset of task IDs; recorded in the plan')
-    parser.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/simple-rag/definition.json'))
-    parser.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/simple-rag/package'))
+    parser.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/bm25-markdown/definition.json'))
+    parser.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/bm25-markdown/package'))
     parser.add_argument('--trust-plugin', action='store_true')
     args = parser.parse_args()
     if args.timeout < 1 or args.repeats < 1 or len(set(args.variants)) != len(args.variants):

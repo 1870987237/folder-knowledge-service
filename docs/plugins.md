@@ -120,13 +120,13 @@ flowchart LR
 
 ## 5. 开发与管理台使用
 
-无需编写程序的示例位于 `examples/plugins/personal-memory`。在项目环境中打包：
+可运行的 BM25 检索插件位于 `examples/plugins/bm25-markdown`。在项目环境中打包：
 
 ```bash
 python -m folder_kb.plugin_package \
-  --source examples/plugins/personal-memory/package \
-  --definition examples/plugins/personal-memory/definition.json \
-  --output /tmp/personal-memory-plugin
+  --source examples/plugins/bm25-markdown/package \
+  --definition examples/plugins/bm25-markdown/definition.json \
+  --output /tmp/bm25-markdown-plugin
 ```
 
 输出目录必须不存在，产物为 `plugin.json` 和 `package.zip`。清单放在 ZIP 外，由打包工具补全压缩包摘要。
@@ -137,12 +137,12 @@ python -m folder_kb.plugin_package \
 
 参见 [Search 插件协议](search-plugin-protocol.md)。平台按库路由到绑定程序，程序自行存储索引与查询；返回规范的原文片段、路径和行号。平台校验来源、范围及内容版本，不对结果重排。
 
-旧 [简易 RAG 插件](simple-rag.md) 和 `examples/plugins/simple-rag-python` 保留兼容，新安装推荐 `bm25-markdown`。插件可以选择全文、语义或混合算法，但只有接入支持的检索实现并构建成功后才可检索；程序实现还须批准执行。
+旧简易 RAG 示例已删除，新安装使用 `bm25-markdown`；已有安装迁移见[迁移说明](simple-rag.md)。插件可以选择全文、语义或混合算法，但只有接入支持的检索实现并构建成功后才可检索；程序实现还须批准执行。
 
 
 ## 标准基础插件
 
-新安装推荐 `bm25-markdown@1.0.1`（独立 BM25 全文检索）或 `general-knowledge@1.1.2`（分类 Markdown 模板＋增量更新＋BM25）。个人记忆使用独立仓库的 `memory-files`，大规模语料评测使用 `sqlite-corpus`；`personal-memory-guide` 仅为声明示例。完整清单、源码和操作步骤见[插件目录](../examples/plugins/README.md)。原 `simple-rag` / `simple-rag-python` 是兼容 ID，已安装版本保持不变，避免破坏绑定与历史评测的可复现性。
+新安装推荐 `bm25-markdown@1.0.1`（独立 BM25 全文检索）或 `general-knowledge@1.1.2`（分类 Markdown 模板＋增量更新＋BM25）。个人记忆使用独立仓库的 `memory-files`，大规模语料评测使用 `sqlite-corpus`。完整清单、源码和操作步骤见[插件目录](../examples/plugins/README.md)。旧示例源码已删除，历史评测不改写；已有安装仍可通过兼容后端运行，迁移需要显式改绑和重建索引。
 
 通用知识库 1.1.2 使用 `model_binding` 声明 llm 模式的模型依赖和变量映射。平台派生默认映射并在配置、入队和运行阶段校验；不把密钥写入插件或实例配置。已有 1.1.x 工作目录可升级绑定，无需重新初始化。
 

@@ -25,17 +25,17 @@ def setup(app, client, settings, tmp_path):
     (root / 'alpha/archive').mkdir()
     (root / 'alpha/archive/old.md').write_text('outdated-secret', encoding='utf-8')
     (root / 'beta/guide.md').write_text('# 访问密钥\nBeta private data secret-beta', encoding='utf-8')
-    package = package_plugin(Path('examples/plugins/simple-rag/package'),
-                             Path('examples/plugins/simple-rag/definition.json'), tmp_path / 'upload')
+    package = package_plugin(Path('tests/fixtures/legacy-fulltext/package'),
+                             Path('tests/fixtures/legacy-fulltext/definition.json'), tmp_path / 'upload')
     manifest = json.loads(Path(package['manifest']).read_text(encoding='utf-8'))
     response = client.post('/admin/api/plugins', headers=auth(), json=manifest)
     assert response.status_code == 201, response.text
     assert response.json()['capabilities']['indexing']['integration'] == 'available'
-    assert client.put('/admin/api/plugins/simple-rag/versions/1.0.0/package', headers=auth(),
+    assert client.put('/admin/api/plugins/test-legacy-fulltext/versions/1.0.0/package', headers=auth(),
                       content=Path(package['package']).read_bytes()).status_code == 200
     for lid in ('alpha', 'beta'):
         assert client.put(f'/admin/api/libraries/{lid}/plugin', headers=auth(), json={
-            'plugin_id': 'simple-rag', 'plugin_version': '1.0.0'}).status_code == 200
+            'plugin_id': 'test-legacy-fulltext', 'plugin_version': '1.0.0'}).status_code == 200
     return Retrieval(app.state.registry)
 
 

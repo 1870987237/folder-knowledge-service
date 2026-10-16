@@ -1,4 +1,7 @@
-"""Create disposable knowledge and a packaged RAG plugin for browser validation."""
+"""Create disposable knowledge and a packaged BM25 plugin for browser validation.
+
+Building this program index requires KB_SEARCH_TRUSTED_PYTHON=1 and approval
+of the generated package digest in the isolated UI service."""
 import json
 from pathlib import Path
 import uuid
@@ -19,7 +22,7 @@ def create_fixture():
     (root / 'guide/deployment.txt').write_text('Rollback restores the previous release. Keep a backup before deployment.\n', encoding='utf-8')
     registry = Registry(str(root), str(base / 'state'))
     registry.save_library('rag-demo', 'RAG 检索测试', 'guide', True, create=True)
-    package_plugin(Path('examples/plugins/simple-rag/package'), Path('examples/plugins/simple-rag/definition.json'), base / 'upload')
+    package_plugin(Path('examples/plugins/bm25-markdown/package'), Path('examples/plugins/bm25-markdown/definition.json'), base / 'upload')
     (base / 'fixture.json').write_text(json.dumps({'root':str(root),'state':str(base/'state')}), encoding='utf-8')
     print(base)
 

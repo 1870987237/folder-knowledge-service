@@ -214,7 +214,18 @@ class Workflow:
             'name':'待审核知识库','organization_id':org['id'],'template':{'plugin_id':'reference-docs','plugin_version':'0.2.0','enabled':True}}))
         lid=library['id']; base=f'/portal/api/libraries/{lid}'
         self.library_ids.append(lid)
-        seed_knowledge(self.suite.current(lid),read_tree(self.args.dataset/'knowledge'/'update'))
+        # Finish the new-library bootstrap before seeding scenario documents;
+        # editing the initial directory first would invalidate bootstrap consent.
+        worker=TemplateWorker(self.suite.registry)
+        await asyncio.to_thread(worker.tick)
+        await asyncio.to_thread(worker.tick)
+        state=self.operation('initialization_status',lambda:self.admin.get(base+'/update-jobs',headers=headers))
+        if state['initialization']!='ready':
+            raise RuntimeError('Scenario library initialization did not publish')
+        for path, content in read_tree(self.args.dataset/'knowledge'/'update').items():
+            target=self.suite.current(lid)/path
+            target.parent.mkdir(parents=True,exist_ok=True)
+            target.write_text(content,encoding='utf-8',newline='\n')
         before=self.files(lid)
         key=self.issue({lid:{'grep':True,'write_policy':'submit'}},submit=[lid])
         def check(e,c):
@@ -227,7 +238,6 @@ class Workflow:
         if not row['checks']['submitted']:
             raise RuntimeError('No valid submission; cannot grade publication phase')
         job=self.operation('reviewer_enqueue',lambda:self.admin.post(base+'/update-jobs',headers=headers,json={}))
-        worker=TemplateWorker(self.suite.registry)
         await asyncio.to_thread(worker.tick)
         detail=self.operation('candidate_status',lambda:self.admin.get(base+'/update-jobs/'+job['id'],headers=headers))
         preview=self.operation('reviewer_preview',lambda:self.admin.get(base+'/update-jobs/'+job['id']+'/preview',headers=headers))
@@ -248,7 +258,9 @@ class Workflow:
         published = self.files(lid)
         await self.agent('R_PUBLISHED',repeat,key,lambda e,c:{'published_fact':evidence_check(e,c,published,self.expectations['R_PUBLISHED']),
             'read_only':self.files(lid)==published,
-            'preserved_previous_files':all(self.files(lid).get(p)==v for p,v in before.items())})
+            # The deterministic template updates its generated inbox index.
+            'preserved_previous_files':all(self.files(lid).get(p)==v for p,v in before.items()
+                                           if p!='demo-inbox/INDEX.md')})
 
 
 async def run(args):
@@ -312,8 +324,8 @@ def main():
     p.add_argument('--omp',default=shutil.which('omp') or 'omp')
     p.add_argument('--model',default='hyper-op/GLM-5.3-Flash')
     p.add_argument('--models-config',type=Path,default=Path.home()/'.omp/agent/models.yml')
-    p.add_argument('--plugin-definition',type=Path,default=Path('examples/plugins/simple-rag/definition.json'))
-    p.add_argument('--plugin-source',type=Path,default=Path('examples/plugins/simple-rag/package'))
+    p.add_argument('--plugin-definition',type=Path,default=Path('examples/plugins/bm25-markdown/definition.json'))
+    p.add_argument('--plugin-source',type=Path,default=Path('examples/plugins/bm25-markdown/package'))
     p.add_argument('--trust-plugin',action='store_true')
     args=p.parse_args(); args.output=args.output.resolve()
     asyncio.run(run(args))
