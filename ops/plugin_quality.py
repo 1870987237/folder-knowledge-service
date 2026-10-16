@@ -68,6 +68,13 @@ def execute(args):
     endpoint = base if base.endswith('/chat/completions') else base+'/chat/completions'
     root = args.output.resolve(); root.mkdir(parents=True, exist_ok=False)
     fixture = json.loads(args.fixtures.read_text(encoding='utf-8'))
+    if args.baseline_run:
+        baseline_report = json.loads((args.baseline_run/'report.json').read_text(encoding='utf-8'))
+        if baseline_report['fixtures_sha256'] != hashlib.sha256(args.fixtures.read_bytes()).hexdigest():
+            raise ValueError('Baseline fixtures differ')
+        if (baseline_report['model'] != args.provider+'/'+args.model
+                or baseline_report['repeats'] != args.repeats):
+            raise ValueError('Baseline model/repeats differ')
     save(root/'fixtures.json', fixture)
     shutil.copy2(PROGRAM, root/'program-under-test.py')
     calls=[]; lock=Lock()
@@ -108,6 +115,7 @@ def execute(args):
         'program_sha256':hashlib.sha256(PROGRAM.read_bytes()).hexdigest(),
         'fixtures_sha256':hashlib.sha256(args.fixtures.read_bytes()).hexdigest(),
         'repeats':args.repeats,'parallelism':args.parallelism,'started_at':time.time(),
+        'baseline_run':str(args.baseline_run) if args.baseline_run else None,
         'grading':'Fixed expectations; inspect evidence and grade separately. Transport success is not quality.',
         'runs':[]}
     save(root/'report.json',summary)
@@ -126,13 +134,15 @@ def execute(args):
 
         def run_case(case,repeat):
             label=f"{case['id']}-r{repeat}"; folder=root/label; folder.mkdir()
-            source=folder/'source'; shutil.copytree(baseline,source)
-            if case.get('edit')=='api':
+            source=folder/'source'
+            frozen_source=args.baseline_run/label/'source' if args.baseline_run else baseline
+            shutil.copytree(frozen_source,source)
+            if not args.baseline_run and case.get('edit')=='api':
                 p=next(p for p in (source/'knowledge').rglob('reference_*.md') if 'Atlas生产API' in p.read_text(encoding='utf-8'))
                 p.write_text(p.read_text(encoding='utf-8').replace('30秒','45秒')+'\n仅允许幂等请求重试。\n',encoding='utf-8')
-            elif case.get('edit')=='delete':
+            elif not args.baseline_run and case.get('edit')=='delete':
                 next(p for p in (source/'knowledge').rglob('reference_*.md') if '每天02:00' in p.read_text(encoding='utf-8')).unlink()
-            elif case.get('edit')=='new':
+            elif not args.baseline_run and case.get('edit')=='new':
                 (source/'knowledge/release.md').write_text('---\nscope: Atlas\ntitle: Atlas发布流程\n---\n\nAtlas每周三发布。\n',encoding='utf-8')
             if case.get('copy_seed'):
                 orig=next(s for s in seeds if s.id==case['copy_seed'])
@@ -146,7 +156,12 @@ def execute(args):
                 KNOWLEDGE_LLM_MODEL=args.model,PYTHONIOENCODING='utf-8')
             env.pop('KNOWLEDGE_LLM_API_KEY',None)
             row={'id':label,'case':case['name'],'expected':case['expected'], 'input':rec.material.model_dump(),
-                'before':before,'status':'started'}
+                'before':before,'status':'started','source_digest':req.base_version}
+            if args.baseline_run:
+                prior=json.loads((args.baseline_run/label/'evidence.json').read_text(encoding='utf-8'))
+                assert row['input']==prior['input']
+                assert req.base_version==program.workspace_digest(frozen_source)
+                row['baseline_input_identical']=True
             started=time.perf_counter()
             try:
                 result=subprocess.run([sys.executable,'-B',str(root/'program-under-test.py'),'update',
@@ -171,6 +186,8 @@ def execute(args):
             except Exception as exc:
                 row.update(status='failed',error_type=type(exc).__name__)
             row['seconds']=round(time.perf_counter()-started,3)
+            trace=job/'work/model-attempts.jsonl'
+            row['model_attempts']=[json.loads(line) for line in trace.read_text(encoding='utf-8').splitlines()] if trace.exists() else []
             with lock:
                 run_calls=[c for c in calls if c['run']==label]
             row['model_calls']=len(run_calls)
@@ -194,6 +211,7 @@ if __name__=='__main__':
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--fixtures',type=Path,default=ROOT/'ops/fixtures/knowledge-quality.json')
     parser.add_argument('--models-config',type=Path,default=Path.home()/'.omp/agent/models.yml')
+    parser.add_argument('--baseline-run',type=Path,help='Reuse this prior run\'s exact source snapshots and validate identical materials/model.')
     parser.add_argument('--provider',default='hyper-op'); parser.add_argument('--model',default='GLM-5.3-Flash')
     parser.add_argument('--repeats',type=int,default=2); parser.add_argument('--parallelism',type=int,choices=(1,2),default=2)
     execute(parser.parse_args())

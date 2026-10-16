@@ -33,7 +33,7 @@ def run(tmp_path, source=None, records=(), planner=None, config=None):
         source.mkdir(exist_ok=True)
     request = JobRequest(job_id=job.name, operation='update' if records else 'initialize',
         library_id='demo', base_version=program.workspace_digest(source),
-        template=TemplateRef(id='general-knowledge', version='1.1.0', package_sha256='a'*64),
+        template=TemplateRef(id='general-knowledge', version=program.VERSION, package_sha256='a'*64),
         knowledge_subpath='knowledge', workspace_key='test', config=config or {'mode': 'structured'})
     prepare_job(job, request, list(records), source)
     before = program.workspace_digest(job/'input/workspace')
@@ -187,6 +187,94 @@ def test_manual_change_invalidates_dedup_and_preserves_unrelated_bytes(tmp_path)
     assert (result/path.relative_to(base)).read_bytes() == path.read_bytes()
 
 
+def test_scope_metadata_does_not_duplicate_legacy_footer_after_manual_append(tmp_path):
+    base = run(tmp_path, run(tmp_path), [material('a')])
+    path = next((base/'knowledge/reference').glob('*.md'))
+    raw = path.read_text(encoding='utf-8')
+    assert '适用范围：' not in raw
+    # Simulate a 1.1.0 published file followed by a human appending below its footer.
+    raw += '\n适用范围：general\n\nHuman-added constraint.\n'
+    path.write_text(raw, encoding='utf-8')
+    ident = next(iter(state(base)['documents']))
+    out = run(tmp_path, base, [material('b', 'Compatible addition.', knowledge_action='merge', knowledge_target=ident)])
+    text = (out/path.relative_to(base)).read_text(encoding='utf-8')
+    assert text.count('适用范围：general') == 1
+    assert 'Human-added constraint.' in text and 'Compatible addition.' in text
+    assert 'scope: "general"' in text
+    assert path.read_text(encoding='utf-8') == raw
+
+
+def test_skip_missing_evidence_is_normalized_but_writes_remain_strict():
+    mat = material('a').material.model_dump()
+    d = [{'action':'skip', 'reason':'No reusable information'}]
+    assert program.validate_decisions(d, mat, {}, 'general')[0]['evidence'] == []
+    for action in ('defer', 'create'):
+        with pytest.raises(program.Invalid, match='fields'):
+            program.validate_decisions([{'action':action, 'reason':'test'}], mat, {}, 'general')
+    with pytest.raises(program.Invalid, match='Evidence'):
+        program.validate_decisions([{'action':'skip', 'reason':'test', 'evidence':['invented']}], mat, {}, 'general')
+
+
+def model_responses(monkeypatch, answers):
+    """Controlled transport for contract-repair tests, never used by the quality benchmark."""
+    import io
+    from types import SimpleNamespace
+    calls = []
+    def send(req, timeout):
+        calls.append(json.loads(req.data))
+        answer = answers[len(calls)-1]
+        if isinstance(answer, Exception):
+            raise answer
+        content = answer if isinstance(answer,str) else json.dumps({'decisions': answer})
+        return io.BytesIO(json.dumps({'choices':[{'finish_reason':'stop','message':{'content':content}}]}).encode())
+    monkeypatch.setenv('KNOWLEDGE_LLM_BASE_URL','http://localhost/v1')
+    monkeypatch.setenv('KNOWLEDGE_LLM_MODEL','contract-fixture')
+    monkeypatch.delenv('KNOWLEDGE_LLM_API_KEY',raising=False)
+    monkeypatch.setattr(program.http,'build_opener',lambda *a: SimpleNamespace(open=send))
+    monkeypatch.setattr(program.time,'sleep',lambda *a: None)
+    return calls
+
+
+@pytest.mark.parametrize('bad', ['quote', 'json', 'scope'])
+def test_invalid_model_output_gets_one_validated_repair(tmp_path, monkeypatch, bad):
+    base = run(tmp_path, run(tmp_path), [material('a')])
+    ident = next(iter(state(base)['documents']))
+    wrong = [{'action':'merge','target':ident,'body':'Do not apply this.', 'reason':'test', 'evidence':['invented']}]
+    if bad=='json': wrong='invalid JSON'
+    if bad=='scope': wrong=[{'action':'merge','target':'outside-scope','body':'Do not apply this.', 'reason':'test', 'evidence':['New detail']}]
+    good = [{'action':'merge','target':ident,'body':'New detail','reason':'Compatible','evidence':['New detail']}]
+    calls = model_responses(monkeypatch, [wrong,good])
+    out = run(tmp_path, base, [material('b','New detail')], config={'mode':'llm'})
+    assert len(calls)==2
+    assert len(calls[1]['messages'])==4
+    assert calls[0]['messages'][1]==calls[1]['messages'][1]
+    assert 'Do not apply this.' not in state(out)['documents'][ident]['body']
+    assert state(out)['documents'][ident]['body'].endswith('New detail')
+    trace=[json.loads(x) for x in (out.parent.parent/'work/model-attempts.jsonl').read_text(encoding='utf-8').splitlines()]
+    assert [x['status'] for x in trace]==['invalid_output','accepted']
+
+
+def test_repair_rejection_keeps_source_unchanged_and_is_bounded(tmp_path,monkeypatch):
+    base=run(tmp_path,run(tmp_path),[material('a')])
+    before=program.workspace_digest(base)
+    bad=[{'action':'defer','reason':'test','evidence':['invented']}]
+    calls=model_responses(monkeypatch,[bad,bad])
+    with pytest.raises(program.Invalid,match='Evidence'):
+        run(tmp_path,base,[material('b','New detail')],config={'mode':'llm'})
+    assert len(calls)==2 and program.workspace_digest(base)==before
+
+
+def test_transport_and_repair_share_request_budget(tmp_path,monkeypatch):
+    from urllib.error import URLError
+    calls=model_responses(monkeypatch,[URLError('offline'),'invalid JSON',[{'action':'skip','reason':'No knowledge'}]])
+    out=run(tmp_path,run(tmp_path),[material('a')],config={'mode':'llm'})
+    assert len(calls)==3 and not state(out)['documents']
+    calls=model_responses(monkeypatch,[URLError('offline'),URLError('offline'),'invalid JSON'])
+    with pytest.raises(program.Invalid,match='invalid JSON'):
+        run(tmp_path,out,[material('b')],config={'mode':'llm'})
+    assert len(calls)==3
+
+
 
 def test_model_http_semantic_merge_and_failure_without_fallback(tmp_path, monkeypatch):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -243,8 +331,8 @@ def test_platform_install_initialize_submit_review_publish_and_search(tmp_path, 
     package = package_plugin(PACKAGE, PACKAGE.parent/'definition.json', tmp_path/'package')
     updates = Updates(registry)
     updates.catalog.register(TemplateRegistration(**json.loads(Path(package['manifest']).read_text(encoding='utf-8'))))
-    installed = updates.catalog.install('general-knowledge', '1.1.0', Path(package['package']).read_bytes())
-    updates.catalog.bind('demo', TemplateBinding(template_id='general-knowledge', template_version='1.1.0',
+    installed = updates.catalog.install('general-knowledge', program.VERSION, Path(package['package']).read_bytes())
+    updates.catalog.bind('demo', TemplateBinding(template_id='general-knowledge', template_version=program.VERSION,
         config={'mode': 'structured'}, workspace=WorkspaceSpec(type='local', root_path='demo', knowledge_subpath='knowledge')))
     updates.save_policy('demo', UpdatePolicy(enabled=True, approved_package_sha256=installed['package_sha256']))
     monkeypatch.setenv('KB_TEMPLATE_TRUSTED_PYTHON', '1')

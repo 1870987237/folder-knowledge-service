@@ -27,7 +27,7 @@ def setup(env, tmp_path, monkeypatch):
         installed[name] = r.json()
         assert c.put(f"/admin/api/resource-access/plugin/{name}@{manifest['version']}", headers=headers(ADMIN),
                      json={'approved': True, 'user_ids': [uid]}).status_code == 200
-    settings = {'plugin_id': 'general-knowledge', 'plugin_version': '1.1.0', 'config': {'mode': 'structured'}, 'enabled': True}
+    settings = {'plugin_id': 'general-knowledge', 'plugin_version': installed['general-knowledge']['definition']['version'], 'config': {'mode': 'structured'}, 'enabled': True}
     r = c.post('/portal/api/libraries', headers=headers(token), json={'name': 'Editable synthetic', 'template': settings})
     assert r.status_code == 201, r.text
     lid = r.json()['id']; base = f'/portal/api/libraries/{lid}'
