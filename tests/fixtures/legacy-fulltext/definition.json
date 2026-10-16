@@ -1,0 +1,38 @@
+{
+  "id": "test-legacy-fulltext",
+  "version": "1.0.0",
+  "protocol_version": "1.1",
+  "name": "Legacy fulltext test fixture",
+  "maintainer": "Folder KB",
+  "description": "Test-only declaration for persisted legacy backend compatibility.",
+  "capabilities": [],
+  "entrypoints": {},
+  "runtime": {
+    "type": "declarative"
+  },
+  "output": {
+    "directory": "workspace",
+    "required_files": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "plugin": {
+    "manifest_version": "1.0",
+    "instructions": "先使用 search 检索与问题有关的证据，必要时使用 read_file 查看原文。回答引用文件路径及行号；证据不足时说明缺少哪些信息，不臆造知识。",
+    "indexing": {
+      "mode": "fulltext",
+      "splitter": "markdown_sections",
+      "include": [
+        "**/*.md",
+        "**/*.txt"
+      ],
+      "exclude": [
+        "drafts/**",
+        "archive/**"
+      ],
+      "metadata_fields": []
+    }
+  }
+}

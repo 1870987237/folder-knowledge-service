@@ -53,6 +53,7 @@ def analyze(run, dataset, judgments=None):
         raise ValueError('Expected a BrowseComp-Plus dataset')
     judge_by_episode = {}
     judge_metadata = None
+    human_review = None
     if judgments:
         judged = json.loads(Path(judgments).read_text(encoding='utf-8'))
         if judged['run_sha256'] != hashlib.sha256(raw).hexdigest():
@@ -61,6 +62,7 @@ def analyze(run, dataset, judgments=None):
         if len(judge_by_episode) != len(judged['episodes']):
             raise ValueError('Duplicate judgments')
         judge_metadata = {k: judged.get(k) for k in ('judge_model', 'same_model_as_solver', 'prompt_sha256')}
+        human_review = judged.get('human_review')
     rows, identifiers = [], set()
     for row in data['episodes']:
         if row['episode'] in identifiers:
@@ -72,6 +74,8 @@ def analyze(run, dataset, judgments=None):
         status = execution_status(row)
         judgment = judge_by_episode.get(row['episode'], {})
         correct = judgment.get('correct') if status in ('completed', 'incomplete_answer') else None
+        if correct is not None and type(correct) is not bool:
+            raise ValueError('Judge correct must be boolean or null')
         rows.append({'episode': row['episode'], 'task_id': row['task_id'], 'variant': row['variant'],
             'repeat': row['repeat'], 'status': status, 'answer_correct': correct,
             'judge_error': judgment.get('error'), 'answer_exact_match_proxy': row['evaluation']['answer_exact_match'],
@@ -91,14 +95,14 @@ def analyze(run, dataset, judgments=None):
     if set(judge_by_episode) - identifiers:
         raise ValueError('Unknown episode in judgments')
     plan = data.get('plan', {})
-    summary = {'scope': 'reduced-corpus-internal-adaptation', 'official_leaderboard_comparable': False,
+    summary = {'scope': metadata.get('provenance',{}).get('scope','reduced-corpus-internal-adaptation'), 'official_leaderboard_comparable': False,
                'model': data['model'], 'omp_version': data.get('omp_version'),
                'dataset': metadata, 'source_sha256': data.get('source_sha256'),
                'system_prompt_sha256': hashlib.sha256(data.get('system_prompt', '').encode()).hexdigest(),
                'timeout_seconds': plan.get('timeout_seconds'),
                'plugin_sha256': data.get('plugin', {}).get('package_sha256'),
                'plugin_indexing': data.get('plugin', {}).get('definition', {}).get('plugin', {}).get('indexing'),
-               'run_sha256': hashlib.sha256(raw).hexdigest(), 'judge': judge_metadata,
+               'run_sha256': hashlib.sha256(raw).hexdigest(), 'judge': judge_metadata,'human_review':human_review,
                'planned_episodes': plan.get('planned_episodes'), 'executed_episodes': len(rows),
                'missing_episodes': max(0, plan.get('planned_episodes', len(rows)) - len(rows)),
                'episodes': rows}
@@ -107,7 +111,8 @@ def analyze(run, dataset, judgments=None):
 
 def render(summary):
     lines = ['# BrowseComp-Plus Agent 评测', '',
-        '缩小语料的内部测试，不与官方榜单比较。执行失败、未判分和回答错误分别统计。', '',
+        ('全量语料的平台工具评测，使用内部判分，不直接与官方榜单比较。' if summary['scope']=='full-corpus-platform-adaptation'
+         else '缩小语料的内部测试，不与官方榜单比较。') + '执行失败、未判分和回答错误分别统计。', '',
         f"模型：{summary['model']}；OMP：{summary['omp_version']}；文档：{summary['dataset'].get('corpus_files')}；"
         f"计划执行：{summary['planned_episodes']}；已执行：{summary['executed_episodes']}；未执行：{summary['missing_episodes']}。",
         f"索引包 SHA-256：`{summary['plugin_sha256']}`。", '',
@@ -126,6 +131,8 @@ def render(summary):
               '索引构建在任务计时之外；逐题指标另外记录构建耗时、服务端工具延迟和模型 Token。']
     if summary['judge']:
         lines += [f"内部判分模型：{summary['judge']['judge_model']}；与被测模型相同：{summary['judge']['same_model_as_solver']}。同模型判分存在偏差，需要抽检。"]
+    if summary.get('human_review'):
+        lines += [f"人工复核记录：{summary['human_review']}。原机器判分保留在独立文件中。"]
     lines += ['', '## 每项任务使用了什么工具', '',
               '| 任务 / 配置 / 重复 | 状态 | 工具调用统计 | 服务端工具成功/调用 | 答案 | 证据召回 | 秒 |',
               '|---|---|---|---:|---|---:|---:|']

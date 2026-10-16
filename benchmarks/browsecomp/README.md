@@ -1,8 +1,103 @@
 # BrowseComp-Plus 接入
 
+小规模评测默认使用 `bm25-markdown`，运行时需显式 `--trust-plugin`；历史旧插件成绩不改写。全量 BrowseComp-Plus 仍使用 `sqlite-corpus`。
+
 让现有 OMP + GLM 通过 Folder KB 的真实 MCP 工具完成公开基准问题，对比 grep、Search 和混合配置。复用现有 Agent runner，不改变工具 schema 或替 Agent 规划调用。
 
-**当前是缩小语料的内部适配版，不是官方全量复现。**原始问题、文档与答案不改写；所有选中问题共用一个文档池，包含全部对应 evidence/gold 文档及固定随机种子抽取的 hard negatives。每次使用独立只读知识库和会话。
+支持两种数据规模：`full_prepare/full_run` 使用 **全部 830 题、100,195 篇文档**；`prepare/campaign` 保留缩小语料的快速回归。两者结果不可直接混合。原问题、文档和答案不改写；判分仍按用户选择使用 Flash，不能直接当作采用上游 Qwen3-32B 的官方榜单成绩。
+
+## 全量入口
+
+长实验建议使用统一入口，它依次执行模型连通性检查、索引准备、实际 MCP 检查、830 条文档检索和 830 题 Agent 测评。运行器每五秒更新心跳，状态查询会把过期的“运行中”标为中断；各阶段标准输出和错误日志分别保留。请在独立终端或操作系统任务中运行，普通工具终端进程可能随会话退出。
+
+```powershell
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full --status
+# 源码、模型和数据相同才可续跑；已开始的中断答题保留为失败，不重新答题
+python -B -m benchmarks.browsecomp.workflow --output data/bcp-full --resume
+```
+
+统一入口的 `workflow.json` 和阶段日志在根输出目录，Agent 记录位于 `agent/`，独立检索记录位于 `retrieval/`。Windows 本机采用无定时触发器的任务计划程序任务手动启动，以当前用户的普通权限执行；它不依赖工具终端，也不会周期性发起新测评。
+
+以下分步入口仍可用于调试和独立实验：
+
+```powershell
+# 下载并校验官方 6 个问题分片和 7 个语料分片，导入全部文档；可从下载/导入中断处继续
+python -m benchmarks.browsecomp.full_prepare
+
+# 只构建共享的大语料索引，不调用模型
+python -m benchmarks.browsecomp.full_run --output data/bcp-full-search --prepare-only
+
+# 原题文档级检索，分别输出 evidence/gold Recall@5/100/1000 和 nDCG@10；无 LLM 调用
+python -m benchmarks.browsecomp.full_retrieval --run data/bcp-full-search --output data/bcp-full-retrieval
+
+# 全部 830 题，Search 配置每题一次，每题最多 300 秒；Flash 答题和判分
+python -m benchmarks.browsecomp.full_run --output data/bcp-full-search --resume
+```
+
+完整数据保存到 `data/browsecomp-plus-full/`，下载缓存为 `data/browsecomp-full-downloads/`。约 4.54 GB 压缩分片，另需语料、构建输入和索引空间。`manifest.json` 固定源版本、分片 SHA、全部题目/答案指纹、语料计数与逐文档指纹；不抽负例、不排除开发题、不截断长文档。标准答案只供判分器使用，Agent Key 仅挂载 `knowledge/`。
+
+`full_run` 的只读语料和磁盘索引共用，不逐题复制或重建。每题使用新 OMP 会话、新 Key，保留真实工具轨迹、错误、Token 和判分；源码或数据改变后拒绝混入同一轮。`--resume` 校验已完成记录并跳过；已开始但崩溃的题记为中断失败，不暗中重新作答。运行中可查看 `status.json`、`report.md`、`metrics.json`，结束后另有 `official-format/`。服务状态和索引保存在 `service.json` 指向的短路径中，结束后保留用于复核与续跑。
+
+全量检索使用独立 `sqlite-corpus` 插件，其协议、产物和算法见 [插件说明](../../examples/plugins/sqlite-corpus/package/README.md)。它是文档 BM25 基线，不等同于旧 Markdown 分块基线或上游 Pyserini 实现。平台继续提供相同 MCP 权限和工具接口；830 题中没有预设调用顺序。
+
+`full_retrieval` 直接调用该插件的文档排序入口，原题不经 LLM 改写，可返回 Top-1000；MCP Search 保持最多 10 条引用的上下文预算。这两层分别回答“索引能否召回”和“Agent 能否利用工具完成任务”，不会把片段 Top-10 冒充文档 Top-1000。`run.trec` 可交给官方 `trec_eval` 再核验。
+
+这是**官方全量数据 + 本平台工具 + OMP/Flash**的评测配置，仍需披露同模型判分偏差、工具预算和插件差异。公开原题可能已进入模型训练，也包含先前使用过的开发题；全量不等于模型未见过的数据。不得将题目、答案和原始轨迹推送到远端。
+
+## 缩小语料回归：配置、对照、检索和人工复核
+
+主入口是 `campaign.py`。先准备冻结数据，默认只生成计划；加 `--execute` 才开始调用模型。`configs/main.json` 配置模型、判分模型、重复次数、预算及插件列表，不包含密钥。默认 Flash 答题、Flash 判分，报告明确标记同模型偏差。
+
+```powershell
+# 从本地固定分片随机抽题，排除已用于开发的旧任务；保留全部标准证据
+python -m benchmarks.browsecomp.prepare --source data/browsecomp-upstream/test-00000-of-00006.parquet `
+  --output data/bcp-holdout --selection random --questions 50 --negatives-per-question 3 `
+  --seed 20261013 --exclude-dataset data/baseline-20261012/dataset-bcp
+
+# 只冻结计划和源码快照，不调用模型
+python -m benchmarks.browsecomp.campaign --dataset data/bcp-holdout --output data/bcp-main
+
+# 在同样源码和配置下执行已冻结计划
+python -m benchmarks.browsecomp.campaign --dataset data/bcp-holdout --output data/bcp-main --resume --execute
+
+# 小规模接入验证；该配置额外比较内置 BM25 插件
+python -m benchmarks.browsecomp.campaign --config benchmarks/browsecomp/configs/smoke.json `
+  --dataset data/browsecomp-plus-smoke --output data/bcp-campaign-smoke --execute
+```
+
+每轮主基准顺序执行：
+
+1. 只把原问题交给一个无工具模型会话，生成一条 1–200 字符查询。它看不到语料、标准答案或检索结果。最多三次仅针对 JSON 格式/长度的尝试，全部留档；仍无有效查询就停止，不截断、不按检索成绩挑选查询。工具越界或进程失败直接停止。
+2. 冻结查询 CSV 和 evidence qrels，交给所有插件各执行一次检索，比较 Recall@K、nDCG@K、MRR、Precision。
+3. 无知识库组只凭已有知识答原题，无任何工具、MCP instructions 或正文。记录真实模型请求中的工具目录，出现额外工具即视为无效运行。
+4. 各插件按配置运行 grep / search / hybrid。问题、语料、模型和时间预算相同；每题轮换工具配置次序，保留重复次数。插件之间按配置顺序分批执行，因此延迟差异仍可能受远端负载影响。
+5. 新会话语义判分，合并报告；按问题和重复编号与无知识库组配对，统计确认正确率增益。独立固定查询分数单独呈现。
+
+50 题 × 4 组 × 3 次 = **600 次 Agent 任务**，最多另有 600 次判分及 50 条查询准备（格式修复算入最多 150 次查询准备调用）。这个数字是计划工作量，不表示已跑完。源码、数据、插件及任务矩阵改变后必须另建输出。可向配置中的 `plugins` 添加插件；控制组只执行一次，不因插件数量增加重复执行。比较同一工具配置下的插件效果时，确保各插件都包含该配置。
+
+`--resume` 跳过完成且产物哈希一致的阶段，不覆盖已经中断的半个阶段。部分执行仍留在原目录，不能选择性补跑答错题冒充同一轮。长实验中途失败后应先分析部分结果，再决定新开完整运行；目前尚不支持逐题断点续跑。运行前后都会校验评测与平台源码，避免中途修改混入一轮数据。
+
+主报告的确认正确率使用所有已执行样本为分母，未判分单列。完整运行才能做配对增益比较。95% bootstrap 区间先聚合同题的多次重复，再按题目重采样；不把重复三次当成三道独立题。小样本或全部同分时区间可能退化，不构成稳定优劣或统计显著性的证明。
+
+### 人工抽检
+
+可导出所有已执行但机器判错/未判的有效答复，并按组随机抽取部分机器判对答复。失败进程不人工补判成成功答题。CSV 隐藏配置名、自动判分及工具次数，保存问题、参考答案、候选答复和空的人工判定栏；答案包仅保留本地。
+
+```powershell
+python -m benchmarks.browsecomp.review export --run data/bcp-main/program-bm25/execution `
+  --dataset data/bcp-holdout --judgments data/bcp-main/program-bm25/judge/judgments.json `
+  --output data/bcp-review --sample 10
+
+# 人工填写 review.csv 中 decision（correct/incorrect/unjudged）、reviewer、reason
+python -m benchmarks.browsecomp.review apply --queue data/bcp-review `
+  --decisions data/bcp-review/review.csv --output data/bcp-reviewed
+
+python -m benchmarks.browsecomp.analyze data/bcp-main/program-bm25/execution `
+  --dataset data/bcp-holdout --judgments data/bcp-reviewed/judgments.json --output data/bcp-reviewed-report
+```
+
+导入校验运行哈希、行 ID 及问题/答案内容，要求明确审核人和理由。机器原分数不覆盖，人工修改单独留档；没有人填写不能宣称已经人工抽检。抽样复核不能替代全量独立判分。
 
 ## 运行
 
@@ -20,15 +115,15 @@ python -m benchmarks.browsecomp.prepare --source path/to/test-00000-of-00006.par
   --output data/bcp-local --questions 2 --negatives-per-question 20
 
 # 推荐：一次命令完成模型预检、Agent 执行、独立判分、报告和上游格式导出
-python -m benchmarks.browsecomp.run --dataset data/bcp-local `
+python -m benchmarks.browsecomp.run --dataset data/bcp-local --trust-plugin `
   --output data/bcp-experiment --timeout 180 --repeats 1
 
-# 比较独立程序插件：自然语言问题、模型、预算及工具权限保持一致
+# 显式指定同一个默认插件；替换路径可比较其他检索程序
 # --trust-plugin 仅对本次测试进程批准该包，使用前审阅插件源码
-python -m benchmarks.browsecomp.run --dataset data/bcp-local `
+python -m benchmarks.browsecomp.run --dataset data/bcp-local --trust-plugin `
   --output data/bcp-program --timeout 180 --repeats 1 `
-  --plugin-definition examples/plugins/simple-rag-python/definition.json `
-  --plugin-source examples/plugins/simple-rag-python/package --trust-plugin
+  --plugin-definition examples/plugins/bm25-markdown/definition.json `
+  --plugin-source examples/plugins/bm25-markdown/package
 ```
 
 一键运行默认同一模型在全新、无工具的会话中判分，报告标出同模型偏差。
@@ -40,7 +135,7 @@ python -m benchmarks.browsecomp.run --dataset data/bcp-local `
 ```powershell
 
 # 任务编号来自生成的 tasks.csv；省略 --tasks 执行全部导入的问题
-python -m benchmarks.agent.runner --dataset data/bcp-suite `
+python -m benchmarks.agent.runner --dataset data/bcp-suite --trust-plugin `
   --output data/bcp-run --variants grep search hybrid --timeout 180
 
 python -m benchmarks.agent.report data/bcp-run
@@ -116,13 +211,13 @@ data/bcp-experiment/                    # 一键运行的输出
 
 当前的 evidence/gold recall 是 Agent 整个任务中的累计文档召回，不能标成单次 Search 的 Recall@K。
 
-数据标签支持后续增加独立检索实验：固定查询与 K，对每个插件计算 Recall@K 和 nDCG@K，避免 Agent 查询改写和多轮检索的影响。此实验尚未实现；平台当前 Search 最多返回 10 个片段，查询有长度限制，因此不能把现有接口直接当成上游 Recall@100/1000 评测。实现时应明确查询构造方式、片段到文档的去重规则和候选规模，不静默截断原问题。
+独立检索实验已实现，见 [retrieval](../retrieval/README.md)：固定查询与 K，对每个插件计算 Recall@K 和 nDCG@K。主基准使用仅从问题生成、在检索前冻结的查询，也可从旧轨迹导出符合条件的首次查询；这两种查询集不能混用比较。平台当前 Search 最多返回 10 个片段，先去重为文档，不能当成上游文档 Recall@100/1000 评测。超长查询明确拒绝，不静默截断原问题。
 
 这些标签主要评估文档检索，不能直接量化分块是否包含完整证据、知识抽取是否遗漏或答案每句话是否有依据。相关能力需增加片段级标签、忠实性核验和真实业务测试集。
 
 ## 与官方全量评测的差异
 
-1. 官方约十万篇文档；这里选前 N 个问题并保留全部正例及每题指定数量的困难负例，多个问题共用同一池。减小了检索空间，因此不能与官方榜单直接比成绩。
+1. 官方约十万篇文档；这里选择部分问题（可按顺序或固定种子抽样），保留全部正例及每题指定数量的困难负例，多个问题共用同一池。减小了检索空间，因此不能与官方榜单直接比成绩。
 2. 官方文档规模超过现有演示索引的 1,000 文件、16 MiB、16,000 分块上限。导入器在写出前检查，超限会报错，不会偷偷截断文档或丢证据。全量跑需要先实现更大规模的索引后端和语料加载方式。
 3. 使用我们的 MCP 工具、Markdown 分块、返回长度和 OMP 的提示约定；不同于上游默认 Top-5/512-token 工具设置。
 4. 原问题原样传给 Agent，输出格式要求放在通用系统提示中；语义判分默认使用配置的 GLM，官方默认是 Qwen3-32B。

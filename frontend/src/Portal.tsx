@@ -18,7 +18,7 @@ import { MarkdownEditor } from './MarkdownEditor';
 import type { DirectoryPage } from './types';
 
 type Library = { id: string; name: string; role: number; editable: boolean; can_configure: boolean; updated_at?: string; organization_id?: string; owner_id?: string };
-type Doc = { path: string; content: string; version: string };
+type Doc = { path: string; content: string; version: string; editable?: boolean };
 type Draft = { id: string; path: string; author_id: string; author: string; status: string; revision: number; updated_at: string; content: string; original: string; diff: string };
 const statuses: Record<string, string> = { draft: '草稿', submitted: '待审核', published: '已发布', rejected: '已退回' };
 const roles = ['', '读者', '编辑者', '发布者', '管理者'];
@@ -77,7 +77,7 @@ function KnowledgeEditor({ api, identity, library, back, onChanged, onDirtyChang
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [newFile, setNewFile] = useState(false), [filename, setFilename] = useState('');
   const [search, setSearch] = useState<{ matches: { path: string; line: number; text: string }[]; partial?: boolean; next_cursor?: string }>(), [searchTerm, setSearchTerm] = useState('');
   const base = `/libraries/${library.id}`, generation = useRef(0);
-  const canEdit = library.role >= 2 && library.editable;
+  const canEdit = library.role >= 2 && library.editable && doc?.editable !== false;
   const dirty = (!!doc && canEdit && tab === 'documents' && text !== doc.content) || (!!selected && selected.status === 'draft' && draftText !== selected.content);
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
   useEffect(() => { const handler = (e: BeforeUnloadEvent) => { if (dirty) e.preventDefault(); }; window.addEventListener('beforeunload', handler); return () => window.removeEventListener('beforeunload', handler); }, [dirty]);

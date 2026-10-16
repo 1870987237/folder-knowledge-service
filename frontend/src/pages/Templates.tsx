@@ -70,7 +70,7 @@ export function TemplatesPage() {
 
 function Capabilities({ plugin }: { plugin: Template }) {
   const f = plugin.definition.plugin;
-  return <Space wrap>{plugin.definition.capabilities.map(c => <Tag key={c}>{c === 'update' ? '增量更新' : '初始化'}</Tag>)}{f?.indexing && <Tag>索引定义</Tag>}{f?.instructions?.trim() && <Tag>Agent 指引</Tag>}</Space>;
+  return <Space wrap>{plugin.definition.capabilities.map(c => <Tag key={c}>{c === 'update' ? '增量更新' : '初始化'}</Tag>)}{f?.indexing && <Tag>索引定义</Tag>}{f?.instructions?.trim() && <Tag>Agent 指引</Tag>}{!!plugin.definition.capabilities.length && <Tag>{f?.document_editing === 'allowed' ? '允许直接编辑' : '仅管线更新'}</Tag>}</Space>;
 }
 function PluginDetails({ plugin }: { plugin: Template }) {
   const f = plugin.definition.plugin, index = f?.indexing;
@@ -118,7 +118,7 @@ export function TemplateBinding({ library }: { library: Library }) {
       }
       await api.request(`/libraries/${library.id}/plugin`, 'PUT', { plugin_id: t.definition.id, plugin_version: t.definition.version, config: parseObject(values.config), ...(workspace ? { workspace } : {}) }); refresh(); message.success('插件绑定已保存');
     }} footer={resource.data?.binding && <Button danger onClick={() => modal.confirm({ title: '解除插件绑定？', content: '知识文件与插件程序包会保留。', onOk: async () => { try { await api.request(`/libraries/${library.id}/plugin`, 'DELETE'); refresh(); message.success('已解除绑定'); } catch (e) { message.error(errorMessage(e)); throw e; } } })}>解除绑定</Button>}>
-      <Form.Item name="template" label="插件版本" rules={required}><Select showSearch optionFilterProp="label" placeholder="选择已安装的版本" options={templates.map(t => ({ value: t.definition.id + '/' + t.definition.version, label: `${t.definition.name} · ${t.definition.version}` }))} /></Form.Item>
+      <Form.Item name="template" label="知识管理插件版本" rules={required}><Select showSearch optionFilterProp="label" placeholder="选择已安装的版本" options={templates.filter(t => t.definition.capabilities.length || t.definition.id + '/' + t.definition.version === template).map(t => ({ value: t.definition.id + '/' + t.definition.version, label: `${t.definition.name} · ${t.definition.version}` }))} /></Form.Item>
       {!!selected?.definition.capabilities.length && <Form.Item name="mode" label="更新程序工作范围"><Select options={[{ value: 'default', label: '仅当前检索目录' }, { value: 'custom', label: '指定完整工作目录' }]} /></Form.Item>}
       {!!selected?.definition.capabilities.length && mode === 'custom' && <><Form.Item name="root" label={library.repository ? '工作根（相对 Git 仓库根）' : '工作根（相对挂载根）'} rules={required}>{library.repository ? <Input /> : <PathInput />}</Form.Item><Form.Item name="subpath" label="检索子目录（相对工作根）" rules={required}><Input /></Form.Item><Form.Item name="excludes" label="额外排除路径（每行一项）"><Input.TextArea rows={3} /></Form.Item><Alert type="info" title="工作根与检索子目录须对应当前挂载；.git、.env、私钥等默认排除。" className="block-gap" /></>}
       <Form.Item name="config" label="实例配置（JSON）" rules={required}><Input.TextArea rows={6} className="json-input" /></Form.Item>

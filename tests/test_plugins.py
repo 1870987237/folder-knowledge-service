@@ -144,8 +144,8 @@ def test_native_can_publish_with_declarative_plugin(env):
 def test_packaged_example(env, tmp_path):
     _, c, _, _ = env
     base = Path(__file__).resolve().parents[1]
-    files = package_plugin(base / 'examples/plugins/personal-memory/package',
-                           base / 'examples/plugins/personal-memory/definition.json', tmp_path / 'dist')
+    files = package_plugin(base / 'examples/plugins/bm25-markdown/package',
+                           base / 'examples/plugins/bm25-markdown/definition.json', tmp_path / 'dist')
     value = json.loads(Path(files['manifest']).read_text(encoding='utf-8'))
     result = install_plugin(c, value, Path(files['package']).read_bytes())
-    assert result['definition']['plugin']['indexing']['mode'] == 'hybrid'
+    assert result['definition']['plugin']['indexing']['search_protocol'] == '1.0'

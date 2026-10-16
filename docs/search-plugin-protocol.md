@@ -96,15 +96,26 @@ export KB_SEARCH_PLUGIN_ALLOWLIST=<安装后返回的package_sha256，多个用�
 
 ## 示例与验收
 
-完整可运行示例：`examples/plugins/simple-rag-python`。其程序自行完成 Markdown 分块、SQLite FTS5、BM25、目录过滤及 has_more；只依赖 Python 标准库，未宣称具备向量检索。
+完整可运行示例：`examples/plugins/bm25-markdown`。其程序自行完成 Markdown 分块、SQLite FTS5、BM25、目录过滤及 has_more；只依赖 Python 标准库，未宣称具备向量检索。
 
 ```bash
 python -m folder_kb.plugin_package \
-  --source examples/plugins/simple-rag-python/package \
-  --definition examples/plugins/simple-rag-python/definition.json \
-  --output /tmp/simple-rag-python
+  --source examples/plugins/bm25-markdown/package \
+  --definition examples/plugins/bm25-markdown/definition.json \
+  --output /tmp/bm25-markdown
 ```
 
 管理台安装、批准程序摘要、绑定知识库后，在“检索索引”构建和测试。旧声明式插件不用迁移即可使用；要采用程序版，应安装新插件并显式改绑、重建。
 
 测试覆盖独立程序实际执行、原查询与排序保持不变、目录过滤、REST/MCP、权限隔离、过期索引、超时、失败保留旧代及非法证据拒绝。工具协议改善和检索质量分开验收：本次不将 BM25 算法效果变化宣称为已验证提升；后续用同一 benchmark 比较不同插件。
+## 大语料扩展：Search 1.1
+
+`plugin.indexing.search_protocol: "1.1"` 保持原有 MCP Search 接口，增加流式构建和共享只读索引。旧 `1.0` 插件继续使用原来的小语料协议。
+
+构建请求将内联 `documents` 换成 `documents_path`：指向平台生成的 UTF-8 JSONL，每行仍为 `path/text/sha256/version`。这是已挂载知识视图的快照，不含其他知识库、标准答案或模型凭据。插件逐行处理；构建返回 `protocol_version/engine/chunks`，产物仍在 `output/index/`。
+
+查询请求与 1.0 相同，但 `protocol_version` 为 `1.1`，`index_dir` 指向已发布的共享索引。插件须只读打开它。查询返回字段、原文引用、目录过滤、鉴权均沿用原协议；平台不规定分块、分词或排序算法。新示例包为 `examples/plugins/sqlite-corpus/`。
+
+平台在每次查询前后比较完整源目录的文件 stat 清单，并重新读取命中文件来核验原文和行号。索引构建时计算完整产物 SHA-256，查询前后检查索引 stat 清单；不再为每次查询复制或全量哈希数 GB 产物。该检查依赖正常文件系统元数据，不能防御可信插件或宿主操作者刻意恢复时间戳等行为；仍只允许运行管理员按包 SHA 批准的 Python 程序，不是沙箱。Benchmark 额外在整轮前后核验全部语料内容 SHA。
+
+宿主上限：15 万源文件、8 GiB 源正文、单文件 128 MiB、24 GiB 索引产物；构建最多 3,600 秒、查询进程最多 60 秒。失败不替换已发布索引，源变化要求手动重建，不自动建索引。

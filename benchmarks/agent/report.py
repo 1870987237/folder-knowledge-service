@@ -100,6 +100,8 @@ def render(data, traces):
                 lines.append(f"  - `{c['tool']}`：{error_text(c)[:300].replace(chr(10), ' ')}")
             if r['evaluation']['failed_checks']:
                 lines.append('  - 未通过：' + '、'.join(r['evaluation']['failed_checks']))
+            if r['evaluation'].get('formatting_only_failures'):
+                lines.append('  - 仅段落空行差异，严格文件检查仍不通过，不计为虚报：' + '、'.join(r['evaluation']['formatting_only_failures']))
     lines += ['', '## 逐任务结果', '', '| 任务 | 配置 | 目标 / 严格通过 | 调用 / 错误 | 端到端秒 |', '|---|---|---|---:|---:|']
     for r in rows:
         lines.append(f"| {r['task_id']} {r['kind']} | {r['variant']} | {'是' if outcome(r) else '否'} / {'是' if r['evaluation']['success'] else '否'} | "
@@ -110,7 +112,7 @@ def render(data, traces):
               '固定模型标识并不保证远端模型版本、采样与硬件确定。后续比较须固定语料、任务、预算及模型配置，每组多次重复，并同时报告失败样本。没有为了提高通过率而对单个失败任务重跑替换。', '']
     if data.get('grading_note'):
         changed = sum(r['evaluation']['success'] != r['original_evaluation']['success'] for r in rows)
-        lines += [f"评分器修订 {data['grader_version']}：区分实际目标与完成标志，正确拒绝但 completed=true 记录为协议不一致，不计为虚报。对全部原始轨迹统一离线重评分，{changed} 次严格通过结果发生变化；新增目标达成指标，原评分保留，没有重新调用模型。", '']
+        lines += [f"评分器修订 {data['grader_version']}：正确拒绝但 completed=true 记录为协议不一致；仅段落空行不同仍不通过严格文件检查，但不计为虚报。对全部原始轨迹统一离线重评分，{changed} 次严格通过结果发生变化；原评分保留，没有重新调用模型。", '']
     return '\n'.join(lines)
 
 

@@ -1,0 +1,44 @@
+{
+  "id": "bm25-markdown",
+  "version": "1.0.1",
+  "protocol_version": "1.1",
+  "name": "BM25 Markdown 检索",
+  "maintainer": "Folder KB",
+  "description": "按 Markdown 章节切分，以 SQLite FTS5/BM25 检索中英文片段；不调用模型，不提供向量检索或回答生成。",
+  "capabilities": [],
+  "entrypoints": {},
+  "runtime": {
+    "type": "trusted-python-demo",
+    "timeout_seconds": 60
+  },
+  "output": {
+    "directory": "workspace",
+    "required_files": []
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "plugin": {
+    "manifest_version": "1.0",
+    "instructions": "用 search 查找证据，已知目录时通过 path 缩小范围。需要上下文时读取来源文件。检索无命中不代表资料一定不存在。",
+    "indexing": {
+      "mode": "fulltext",
+      "splitter": "custom",
+      "entrypoint": [
+        "python",
+        "search.py"
+      ],
+      "search_protocol": "1.0",
+      "supports_path_filter": true,
+      "include": [
+        "**/*.md",
+        "**/*.txt"
+      ],
+      "exclude": [
+        "drafts/**",
+        "archive/**"
+      ]
+    }
+  }
+}

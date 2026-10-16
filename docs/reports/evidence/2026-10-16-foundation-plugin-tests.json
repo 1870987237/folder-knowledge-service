@@ -1,0 +1,451 @@
+{
+  "date": "2026-10-16",
+  "model": "hyper-op/GLM-5.3-Flash",
+  "fixture": "synthetic-only; 3 documents plus INDEX.md",
+  "candidate_phases": [
+    {
+      "case": "initialize",
+      "job": "3362fef5dc6746c7a586813b614061fe",
+      "status": "candidate_ready",
+      "seconds": 0.909,
+      "model_calls": 0,
+      "documents_before": 0,
+      "published_before_approval": false,
+      "documents_after": 0,
+      "published": true,
+      "total_seconds": 1.072
+    },
+    {
+      "case": "new-content",
+      "job": "4604710d9554404d85e2b5b4ca8d0f23",
+      "status": "candidate_ready",
+      "seconds": 12.868,
+      "model_calls": 1,
+      "documents_before": 0,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "create"
+      ],
+      "published": true,
+      "total_seconds": 13.067
+    },
+    {
+      "case": "exact-duplicate",
+      "job": "57b0e5fe87d14588914710b995404881",
+      "status": "candidate_ready",
+      "seconds": 1.233,
+      "model_calls": 0,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "duplicate"
+      ],
+      "published": true,
+      "total_seconds": 1.437,
+      "quality_pass": true
+    },
+    {
+      "case": "semantic-duplicate",
+      "job": "9aae660626694536ab06f5876b9adf75",
+      "status": "candidate_ready",
+      "seconds": 9.998,
+      "model_calls": 1,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "duplicate"
+      ],
+      "published": true,
+      "total_seconds": 10.192,
+      "quality_pass": true
+    },
+    {
+      "case": "compatible-addition",
+      "job": "3a27855f86b1423c87930db23c87ff46",
+      "status": "candidate_ready",
+      "seconds": 22.367,
+      "model_calls": 1,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "merge"
+      ],
+      "published": true,
+      "total_seconds": 22.628,
+      "quality_pass": true
+    },
+    {
+      "case": "conflict",
+      "job": "598787ba94234866a7d1dbe37dd50a4c",
+      "status": "candidate_ready",
+      "seconds": 12.321,
+      "model_calls": 1,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "defer"
+      ],
+      "published": true,
+      "total_seconds": 12.559,
+      "quality_pass": true
+    },
+    {
+      "case": "correction",
+      "job": "e4dc5b0617b14288ac5898140e57ac66",
+      "status": "candidate_ready",
+      "seconds": 15.785,
+      "model_calls": 1,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "revise"
+      ],
+      "published": true,
+      "total_seconds": 16.121,
+      "quality_pass": true
+    },
+    {
+      "case": "observation",
+      "job": "c4a1bb18f45a4bf59d59c6e4298602a6",
+      "status": "candidate_ready",
+      "seconds": 1.569,
+      "model_calls": 0,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 1,
+      "actions": [
+        "defer"
+      ],
+      "published": true,
+      "total_seconds": 1.881,
+      "quality_pass": true
+    },
+    {
+      "case": "other-scope",
+      "job": "e28e6340ec2a494a952e78b1648b14bd",
+      "status": "candidate_ready",
+      "seconds": 18.316,
+      "model_calls": 1,
+      "documents_before": 1,
+      "published_before_approval": false,
+      "documents_after": 2,
+      "actions": [
+        "create"
+      ],
+      "published": true,
+      "total_seconds": 18.522,
+      "quality_pass": true
+    },
+    {
+      "case": "embedded-instruction",
+      "job": "66b88d501be7481183667600470de8b0",
+      "status": "candidate_ready",
+      "seconds": 42.017,
+      "model_calls": 1,
+      "documents_before": 2,
+      "published_before_approval": false,
+      "documents_after": 3,
+      "actions": [
+        "create"
+      ],
+      "published": true,
+      "total_seconds": 42.19,
+      "quality_pass": true
+    }
+  ],
+  "replay": {
+    "duplicate": true,
+    "model_calls": 0
+  },
+  "final_run_seconds": 146.056,
+  "model_calls": [
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 564,
+        "total_tokens": 1347,
+        "completion_tokens": 783,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 11.828
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 682,
+        "total_tokens": 1068,
+        "completion_tokens": 386,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 8.472
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 687,
+        "total_tokens": 1492,
+        "completion_tokens": 805,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 21.393
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 725,
+        "total_tokens": 1326,
+        "completion_tokens": 601,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 11.136
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 733,
+        "total_tokens": 1686,
+        "completion_tokens": 953,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 14.499
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 564,
+        "total_tokens": 1554,
+        "completion_tokens": 990,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 16.694
+    },
+    {
+      "status": "ok",
+      "usage": {
+        "prompt_tokens": 721,
+        "total_tokens": 3581,
+        "completion_tokens": 2860,
+        "prompt_tokens_details": null
+      },
+      "finish_reason": "stop",
+      "seconds": 41.038
+    }
+  ],
+  "total_tokens_final_run": 12054,
+  "search": [
+    {
+      "library": "demo",
+      "build_seconds": 0.674,
+      "files": 3,
+      "engine": "bm25-markdown-v2",
+      "queries": [
+        {
+          "query": "Atlas 超时",
+          "seconds": 0.58,
+          "hits": 3,
+          "paths": [
+            "reference/reference_b86bf7b8a9a2b737.md",
+            "reference/reference_5d709ab199fea342.md",
+            "reference/reference_66a25ee9b5a8bdf7.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "Boreal 超时",
+          "seconds": 0.575,
+          "hits": 2,
+          "paths": [
+            "reference/reference_66a25ee9b5a8bdf7.md",
+            "reference/reference_b86bf7b8a9a2b737.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "HTTPS",
+          "seconds": 0.596,
+          "hits": 1,
+          "paths": [
+            "reference/reference_5d709ab199fea342.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "quartzunfindable998877",
+          "seconds": 0.625,
+          "hits": 0,
+          "paths": [],
+          "no_raw_metadata": true
+        }
+      ]
+    },
+    {
+      "library": "bm25",
+      "build_seconds": 0.757,
+      "files": 4,
+      "engine": "bm25-markdown-v2",
+      "queries": [
+        {
+          "query": "Atlas 超时",
+          "seconds": 0.716,
+          "hits": 4,
+          "paths": [
+            "INDEX.md",
+            "reference/reference_b86bf7b8a9a2b737.md",
+            "reference/reference_5d709ab199fea342.md",
+            "reference/reference_66a25ee9b5a8bdf7.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "Boreal 超时",
+          "seconds": 0.613,
+          "hits": 3,
+          "paths": [
+            "reference/reference_66a25ee9b5a8bdf7.md",
+            "INDEX.md",
+            "reference/reference_b86bf7b8a9a2b737.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "HTTPS",
+          "seconds": 0.602,
+          "hits": 2,
+          "paths": [
+            "reference/reference_5d709ab199fea342.md",
+            "INDEX.md"
+          ],
+          "no_raw_metadata": true
+        },
+        {
+          "query": "quartzunfindable998877",
+          "seconds": 0.608,
+          "hits": 0,
+          "paths": [],
+          "no_raw_metadata": true
+        }
+      ]
+    }
+  ],
+  "mcp": {
+    "transport": "MCP Streamable HTTP, loopback",
+    "tools": [
+      "knowledge_info",
+      "list_directory",
+      "glob",
+      "read_file",
+      "search",
+      "list_libraries"
+    ],
+    "checks": [
+      {
+        "name": "catalog",
+        "passed": true
+      },
+      {
+        "name": "search",
+        "library": "demo",
+        "query": "Atlas 超时",
+        "passed": true,
+        "hits": 3,
+        "ms": 627.489
+      },
+      {
+        "name": "read_evidence",
+        "library": "demo",
+        "passed": true,
+        "ms": 76.672
+      },
+      {
+        "name": "search",
+        "library": "demo",
+        "query": "Boreal 超时",
+        "passed": true,
+        "hits": 2,
+        "ms": 610.932
+      },
+      {
+        "name": "read_evidence",
+        "library": "demo",
+        "passed": true,
+        "ms": 82.024
+      },
+      {
+        "name": "search",
+        "library": "demo",
+        "query": "quartzunfindable998877",
+        "passed": true,
+        "hits": 0,
+        "ms": 701.63
+      },
+      {
+        "name": "search",
+        "library": "bm25",
+        "query": "Atlas 超时",
+        "passed": true,
+        "hits": 4,
+        "ms": 751.922
+      },
+      {
+        "name": "read_evidence",
+        "library": "bm25",
+        "passed": true,
+        "ms": 83.031
+      },
+      {
+        "name": "search",
+        "library": "bm25",
+        "query": "Boreal 超时",
+        "passed": true,
+        "hits": 3,
+        "ms": 726.649
+      },
+      {
+        "name": "read_evidence",
+        "library": "bm25",
+        "passed": true,
+        "ms": 77.473
+      },
+      {
+        "name": "search",
+        "library": "bm25",
+        "query": "quartzunfindable998877",
+        "passed": true,
+        "hits": 0,
+        "ms": 725.234
+      },
+      {
+        "name": "metadata_boundary",
+        "passed": true
+      },
+      {
+        "name": "unauthorized_library",
+        "passed": true
+      }
+    ],
+    "passed": 13,
+    "total": 13
+  },
+  "earlier_runs": [
+    {
+      "path": "data/plugin-acceptance-20261016-r1",
+      "result": "new-content failed; proxy HTTP failures, 3 attempted model calls"
+    },
+    {
+      "path": "data/plugin-acceptance-20261016-r2",
+      "result": "conflict failed; separate diagnostic reproduced revise on new_content, rejected by validation"
+    }
+  ]
+}

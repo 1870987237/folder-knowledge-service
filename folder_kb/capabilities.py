@@ -72,7 +72,11 @@ class Capabilities:
     def plugin(db, lid):
         row = db.execute('SELECT t.metadata_json FROM library_templates b JOIN template_versions t '
                          'ON t.id=b.template_id AND t.version=b.template_version WHERE b.library_id=?', (lid,)).fetchone()
-        return (json.loads(row[0]).get('plugin') or {}) if row else {}
+        from .plugin_bindings import search_definition
+        management = (json.loads(row[0]).get('plugin') or {}) if row else {}
+        search = search_definition(db, lid)
+        return dict(management, indexing=search.get('indexing'),
+                    instructions='\n'.join(dict.fromkeys(s for s in [management.get('instructions', ''), search.get('instructions', '')] if s)))
 
     @staticmethod
     def settings(db, lid):
@@ -175,7 +179,7 @@ class Capabilities:
             eligible = service.editable(db, lid, row['path'])
             if value is not None:
                 if value.direct_enabled and not eligible:
-                    raise KnowledgeError('direct_write_unsupported', 'Direct writes require an independent native library without an update plugin or Git binding', 409)
+                    raise KnowledgeError('direct_write_unsupported', 'Direct writes require an independent local library whose management plugin allows editing', 409)
                 db.execute('INSERT INTO library_agent_settings VALUES (?,?,?) ON CONFLICT(library_id) '
                            'DO UPDATE SET purpose=excluded.purpose,direct_enabled=excluded.direct_enabled', (lid, value.purpose, value.direct_enabled))
                 self.store.event(db, {'kind': 'admin', 'action': 'library_agent_settings', 'library_id': lid, 'status': 'ok'})

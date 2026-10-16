@@ -38,6 +38,10 @@ def scenario(env, monkeypatch):
     for uid, role in ((editor_id, 'editor'), (publisher_id, 'publisher')):
         assert c.put(base + '/members', headers=headers(owner), json={'user_id': uid, 'role': role}).status_code == 200
     monkeypatch.setenv('KB_TEMPLATE_TRUSTED_PYTHON', '1')
+    worker = TemplateWorker(registry)
+    assert worker.tick()
+    assert worker.tick()
+    assert c.get(base + '/update-jobs', headers=headers(owner)).json()['initialization'] == 'ready'
     return locals()
 
 
@@ -178,7 +182,7 @@ def test_initialize_and_failed_retry(scenario, monkeypatch):
     s = scenario; c = s['c']
     jobs = s['base'] + '/update-jobs'
     state = c.get(jobs, headers=headers(s['publisher'])).json()
-    assert state['can_run'] and state['can_initialize']
+    assert not state['can_run'] and not state['can_initialize']
     job = c.post(jobs, headers=headers(s['publisher']), json={'operation': 'initialize'}).json()
     monkeypatch.delenv('KB_TEMPLATE_TRUSTED_PYTHON')
     worker = TemplateWorker(s['registry']); worker.tick()
@@ -215,7 +219,7 @@ def test_v11_migration_preserves_agent_inbox_and_job_links(scenario):
         db.commit()
     migrated = SqliteStore(registry.directory)
     with migrated.transaction() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 12
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 14
         assert not db.execute('PRAGMA foreign_key_check').fetchall()
         row = db.execute('SELECT * FROM inbox_items WHERE id=?', (item['id'],)).fetchone()
         assert row['key_id'] == key['key']['id'] and row['user_id'] is None

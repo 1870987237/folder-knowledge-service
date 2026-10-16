@@ -37,7 +37,7 @@ def main():
     data['grader_version'] = GRADER_VERSION
     data['grading_dataset'] = metadata
     data['grader_sha256'] = hashlib.sha256(Path('benchmarks/agent/evaluate.py').read_bytes()).hexdigest()
-    data['grading_note'] = 'All saved episodes regraded uniformly. Separate task outcome from completion-flag compliance: a correct refusal with completed=true is a protocol inconsistency, not fabricated task completion. Original strict scores are retained. No model reruns or substituted episodes.'
+    data['grading_note'] = 'All saved episodes regraded uniformly. Exact-file checks remain strict; paragraph-spacing-only differences are diagnosed separately from false completion. Correct refusals with completed=true remain protocol inconsistencies. Original scores are retained. No model reruns or substituted episodes.'
     destination = args.run / 'graded-results.json'
     if destination.exists():
         raise FileExistsError('Do not overwrite earlier grading evidence')

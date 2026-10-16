@@ -72,6 +72,23 @@ def test_delete_and_move_require_old_file_absence_and_content_preservation():
     assert not grade(t, before, after, final(), CALL)['success']
 
 
+def test_spacing_is_still_strict_failure_but_not_false_completion():
+    t = task('W02')
+    after = dict(corpus(), **{p: text.replace('\n', '\n\n') for p, text in t.expected_files.items()})
+    result = grade(t, corpus(), after, final(), CALL)
+    assert not result['success'] and not result['outcome_success']
+    assert result['formatting_only_failures'] == ['file:settings/连接.md']
+    assert not result['false_completion']
+    after['settings/连接.md'] = after['settings/连接.md'].replace('30 秒', '31 秒')
+    assert grade(t, corpus(), after, final(), CALL)['false_completion']
+
+
+def test_whitespace_in_code_and_lists_is_not_assumed_cosmetic():
+    from benchmarks.agent.evaluate import paragraph_spacing_only
+    assert not paragraph_spacing_only('```\na\nb\n```', '```\na\n\nb\n```')
+    assert not paragraph_spacing_only('- a\n- b', '- a\n\n- b')
+
+
 def test_readonly_refusal_must_not_write_and_empty_output_is_failure():
     t = task('W06')
     answer = final(False, answer='当前权限为只读，无法修改。')

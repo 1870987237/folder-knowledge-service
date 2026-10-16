@@ -182,7 +182,7 @@ def test_workspace_serialization_and_required_secrets(setup):
     _,_,updates,worker,_,_=setup
     _,job=candidate(setup)
     submit(setup,'two')
-    with pytest.raises(KnowledgeError,match='current workspace job'):
+    with pytest.raises(KnowledgeError,match='当前任务'):
         updates.enqueue('memory')
     context={'template':{'definition':{'runtime':{'type':'trusted-python-demo'},'required_secrets':['MISSING_API_KEY']}},'model':None}
     with pytest.raises(KnowledgeError,match='credentials'):

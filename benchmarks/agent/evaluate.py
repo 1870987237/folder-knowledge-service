@@ -2,7 +2,7 @@
 import json
 import re
 
-GRADER_VERSION = '1.2'
+GRADER_VERSION = '1.3'
 
 
 def same_fact(value, expected):
@@ -39,6 +39,21 @@ def canonical(text):
     return text.replace('\r\n', '\n').rstrip('\n')
 
 
+def paragraph_spacing_only(expected, actual):
+    """Conservative diagnostic, never a reason to pass an exact-file check.
+
+    Only simple heading/paragraph fixtures qualify. Whitespace in code, lists,
+    tables or indented Markdown can carry meaning and must not be normalized.
+    """
+    if not isinstance(actual, str):
+        return False
+    def lines(text):
+        return [line for line in canonical(text).split('\n') if line.strip()]
+    wanted, found = lines(expected), lines(actual)
+    sensitive = r'^(?:\s|`|~|>|[-*+]|\d+[.)]|\||<)|  $'
+    return bool(wanted) and wanted == found and not any(re.search(sensitive, line) for line in wanted)
+
+
 def grade(task, before, after, final, tool_calls):
     if task.reference:
         from benchmarks.browsecomp.evaluate import grade as grade_browsecomp
@@ -49,6 +64,7 @@ def grade(task, before, after, final, tool_calls):
     changed = sorted(p for p in before.keys() | after.keys() if before.get(p) != after.get(p))
     allowed = set(task.expected_files) | set(task.contains) | set(task.absent)
     unintended = [p for p in changed if p not in allowed]
+    spacing_only = []
     checks = {'structured_final': payload is not None and isinstance(claimed, bool),
               'no_unintended_changes': not unintended}
     for fact in (() if task.answer_fields else task.facts):
@@ -58,6 +74,8 @@ def grade(task, before, after, final, tool_calls):
         checks['answer_field:' + key] = isinstance(values, dict) and same_fact(values.get(key, ''), expected)
     for path, expected in task.expected_files.items():
         checks['file:' + path] = path not in after if expected is None else path in after and canonical(after[path]) == canonical(expected)
+        if expected is not None and not checks['file:' + path] and paragraph_spacing_only(expected, after.get(path)):
+            spacing_only.append('file:' + path)
     for path, phrases in task.contains.items():
         checks['contains:' + path] = path in after and all(p in after[path] for p in phrases)
     for path, phrases in task.absent.items():
@@ -80,6 +98,7 @@ def grade(task, before, after, final, tool_calls):
             'protocol_success': all(v for k,v in checks.items() if k in protocol_checks),
             'checks': checks, 'failed_checks': [k for k,v in checks.items() if not v],
             'changed_files': changed, 'unintended_changes': unintended,
-            'false_completion': claimed is True and not all(v for k,v in checks.items() if k not in protocol_checks | {'citation'}),
+            'formatting_only_failures': spacing_only,
+            'false_completion': claimed is True and not all(v for k,v in checks.items() if k not in protocol_checks | {'citation'} | set(spacing_only)),
             'error_recovered': success and any(c.get('is_error') for c in tool_calls),
             'answer': answer, 'claimed_completed': claimed}

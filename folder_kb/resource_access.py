@@ -7,6 +7,7 @@ from pydantic import Field, field_validator
 from .errors import KnowledgeError
 from .inbox import StrictModel
 from .updates import UpdatePolicy
+from .model_contract import default_mapping, validate_mapping
 
 
 RESOURCE_SCHEMA = (
@@ -41,7 +42,14 @@ def scope(db, library_id):
 
 def grant(db, kind, resource_id):
     row = db.execute('SELECT definition FROM resource_access WHERE kind=? AND resource_id=?', (kind, resource_id)).fetchone()
-    return json.loads(row[0]) if row else ResourceGrant().model_dump()
+    if row:
+        return json.loads(row[0])
+    value = ResourceGrant().model_dump()
+    if kind == 'plugin' and '@' in resource_id:
+        definition = db.execute('SELECT metadata_json FROM template_versions WHERE id=? AND version=?', resource_id.rsplit('@', 1)).fetchone()
+        if definition:
+            value['model_environment'] = default_mapping(json.loads(definition[0]), value['model_environment'])
+    return value
 
 
 def allowed(value, owner):
@@ -58,7 +66,8 @@ def require_access(db, kind, resource_id, owner):
 
 def check_binding_access(db, library_id, binding, model_id=None):
     """Legacy platform bindings retain their explicit approval; delegated bindings recheck grants."""
-    if not db.execute('SELECT 1 FROM delegated_libraries WHERE library_id=?', (library_id,)).fetchone():
+    delegated = binding['delegated'] if 'delegated' in binding.keys() else db.execute('SELECT 1 FROM delegated_libraries WHERE library_id=?', (library_id,)).fetchone()
+    if not delegated:
         return
     owner = scope(db, library_id)
     access = require_access(db, 'plugin', plugin_key(binding['template_id'], binding['template_version']), owner)
@@ -110,6 +119,11 @@ def add_resource_routes(app, registry):
                 if value.approved and not row['package_sha256']:
                     raise KnowledgeError('template_not_installed', '请先安装程序包', 409)
                 data['package_sha256'] = row['package_sha256']
+                definition = json.loads(row['metadata_json'])
+                if 'model_environment' not in value.model_fields_set:
+                    data['model_environment'] = default_mapping(definition, data['model_environment'])
+                if value.approved:
+                    validate_mapping(definition, data['model_environment'])
             elif kind == 'model':
                 if not db.execute('SELECT 1 FROM model_connections WHERE id=?', (resource_id,)).fetchone():
                     raise KnowledgeError('unknown_model', '模型不存在', 404)
@@ -139,7 +153,7 @@ def add_resource_routes(app, registry):
                 access = grant(db, 'plugin', plugin_key(row['id'], row['version']))
                 if allowed(access, owner) and access.get('package_sha256') == row['package_sha256']:
                     definition = json.loads(row['metadata_json'])
-                    plugins.append({k: definition[k] for k in ('id', 'version', 'name', 'description', 'capabilities', 'config_schema', 'required_secrets')})
+                    plugins.append({k: definition.get(k) for k in ('id', 'version', 'name', 'description', 'capabilities', 'config_schema', 'required_secrets', 'plugin')})
             models = []
             for row in db.execute('SELECT * FROM model_connections ORDER BY id'):
                 model = json.loads(row['definition'])

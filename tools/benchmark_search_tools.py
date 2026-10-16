@@ -9,6 +9,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import statistics
 import time
@@ -29,16 +30,25 @@ def summary(values):
 
 
 async def synthetic(output):
-    suite = Suite(output)
+    output.mkdir(parents=True, exist_ok=True)
+    suite = Suite(output, short_fixture=True)
+    saved_env = {key: os.environ.get(key) for key in (
+        "KB_SEARCH_TRUSTED_PYTHON", "KB_SEARCH_PLUGIN_ALLOWLIST")}
     result = {'environment': suite.result['environment'], 'datasets': [], 'lifecycle': {}}
     try:
         admin = suite.app.user_middleware[0].kwargs['settings'].admin_token
         with httpx.Client(base_url=suite.url, headers={'Authorization': 'Bearer ' + admin}, trust_env=False, timeout=120) as c:
-            pkg = package_plugin(Path('examples/plugins/simple-rag/package'),
-                                 Path('examples/plugins/simple-rag/definition.json'), suite.run_root / 'package')
+            pkg = package_plugin(Path('examples/plugins/bm25-markdown/package'),
+                                 Path('examples/plugins/bm25-markdown/definition.json'), suite.run_root / 'package')
             response = c.post('/admin/api/plugins', json=json.loads(Path(pkg['manifest']).read_text(encoding='utf-8')))
             assert response.status_code == 201
-            assert c.put('/admin/api/plugins/simple-rag/versions/1.0.0/package', content=Path(pkg['package']).read_bytes()).status_code == 200
+            installed = c.put('/admin/api/plugins/bm25-markdown/versions/1.0.1/package', content=Path(pkg['package']).read_bytes())
+            assert installed.status_code == 200
+            # This harness executes only the bundled plugin in its isolated service.
+            os.environ['KB_SEARCH_TRUSTED_PYTHON'] = '1'
+            os.environ['KB_SEARCH_PLUGIN_ALLOWLIST'] = installed.json()['package_sha256']
+            result['plugin'] = {'id': 'bm25-markdown', 'version': '1.0.1',
+                                'package_sha256': installed.json()['package_sha256']}
             for count, size in [(32, 8192), (128, 32768)]:
                 lid, key, root = suite.setup(count, size)
                 docs = {
@@ -47,13 +57,13 @@ async def synthetic(output):
                     'models.md': '# 模型配置\n设置模型服务地址和模型名称。\n'}
                 for path, content in docs.items():
                     (root / path).write_text(content, encoding='utf-8')
-                assert c.put(f'/admin/api/libraries/{lid}/plugin', json={'plugin_id': 'simple-rag', 'plugin_version': '1.0.0'}).status_code == 200
+                assert c.put(f'/admin/api/libraries/{lid}/plugin', json={'plugin_id': 'bm25-markdown', 'plugin_version': '1.0.1'}).status_code == 200
                 Capabilities(suite.registry).policy(key['key']['id'], Policy(permissions=[{'library_id': lid, 'grep': True, 'search': True, 'write_policy': 'direct'}]))
                 missing = c.get('/api/v1/search', headers={'Authorization': 'Bearer ' + key['token']}, params={'query': 'rollback'})
                 result['lifecycle']['before_build'] = {'http_status': missing.status_code, 'error': missing.json().get('error')}
                 started = time.perf_counter()
                 build = c.post(f'/admin/api/libraries/{lid}/index/build')
-                assert build.status_code == 200
+                assert build.status_code == 200, build.text
                 row = {'seed_files': count, 'seed_bytes_each': size, 'build_ms': round((time.perf_counter() - started) * 1000, 3),
                        'indexed_files': build.json()['files'], 'chunks': build.json()['chunks'], 'queries': []}
                 cases = [('访问密钥', 'security.md', 'lexical'), ('rollback', 'deployment.md', 'lexical'),
@@ -92,6 +102,11 @@ async def synthetic(output):
                 print(json.dumps({'search_dataset': count, 'build_ms': row['build_ms'], 'files': row['indexed_files'], 'chunks': row['chunks']}, ensure_ascii=False), flush=True)
     finally:
         suite.close()
+        for name, value in saved_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
     return result
 
 

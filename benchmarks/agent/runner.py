@@ -19,6 +19,7 @@ from folder_kb.capabilities import Capabilities, Policy
 from folder_kb.plugin_package import package_plugin
 from tools.benchmark_file_tools import Suite
 from benchmarks.agent.preflight import check_model, stop_process
+from benchmarks.provenance import freeze_source
 
 
 SYSTEM = '''你是通用工作助手。请通过已连接的知识平台完成用户任务，自行决定如何查找和处理资料。
@@ -29,6 +30,9 @@ SYSTEM = '''你是通用工作助手。请通过已连接的知识平台完成�
 不要询问用户补充信息；在现有授权和资料范围内尽力完成。'''
 
 BCP_SYSTEM = SYSTEM + '\n在 facts.final_answer 中只填写简短的最终答案，保留题目所用语言；answer 中可以解释依据。sources 使用知识库相对文件路径。'
+CLOSED_BOOK_SYSTEM = '''Answer the user's question using only your existing knowledge. No knowledge base, search, files or other external tools are available. If you cannot determine an answer, say so rather than inventing it.
+Return only JSON: {"answer":"concise explanation", "facts":{"final_answer":"short final answer in the question's language"}, "sources":[], "completed":true}.
+Set completed to false when you cannot answer. Do not ask the user for clarification.'''
 
 
 class Recorder:
@@ -180,10 +184,115 @@ def install_index_plugin(suite, args):
     return client
 
 
+async def solve(suite, recorder, key, directory, prompt, args, *, revoke=True, closed_book=False, system_prompt=None):
+    """One isolated model session; scenario setup/verification remain outside."""
+    if closed_book:
+        tool_names = []
+        catalog_json = '{"tools":[]}'
+    else:
+        async with suite.client(key) as probe:
+            catalog = await probe.session.list_tools()
+        tool_names = [t.name for t in catalog.tools]
+        catalog_json = catalog.model_dump_json(indent=2)
+    (directory / 'tool-catalog.json').write_text(catalog_json, encoding='utf-8')
+    work = directory / 'work'
+    work.mkdir()
+    profile = directory / 'profile'
+    token = key['token'] if key else 'unused'
+    effective_system = system_prompt or (CLOSED_BOOK_SYSTEM if closed_book else getattr(args,'system_prompt',SYSTEM))
+    prepare_profile(profile, args.models_config, suite.url + '/mcp', token)
+    # The explicit adapter registers the unchanged MCP schemas. Disable native
+    # discovery to avoid duplicate tools and client startup races.
+    (profile / 'mcp.json').write_text('{"mcpServers":{}}', encoding='utf-8')
+    # The adapter activates MCP-derived tools before the model runs and records
+    # the actual provider-facing inventory. Native discovery is disabled above.
+    env = dict(os.environ, PI_CODING_AGENT_DIR=str(profile), OMP_MCP_STARTUP_TIMEOUT_MS='0',
+               FKB_BENCHMARK_TOOLS=json.dumps(['mcp__folderkb_' + n for n in tool_names]),
+               FKB_BENCHMARK_CATALOG=str(directory / 'tool-catalog.json'),
+               FKB_BENCHMARK_INSTRUCTIONS='' if closed_book else recorder.instructions[-1],
+               FKB_BENCHMARK_MODE='closed_book' if closed_book else 'platform',
+               FKB_BENCHMARK_URL=suite.url + '/mcp', FKB_BENCHMARK_KEY=token,
+               FKB_BENCHMARK_POLICY_TRACE=str(directory / 'policy.jsonl'))
+    command = [args.omp, '--cwd', str(work), '-e', str(Path('benchmarks/agent/omp-policy.ts').resolve()),
+               '--auto-approve', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp',
+               '--no-title', '--no-session', '--model', args.model, '--thinking', 'off', '--mode', 'json',
+               '--max-time', str(args.timeout), '--system-prompt', effective_system, '-p', prompt]
+    if closed_book:
+        command.append('--no-tools')
+    index = len(recorder.calls)
+    catalog_index = len(recorder.catalogs)
+    started = time.perf_counter()
+    timed_out = False
+    try:
+        process = await asyncio.create_subprocess_exec(*command, env=env, cwd=work, stdout=asyncio.subprocess.PIPE,
+                                                      stderr=asyncio.subprocess.PIPE,
+                                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=args.timeout + 20)
+    except asyncio.TimeoutError:
+        timed_out = True
+        stdout, stderr = await stop_process(process)
+    finally:
+        if revoke and key:
+            suite.registry.revoke_key(key['key']['id'])
+        # OMP can cache configuration in SQLite. Remove the entire generated
+        # profile after process exit, checking its resolved boundary first.
+        if profile.resolve().parent != directory.resolve() or profile.name != 'profile':
+            raise RuntimeError('Refusing to clean a profile outside this episode')
+        shutil.rmtree(profile)
+    elapsed = (time.perf_counter() - started) * 1000
+    decoded = stdout.decode('utf-8', errors='replace')
+    errtext = stderr.decode('utf-8', errors='replace')
+    # Agent messages contain only synthetic task data; redact any accidental key echo.
+    if key:
+        decoded, errtext = decoded.replace(token, '[REDACTED]'), errtext.replace(token, '[REDACTED]')
+    (directory / 'agent.jsonl').write_text(decoded, encoding='utf-8')
+    (directory / 'stderr.log').write_text(errtext, encoding='utf-8')
+    analysis = parse_events(decoded)
+    calls = recorder.calls[index:]
+    execution = {'returncode': process.returncode, 'timed_out': timed_out,
+                 'wall_ms': round(elapsed, 3), **analysis,
+                 'tool_calls': len(calls), 'tool_errors': sum(c['is_error'] for c in calls),
+                 'tool_ms': round(sum(c['duration_ms'] for c in calls), 3),
+                 'enabled_agent_tools': ['mcp__folderkb_' + n for n in tool_names],
+                 'tools_used': dict(Counter(c['tool'] for c in calls)),
+                 'available_tools': recorder.catalogs[catalog_index:]}
+    unexpected = [name for name in analysis['agent_tool_names'] if name not in execution['enabled_agent_tools']]
+    execution['unexpected_agent_tools'] = unexpected
+    # Wrong tool names and exhausted task budgets are solver failures, not excluded runs.
+    policy = [json.loads(line) for line in (directory / 'policy.jsonl').read_text(encoding='utf-8').splitlines()] if (directory / 'policy.jsonl').exists() else []
+    exposed = [e['names'] for e in policy if e['type'] == 'provider_tools']
+    execution['provider_tool_sets'] = exposed
+    execution['valid_run'] = bool(exposed) and all(set(n) == set(execution['enabled_agent_tools']) for n in exposed) and analysis['model_response_messages'] > 0
+    if closed_book:
+        execution['valid_run'] = execution['valid_run'] and not analysis['agent_tool_attempts'] and not calls
+    execution['adapter_handshake'] = None if closed_book else len(recorder.instructions) > 0
+    execution['knowledge_available'] = not closed_book
+    execution['effective_system_prompt_sha256'] = hashlib.sha256(effective_system.encode()).hexdigest()
+    (directory / 'tool-trace.json').write_text(json.dumps(calls, ensure_ascii=False, indent=2), encoding='utf-8')
+    (directory / 'execution.json').write_text(json.dumps(execution, ensure_ascii=False, indent=2), encoding='utf-8')
+    return execution, calls
+
+
 async def episode(suite, recorder, admin, task, variant, repeat, args):
     name = f'{task.id}-{variant}-{repeat}'
     directory = suite.output / 'episodes' / name
     directory.mkdir(parents=True)
+    if variant == 'closed_book':
+        execution, calls = await solve(suite, recorder, None, directory, task.prompt, args, closed_book=True)
+        evaluation = grade(task, args.knowledge, args.knowledge, execution['final'], calls)
+        evaluation['checks'].pop('used_evidence_tool', None)
+        evaluation['checks']['no_tools'] = not execution['agent_tool_attempts'] and not calls
+        evaluation['success'] = all(evaluation['checks'].values())
+        evaluation['outcome_success'] = evaluation['answer_exact_match'] and evaluation['checks']['no_tools']
+        evaluation['failed_checks'] = [k for k,v in evaluation['checks'].items() if not v]
+        result = {'episode':name,'task_id':task.id,'kind':task.kind,'variant':variant,'repeat':repeat,
+                  'prompt':task.prompt,**execution,'index_build_ms':0,'evaluation':evaluation,
+                  'publications':0,'repeated_identical_errors':0}
+        if not execution['valid_run'] or execution['timed_out'] or execution['returncode'] != 0:
+            evaluation['success'] = evaluation['outcome_success'] = False
+        (directory/'result.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+        print(json.dumps({'episode':name,'valid_run':execution['valid_run'],'tool_calls':len(calls)}),flush=True)
+        return result
     lid, key, root = suite.setup()
     seed_knowledge(root, args.knowledge)
     assert admin.put(f'/admin/api/libraries/{lid}/plugin', json={'plugin_id': 'benchmark-rag', 'plugin_version': args.plugin_version}).status_code == 200
@@ -199,82 +308,18 @@ async def episode(suite, recorder, admin, task, variant, repeat, args):
         'library_id': lid, 'grep': variant in ('grep', 'hybrid'), 'search': variant in ('search', 'hybrid'),
         'write_policy': 'readonly' if task.readonly else 'direct'}]))
     before = read_tree(root)
-    async with suite.client(key) as probe:
-        catalog = await probe.session.list_tools()
-    tool_names = [t.name for t in catalog.tools]
-    (directory / 'tool-catalog.json').write_text(catalog.model_dump_json(indent=2), encoding='utf-8')
     before_hash = hashlib.sha256(json.dumps(before, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-    work = directory / 'work'
-    work.mkdir()
-    profile = directory / 'profile'
-    prepare_profile(profile, args.models_config, suite.url + '/mcp', key['token'])
-    # The explicit adapter registers the unchanged MCP schemas. Disable native
-    # discovery to avoid duplicate tools and client startup races.
-    (profile / 'mcp.json').write_text('{"mcpServers":{}}', encoding='utf-8')
-    # The adapter activates MCP-derived tools before the model runs and records
-    # the actual provider-facing inventory. Native discovery is disabled above.
-    env = dict(os.environ, PI_CODING_AGENT_DIR=str(profile), OMP_MCP_STARTUP_TIMEOUT_MS='0',
-               FKB_BENCHMARK_TOOLS=json.dumps(['mcp__folderkb_' + n for n in tool_names]),
-               FKB_BENCHMARK_CATALOG=str(directory / 'tool-catalog.json'),
-               FKB_BENCHMARK_INSTRUCTIONS=recorder.instructions[-1],
-               FKB_BENCHMARK_URL=suite.url + '/mcp', FKB_BENCHMARK_KEY=key['token'],
-               FKB_BENCHMARK_POLICY_TRACE=str(directory / 'policy.jsonl'))
-    command = [args.omp, '--cwd', str(work), '-e', str(Path('benchmarks/agent/omp-policy.ts').resolve()),
-               '--auto-approve', '--no-extensions', '--no-skills', '--no-rules', '--no-lsp',
-               '--no-title', '--no-session', '--model', args.model, '--thinking', 'off', '--mode', 'json',
-               '--max-time', str(args.timeout), '--system-prompt', getattr(args, 'system_prompt', SYSTEM), '-p', task.prompt]
-    index = len(recorder.calls)
-    catalog_index = len(recorder.catalogs)
-    started = time.perf_counter()
-    timed_out = False
-    try:
-        process = await asyncio.create_subprocess_exec(*command, env=env, cwd=work, stdout=asyncio.subprocess.PIPE,
-                                                      stderr=asyncio.subprocess.PIPE,
-                                                      creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=args.timeout + 20)
-    except asyncio.TimeoutError:
-        timed_out = True
-        stdout, stderr = await stop_process(process)
-    finally:
-        suite.registry.revoke_key(key['key']['id'])
-        # OMP can cache configuration in SQLite. Remove the entire generated
-        # profile after process exit, checking its resolved boundary first.
-        if profile.resolve().parent != directory.resolve() or profile.name != 'profile':
-            raise RuntimeError('Refusing to clean a profile outside this episode')
-        shutil.rmtree(profile)
-    elapsed = (time.perf_counter() - started) * 1000
-    decoded = stdout.decode('utf-8', errors='replace')
-    errtext = stderr.decode('utf-8', errors='replace')
-    # Agent messages contain only synthetic task data; redact any accidental key echo.
-    decoded, errtext = decoded.replace(key['token'], '[REDACTED]'), errtext.replace(key['token'], '[REDACTED]')
-    (directory / 'agent.jsonl').write_text(decoded, encoding='utf-8')
-    (directory / 'stderr.log').write_text(errtext, encoding='utf-8')
-    analysis = parse_events(decoded)
-    calls = recorder.calls[index:]
+    execution, calls = await solve(suite, recorder, key, directory, task.prompt, args)
     after = read_tree(suite.current(lid))
     result = {'episode': name, 'task_id': task.id, 'kind': task.kind, 'variant': variant, 'repeat': repeat,
-              'prompt': task.prompt, 'initial_sha256': before_hash, 'returncode': process.returncode,
-              'timed_out': timed_out, 'wall_ms': round(elapsed, 3), **analysis,
-              'tool_calls': len(calls), 'tool_errors': sum(c['is_error'] for c in calls),
-              'tool_ms': round(sum(c['duration_ms'] for c in calls), 3),
+              'prompt': task.prompt, 'initial_sha256': before_hash, **execution,
               'index_build_ms': round(index_build_ms, 3),
               'index_metadata': index_response.json(),
-              'enabled_agent_tools': ['mcp__folderkb_' + n for n in tool_names],
-              'tools_used': dict(Counter(c['tool'] for c in calls)),
-              'available_tools': recorder.catalogs[catalog_index:],
-              'evaluation': grade(task, before, after, analysis['final'], calls)}
-    unexpected = [name for name in analysis['agent_tool_names'] if name not in result['enabled_agent_tools']]
-    result['unexpected_agent_tools'] = unexpected
-    # Wrong tool names and exhausted task budgets are solver failures, not excluded runs.
-    policy = [json.loads(line) for line in (directory / 'policy.jsonl').read_text(encoding='utf-8').splitlines()] if (directory / 'policy.jsonl').exists() else []
-    exposed = [e['names'] for e in policy if e['type'] == 'provider_tools']
-    result['provider_tool_sets'] = exposed
-    result['valid_run'] = bool(exposed) and all(set(n) == set(result['enabled_agent_tools']) for n in exposed) and analysis['model_response_messages'] > 0
-    result['adapter_handshake'] = len(recorder.instructions) > 0
-    if not result['valid_run'] or timed_out or process.returncode != 0:
+              'evaluation': grade(task, before, after, execution['final'], calls)}
+    if not result['valid_run'] or result['timed_out'] or result['returncode'] != 0:
         result['evaluation']['success'] = False
         result['evaluation']['outcome_success'] = False
-    result['evaluation']['error_recovered'] = result['evaluation']['success'] and bool(analysis['agent_tool_errors'])
+    result['evaluation']['error_recovered'] = result['evaluation']['success'] and bool(result['agent_tool_errors'])
     fingerprints = Counter((c['tool'], json.dumps(c['arguments'], sort_keys=True)) for c in calls if c['is_error'])
     result['repeated_identical_errors'] = sum(max(0, count - 1) for count in fingerprints.values())
     with suite.registry.store.transaction() as db:
@@ -296,12 +341,15 @@ async def run(args):
     external = [t for t in selected if t.reference]
     if external and len(external) != len(selected):
         raise ValueError('Run external benchmark and basic regression tasks separately')
+    if 'closed_book' in args.variants and not external:
+        raise ValueError('Closed-book control is only defined for BrowseComp-Plus questions')
     args.system_prompt = BCP_SYSTEM if external else SYSTEM
     args.output.mkdir(parents=True, exist_ok=True)
     plan = {'task_ids': [t.id for t in selected], 'variants': args.variants, 'repeats': args.repeats,
             'timeout_seconds': args.timeout, 'planned_episodes': len(selected) * len(args.variants) * args.repeats,
             'model': args.model, 'dataset': dataset_metadata}
     (args.output / 'plan.json').write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding='utf-8')
+    source_snapshot = freeze_source(args.output)
     health = await check_model(args)
     (args.output / 'preflight.json').write_text(json.dumps(health, indent=2), encoding='utf-8')
     if not health['ok']:
@@ -327,7 +375,7 @@ async def run(args):
                     results.append(result)
                     (suite.output / 'results.json').write_text(json.dumps({'environment': suite.result['environment'],
                         'benchmark_version': '1.1', 'grader_version': GRADER_VERSION, 'started_at': suite.result['timestamp'],
-                        'plan': plan, 'preflight': health,
+                        'plan': plan, 'preflight': health, 'source_snapshot': source_snapshot,
                         'agent_adapter': 'OMP explicit extension; unchanged MCP schemas; JSON Streamable HTTP',
                         'plugin': suite.result['plugin'], 'system_prompt': args.system_prompt,
                         'evaluation_mode': 'browsecomp-exact-match-proxy' if external else 'deterministic-outcome',
@@ -356,10 +404,10 @@ def main():
     p.add_argument('--omp', default=shutil.which('omp') or 'omp')
     p.add_argument('--model', default='hyper-op/GLM-5.3-Flash')
     p.add_argument('--models-config', type=Path, default=Path.home() / '.omp/agent/models.yml')
-    p.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/simple-rag/definition.json'))
-    p.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/simple-rag/package'))
+    p.add_argument('--plugin-definition', type=Path, default=Path('examples/plugins/bm25-markdown/definition.json'))
+    p.add_argument('--plugin-source', type=Path, default=Path('examples/plugins/bm25-markdown/package'))
     p.add_argument('--trust-plugin', action='store_true', help='Permit reviewed local Python plugin only in this isolated test process')
-    p.add_argument('--variants', nargs='+', choices=['grep', 'search', 'hybrid'], default=['grep', 'search', 'hybrid'])
+    p.add_argument('--variants', nargs='+', choices=['closed_book', 'grep', 'search', 'hybrid'], default=['grep', 'search', 'hybrid'])
     p.add_argument('--tasks', nargs='+', help='Task IDs from the selected dataset')
     p.add_argument('--repeats', type=int, default=1)
     p.add_argument('--timeout', type=int, default=180)

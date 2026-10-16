@@ -82,6 +82,8 @@ class TemplateWorker:
         context = self.updates.context(db, job['library_id'])
         if encode(context) != job['context_json']:
             raise KnowledgeError('stale_update_context', 'Workspace configuration changed', 409)
+        from .update_lifecycle import check_bootstrap
+        check_bootstrap(db, self.registry, job, context)
         items = db.execute('SELECT i.* FROM inbox_items i JOIN update_job_items j ON j.item_id=i.id WHERE j.job_id=? ORDER BY i.sequence', (job['id'],)).fetchall()
         if any(i['status'] != 'processing' or not self.updates.permitted(db, i) for i in items):
             raise KnowledgeError('submission_unavailable', 'Submission permission changed', 409)
@@ -105,6 +107,13 @@ class TemplateWorker:
             injected = {name: values[field] for name, field in context['policy']['model_environment'].items()}
         if any(not injected.get(name) for name in definition['required_secrets']):
             raise KnowledgeError('template_secrets_unavailable', 'Required template credentials are not mapped', 409)
+        from .model_contract import model_required, validate_model_config
+        config = json.loads(context['binding']['config_json'])
+        validate_model_config(definition, config, context['policy']['model_connection_id'], context['policy']['model_environment'])
+        if model_required(definition, config):
+            binding = definition['model_binding']
+            if any(not injected.get(name) for name, field in binding['environment'].items() if field in binding['required_fields']):
+                raise KnowledgeError('model_parameters_unavailable', '插件所需的模型连接参数不完整，请检查更新进程配置', 409)
         env.update(injected)
         return env
 
@@ -166,6 +175,11 @@ class TemplateWorker:
             db.execute("UPDATE update_jobs SET status='candidate_ready',base_version=?,candidate_digest=?,result_json=?,updated_at=? WHERE id=?",
                        (request.base_version, digest, result.model_dump_json(), now(), job['id']))
             self.updates.event(db, 'update_candidate_ready', job['id'], job['library_id'])
+            from .update_lifecycle import bootstrap_job
+            if bootstrap_job(db, job['id']):
+                # Creation authorizes only the untouched seed structure; all publication
+                # integrity, permission and source-version checks still run in publish().
+                db.execute("UPDATE update_jobs SET status='publish_queued' WHERE id=?", (job['id'],))
 
     def publish(self, job):
         with self.store.transaction() as db:

@@ -68,7 +68,7 @@ CSV 一条记录对应一个任务，保存为 **CSV UTF-8**。当前文件带 B
 复制整个 `basic/`，修改知识文件、任务和验收规则，从仓库根目录指定新目录：
 
 ```powershell
-python -m benchmarks.agent.runner --dataset benchmarks/datasets/my-suite --output data/my-suite-run
+python -m benchmarks.agent.runner --dataset benchmarks/datasets/my-suite --output data/my-suite-run --trust-plugin
 ```
 
 当前支持 UTF-8 文本文件，不支持二进制附件、符号链接和目录联接；空目录不作为验收对象。任务与答案编号、字段格式和引用来源会在启动服务和调用模型之前校验。

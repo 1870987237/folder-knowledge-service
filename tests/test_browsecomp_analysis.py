@@ -122,8 +122,8 @@ def test_program_index_works_with_long_report_directory(tmp_path, monkeypatch):
     root = suite.run_root
     client = None
     try:
-        args = SimpleNamespace(plugin_definition=Path('examples/plugins/simple-rag-python/definition.json'),
-            plugin_source=Path('examples/plugins/simple-rag-python/package'), trust_plugin=True)
+        args = SimpleNamespace(plugin_definition=Path('examples/plugins/bm25-markdown/definition.json'),
+            plugin_source=Path('examples/plugins/bm25-markdown/package'), trust_plugin=True)
         client = install_index_plugin(suite, args)
         lid, key, folder = suite.setup()
         seed_knowledge(folder, {'documents/1.md': '# Orchard\nApple trees grow here.\n'})
@@ -131,7 +131,7 @@ def test_program_index_works_with_long_report_directory(tmp_path, monkeypatch):
             'plugin_id': 'benchmark-rag', 'plugin_version': args.plugin_version}).status_code == 200
         built = client.post(f'/admin/api/libraries/{lid}/index/build')
         assert built.status_code == 200, built.text
-        assert built.json()['engine'] == 'simple-rag-python-bm25-v1'
+        assert built.json()['engine'] == 'bm25-markdown-v2'
         assert built.json()['files'] == 1
         import os
         assert os.environ['KB_SEARCH_PLUGIN_ALLOWLIST'] == suite.result['plugin']['package_sha256']

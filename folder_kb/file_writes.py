@@ -179,6 +179,10 @@ class FileWrites:
                 key = self.registry._authenticate(token, db)
                 row = db.execute('SELECT * FROM libraries WHERE id=?', (selected['id'],)).fetchone()
                 Capabilities(self.registry).require(db, key, row, 'write_file')
+                from .document_policy import edit_scope, require_path, publish_pointer
+                scope = edit_scope(self.registry, db, row)
+                for change in value.changes:
+                    require_path(db, row['id'], change.path)
                 old = db.execute('SELECT * FROM file_write_receipts WHERE key_id=? AND request_id=?', (key['id'], value.request_id)).fetchone()
                 if old:
                     if old['digest'] != fingerprint:
@@ -186,6 +190,7 @@ class FileWrites:
                     return dict(json.loads(old['receipt']), duplicate=True)
                 folder = self.registry.checked_folder(row)
                 captured = snapshot(folder.root)
+                full_snapshot = snapshot(scope['root'], allow_auxiliary=True) if scope['managed'] else captured
                 before = captured[0]
                 if value.expected_library_version and value.expected_library_version != library_version(row, before):
                     raise KnowledgeError('version_changed', 'Library changed; fetch a new manifest before retrying', 409)
@@ -211,18 +216,20 @@ class FileWrites:
                     raise KnowledgeError('document_storage_unavailable', 'Publication identifier already exists; retry', 503)
                 target = candidate
                 # Reuse the validated snapshot: one tree copy for the entire batch.
-                copy_workspace(folder.root, target, captured=captured)
+                copy_workspace(scope['root'], target, captured=full_snapshot)
+                visible_target = target / scope['spec'].knowledge_subpath
                 for c in value.changes:
-                    self._change(target, c)
-                after = workspace_digest(target)  # also enforces total size/entry limits
+                    self._change(visible_target, c)
+                after = workspace_digest(visible_target)  # also enforces total size/entry limits
+                workspace_digest(target, allow_auxiliary=scope['managed'])
                 for p, expected in versions.items():
                     with folder._open_text(p) as (_, _, v):
                         if v != expected:
                             raise KnowledgeError('version_changed', 'File changed during publication: ' + p, 409)
-                if workspace_digest(folder.root) != before:
+                if workspace_digest(scope['root'], allow_auxiliary=scope['managed']) != full_snapshot[0]:
                     raise KnowledgeError('version_changed', 'Source changed during publication', 409)
-                relative = target.relative_to(self.registry.pool.root).as_posix()
-                published = KnowledgeFolder(target)
+                relative = visible_target.relative_to(self.registry.pool.root).as_posix()
+                published = KnowledgeFolder(visible_target)
                 results = []
                 for c in value.changes:
                     item = {'path': c.path, 'operation': c.operation}
@@ -235,7 +242,7 @@ class FileWrites:
                            'knowledge_updated': True, 'duplicate': False}
                 if single:
                     receipt.update(results[0])
-                db.execute('UPDATE libraries SET path=?,updated_at=? WHERE id=?', (relative, receipt['published_at'], row['id']))
+                publish_pointer(self.registry, db, row, scope, target)
                 db.execute('INSERT INTO file_write_receipts VALUES (?,?,?,?,?,?,?)',
                            (key['id'], value.request_id, row['id'], fingerprint, json.dumps(receipt), row['path'], relative))
                 self.store.event(db, {'kind': 'access', 'tool': 'write_file' if single else 'apply_changes',

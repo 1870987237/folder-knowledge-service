@@ -13,6 +13,7 @@
   <a href="#外部-agent-接入">接入 Agent</a> ·
   <a href="#web-管理台">管理平台</a> ·
   <a href="docs/inbox-api.md">增量收件箱</a> ·
+  <a href="examples/plugins/README.md">插件目录</a> ·
   <a href="https://github.com/oh-my-harness/folder-kb-memory-template">记忆模板</a>
 </p>
 
@@ -24,7 +25,7 @@
 
 ## 文件即知识
 
-以**文件夹和文档作为正式知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite，知识内容不建向量索引、不调用 LLM；维护者更新文件后，下次访问即可读到变化。
+以**文件夹和文档作为正式知识存储**，通过 REST API 和 MCP 提供目录浏览、文件名匹配、按行读取与全文搜索。Web 管理台支持动态知识库、独立 Agent Key 与访问活动查看。管理配置与访问记录使用 SQLite。基础文件读取无需索引或 LLM；可选插件提供索引检索和模型驱动的知识整理，索引是可重建的派生数据。
 
 服务部署在 Linux Docker 中。HTTP/MCP 容器只读挂载知识目录，独立 Git 同步进程负责拉取与发布。Agent 通过 MCP 调用 `grep`、`read_file` 等工具访问远程文件，无需操作系统挂载。
 
@@ -58,7 +59,7 @@ flowchart LR
 
 用户打开 `/workspace` 注册，管理员在 `/admin` 的“账号与组织”中审批。工作区支持个人私有库、组织成员及库权限、Markdown 阅读与搜索、草稿送审和人工发布，以及随用户权限收缩的 Agent Key。
 
-普通文档库可编辑，现有模板库与 Git 库先支持查看，更新仍走原有流程。Linux 部署需为普通文档的发布目录增加专用可写挂载；[设计、使用和迁移说明](docs/human-workspace.md)。
+普通文档库可编辑；插件库是否支持直接编辑由插件声明，通用知识库 1.1.0 起支持人工编辑与管线更新共存，Git 库仍走同步流程。Linux 部署需为普通文档的发布目录增加专用可写挂载；[设计、使用和迁移说明](docs/human-workspace.md)、[插件组合与编辑](docs/plugin-composition-and-editing.md)。
 
 ## 收件箱：提交待整理材料
 
@@ -66,7 +67,20 @@ flowchart LR
 
 [标准内容、授权与调用说明](docs/inbox-api.md) · [材料 JSON Schema](docs/schemas/material-v1.schema.json)。已接入模型连接、独立更新进程和人工审核发布；见[模型驱动更新](docs/template-updates.md)。
 
-## 知识库模板原型
+## 知识插件与更新模板
+
+插件分别管理知识结构、材料更新和检索索引；一个库可独立选择知识管理插件与检索插件。当前源码提供：
+
+| 插件 | 主要用途 |
+|---|---|
+| [BM25 Markdown 1.0.1](examples/plugins/bm25-markdown/package/README.md) | 已有 Markdown/文本目录的全文检索，无模型依赖 |
+| [通用知识库 1.1.2](examples/plugins/general-knowledge/package/README.md) | 分类模板、精确去重、模型语义合并建议、候选审核；内含 BM25，支持人工编辑 |
+| [Memory Files](https://github.com/oh-my-harness/folder-kb-memory-template) | 独立仓库维护的个人记忆更新插件，整理偏好、反馈与项目约定 |
+| [SQLite Corpus 1.0.0](examples/plugins/sqlite-corpus/package/README.md) | 大规模语料的文档级 BM25 评测基线 |
+
+旧兼容插件和声明示例已从当前源码删除；历史评测记录保留，已有服务器安装记录不自动变更。完整版本、源码入口、安装流程与处理结果解释见[插件目录与使用指南](examples/plugins/README.md)。源码提供不代表服务器已安装或已授权。
+
+新建模板库启用更新后，由 worker 初始化并发布未修改的初始结构；增量材料始终生成待人工审核的候选。已有库手动初始化仍需审核。检索索引需显式构建，发布或人工修改后手动重建，详见[模板与更新流程](docs/library-template-workflow.md)。
 
 模板元数据由平台保存，程序由知识库开发者提供并在平台资源上运行。已提供不调用大模型的测试模板，可执行 `python -m folder_kb.template_demo`，在独立演示目录跑通注册、绑定、收件箱材料处理及候选知识生成。正式知识不会自动更新。
 
@@ -125,7 +139,7 @@ flowchart LR
 
 - **收件箱**：按知识库和状态筛选，查看正文、来源与场景；领取后回填处理结论，或放回待处理。领取凭证仅保存在当前页面内存中，刷新或退出后需等待租约到期重新领取；完成处理不等于知识已发布。
 - **Agent 与密钥 → 权限设置**：按知识库勾选“允许访问”和“允许提交”，一次保存；提交需先允许访问，取消访问会同时取消提交。
-- **插件**：点击“安装插件”，导入 `plugin.json`（兼容 `registration.json`）并选择 `package.zip`；查看能力、版本、校验摘要和绑定知识库。全文索引已支持构建与 REST/MCP 检索；其他索引类型及 Agent 指引仍为声明。详见[简易 RAG 插件](docs/simple-rag.md)。
+- **插件**：点击“安装插件”，导入 `plugin.json`（兼容 `registration.json`）并选择 `package.zip`；查看能力、版本、校验摘要和绑定知识库。全文索引已支持构建与 REST/MCP 检索；其他索引类型及 Agent 指引仍为声明。基础插件包括 [BM25 Markdown 检索与通用 Markdown 知识库](examples/plugins/README.md)。
 - **知识库 → 插件配置**：在详情抽屉的“插件与工作范围”选择已安装的版本，填写实例 JSON 配置。默认仅使用检索目录，也可指定完整本地或 Git 工作目录、检索子目录及额外排除路径；可随时解除绑定。
 
 模板安装和绑定不会运行更新程序。在知识库“更新设置”中明确启用后，独立 worker 自动处理新材料，候选经管理员审核后发布。配置方法见[更新流程](docs/template-updates.md)。
@@ -410,6 +424,12 @@ python -m pytest -q
 
 工具与索引的任务效果使用[通用 Agent Benchmark](benchmarks/agent/README.md)评测：让 OMP 自主完成自然语言读写任务，独立核验答案和文件结果，对比 grep、Search 及混合配置，并记录调用成功率、错误恢复、耗时和 tokens。
 
+[评测总入口](benchmarks/README.md)汇总基础任务、平台业务流程、固定查询 Recall@K/nDCG@K 和独立并发负载测试。各层结果分开统计，参见 [10 月 13 日扩展报告](docs/reports/2026-10-13-benchmark-expansion.md)。
+
+[BrowseComp-Plus 主基准](docs/reports/2026-10-13-browsecomp-main.md)提供无知识库对照、配置式插件矩阵、开发集排除、固定查询指标和人工抽检，默认正式计划为 50 题、四组各三次。
+
+[全量 BrowseComp-Plus](benchmarks/browsecomp/README.md#全量入口)另提供全部 830 题、100,195 篇文档的导入与执行：流式磁盘索引、共享只读语料、逐题续跑，以及原始问题的文档 Recall@5/100/1000 和 nDCG@10。全量数据评测仍使用本平台工具和 Flash 判分，需披露其与官方评测配置的差异。
+
 公开检索任务可用 [BrowseComp-Plus 适配器](benchmarks/browsecomp/README.md)：导入官方问题、完整证据和干扰文档，经相同 MCP 工具运行，统计证据召回并独立判分。当前为缩小语料的内部测试，不能直接对比官方全量榜单。
 
 本机开发时先启动后端，再在 `frontend/` 执行 `npm run dev`，打开终端给出的地址。Vite 将 `/admin/api` 代理到 `127.0.0.1:8791`。生产部署仍由同一后端提供 `/admin`，无须运行 Vite。
@@ -440,7 +460,7 @@ python -m pytest -q
 
 部门管理范围、详细权限来源和组织服务账号仍待后续实现。管理数据库已升级到 v10，升级前备份。
 
-检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/simple-rag-python`。
+检索扩展：[Search 插件协议](docs/search-plugin-protocol.md)明确平台与插件边界，支持程序插件独立构建和查询索引；参考实现见 `examples/plugins/bm25-markdown`；带更新管线的通用知识库见 `examples/plugins/general-knowledge`。
 
 
 ## 本机统一启动与后台进程

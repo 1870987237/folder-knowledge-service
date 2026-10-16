@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "model": "hyper-op/GLM-5.3-Flash",
+  "judge_model": "hyper-op/GLM-5.3-Flash",
+  "repeats": 1,
+  "timeout": 120,
+  "plugins": [
+    {
+      "name": "program-bm25",
+      "definition": "examples/plugins/bm25-markdown/definition.json",
+      "source": "examples/plugins/bm25-markdown/package",
+      "trust_plugin": true,
+      "variants": [
+        "grep",
+        "search",
+        "hybrid"
+      ]
+    }
+  ]
+}

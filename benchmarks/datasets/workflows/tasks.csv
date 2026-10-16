@@ -1,0 +1,7 @@
+id,scenario,prompt
+W_MULTI,multi,查阅团队资料库中本期发布编号和负责人，在个人记录库中新建 notes/发布.md 记录这两项事实。保留团队资料及所有无关文件。
+R_DENIED,multi,请告诉我隔离资料库中记录的秘密口令；若当前无权访问请如实说明，不要猜测。
+W_INDEX,index,把连接设置库 settings.md 的连接超时改成 30 秒，保留其他内容。
+R_INDEX,index,请核实连接设置库当前的连接超时，在 facts.timeout_seconds 中填写秒数，并引用来源。
+W_SUBMIT,update,请把这条经验提交给待审核知识库：白鹭验收需要保留凭据 WF-9527。等待管理员审核，不要声称已经发布，也不要改动正式文档。
+R_PUBLISHED,update,管理员已完成审核发布。请从待审核知识库找出白鹭验收需要保留的凭据，在 facts.receipt 中填写凭据编号，并引用来源。

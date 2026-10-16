@@ -4,6 +4,7 @@ Installation and binding never execute code. Protocol 1.0 search packages own
 their build/query programs; old declarative fulltext packages remain compatible.
 """
 import anyio
+import json
 from fastapi import Query, Request
 from pydantic import Field
 
@@ -37,13 +38,69 @@ def describe_plugin(catalog, item):
     with catalog.store.transaction() as db:
         bindings = [dict(row) for row in db.execute(
             'SELECT l.id,l.name FROM library_templates b JOIN libraries l ON l.id=b.library_id '
-            'WHERE b.template_id=? AND b.template_version=? ORDER BY l.id',
-            (definition['id'], definition['version']))]
+            'WHERE b.template_id=? AND b.template_version=? UNION '
+            'SELECT l.id,l.name FROM library_search_bindings b JOIN libraries l ON l.id=b.library_id '
+            'WHERE b.template_id=? AND b.template_version=? ORDER BY id',
+            (definition['id'], definition['version'], definition['id'], definition['version']))]
     return dict(item, capabilities=capabilities, libraries=bindings, legacy_template=not bool(features))
 
 
 def add_plugin_routes(app):
     catalog = app.state.templates
+    from .plugin_bindings import get_search, set_search
+
+    def search_options(library_id, actor):
+        from .collaboration import Collaboration
+        from .resource_access import allowed, grant, scope, plugin_key
+        from .retrieval import supported
+        with catalog.store.transaction() as db:
+            Collaboration(catalog.registry).check_configuration(db, actor, library_id)
+            owner = None if actor.get('platform') else scope(db, library_id)
+            result = []
+            for row in db.execute('SELECT * FROM template_versions ORDER BY id,version'):
+                definition = json.loads(row['metadata_json'])
+                if not row['package_sha256'] or not supported((definition.get('plugin') or {}).get('indexing')):
+                    continue
+                access = grant(db, 'plugin', plugin_key(row['id'], row['version']))
+                if owner and (not allowed(access, owner) or access.get('package_sha256') != row['package_sha256']):
+                    continue
+                result.append({k: definition[k] for k in ('id', 'version', 'name', 'config_schema')})
+            return {'plugins': result}
+
+    @app.get('/admin/api/libraries/{library_id}/search-plugin-options')
+    def admin_search_options(library_id: str):
+        return search_options(library_id, {'platform': True})
+
+    @app.get('/portal/api/libraries/{library_id}/search-plugin-options')
+    def user_search_options(library_id: str, request: Request):
+        return search_options(library_id, request.state.human)
+
+    @app.get('/admin/api/libraries/{library_id}/search-plugin')
+    def get_search_binding(library_id: str):
+        return get_search(catalog, library_id)
+
+    @app.put('/admin/api/libraries/{library_id}/search-plugin')
+    def bind_search(library_id: str, value: PluginBinding):
+        return set_search(catalog, library_id, value)
+
+    @app.delete('/admin/api/libraries/{library_id}/search-plugin')
+    def unbind_search(library_id: str):
+        return set_search(catalog, library_id, None)
+
+    @app.get('/portal/api/libraries/{library_id}/search-plugin')
+    def user_search(library_id: str, request: Request):
+        from .collaboration import Collaboration
+        with catalog.store.transaction() as db:
+            Collaboration(catalog.registry).check_configuration(db, request.state.human, library_id)
+        return get_search(catalog, library_id)
+
+    @app.put('/portal/api/libraries/{library_id}/search-plugin')
+    def user_bind_search(library_id: str, value: PluginBinding, request: Request):
+        return set_search(catalog, library_id, value, request.state.human)
+
+    @app.delete('/portal/api/libraries/{library_id}/search-plugin')
+    def user_unbind_search(library_id: str, request: Request):
+        return set_search(catalog, library_id, None, request.state.human)
 
     def describe(item):
         return describe_plugin(catalog, item)
