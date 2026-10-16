@@ -126,7 +126,19 @@ def test_corpus_excerpt_preserves_source_lines(body):
     assert validate_hits(hits,[('a.md',body,'hash','version')],5,'.')
 
 
-def test_unreadable_corpus_records_failure_before_starting_service(tmp_path,monkeypatch):
+@pytest.fixture
+def isolated_omp_version(monkeypatch):
+    """These runner contract tests simulate the agent, including its version probe."""
+    import benchmarks.browsecomp.full_run as runner
+    original = runner.subprocess.check_output
+    def check_output(command, *args, **kwargs):
+        if command == ['omp', '--version']:
+            return 'synthetic-omp-test-version\n'
+        return original(command, *args, **kwargs)
+    monkeypatch.setattr(runner.subprocess, 'check_output', check_output)
+
+
+def test_unreadable_corpus_records_failure_before_starting_service(tmp_path,monkeypatch,isolated_omp_version):
     import benchmarks.browsecomp.full_run as runner
     root=dataset(tmp_path/'dataset');out=tmp_path/'run'
     args=SimpleNamespace(dataset=root,output=out,allow_fixture=True,tasks=None,model='test/solver',judge_model='test/solver',
@@ -145,7 +157,7 @@ def test_unreadable_corpus_records_failure_before_starting_service(tmp_path,monk
     assert not (out/'execution/results.json').exists()
 
 
-def test_persistent_runner_resume_and_direct_ranking(tmp_path,monkeypatch):
+def test_persistent_runner_resume_and_direct_ranking(tmp_path,monkeypatch,isolated_omp_version):
     import benchmarks.browsecomp.full_run as runner
     from benchmarks.browsecomp.full_retrieval import run as rank
     root=dataset(tmp_path/'dataset');out=tmp_path/'run'

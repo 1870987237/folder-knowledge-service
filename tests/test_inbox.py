@@ -154,7 +154,7 @@ def test_idempotency_concurrency_restart_backup_and_outage(env, tmp_path):
     target = backup(settings.state_dir, tmp_path / 'backup.sqlite3')
     with sqlite3.connect(target) as db:
         assert db.execute('SELECT count(*) FROM inbox_items').fetchone()[0] == 2
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 12
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 14
     # Inbox references a stable library ID and still accepts reports during directory outages.
     path = app.state.registry.pool.root / 'alpha'
     (path / 'README.md').unlink()
