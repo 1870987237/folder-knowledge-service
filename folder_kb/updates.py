@@ -1,4 +1,4 @@
-"""Durable template jobs. Publishing always requires an explicit admin approval."""
+"""Durable template jobs. Material updates require explicit publication approval."""
 from __future__ import annotations
 
 from contextlib import nullcontext
@@ -179,22 +179,30 @@ class Updates:
             AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at>?)''',
             (item['key_id'], item['library_id'], now())).fetchone() is not None
 
-    def enqueue(self, library_id, operation='update', retry_id=None, db=None):
+    def pending(self, db, library_id, include_failed=False):
+        rows = db.execute('''SELECT i.* FROM inbox_items i WHERE i.library_id=? AND i.status='pending'
+            AND (NOT EXISTS (SELECT 1 FROM update_job_items j WHERE j.item_id=i.id)
+              OR (? AND (SELECT u.status FROM update_jobs u JOIN update_job_items j ON j.job_id=u.id
+                WHERE j.item_id=i.id ORDER BY u.created_at DESC,u.id DESC LIMIT 1)='failed'))
+            ORDER BY i.sequence''', (library_id, include_failed))
+        return [row for row in rows if self.permitted(db, row)]
+
+    def enqueue(self, library_id, operation='update', retry_id=None, db=None, *, include_failed=False):
         with self.store.transaction(write=True) if db is None else nullcontext(db) as db:
             context = self.context(db, library_id)
             if operation not in context['template']['definition']['capabilities']:
                 raise KnowledgeError('operation_unsupported', 'Template does not support this operation', 409)
+            from .update_lifecycle import initialized, bootstrap_job
+            if operation == 'update' and not initialized(db, context):
+                raise KnowledgeError('library_not_initialized', '知识库尚未完成初始化。请等待初始化发布；若初始化失败，请查看任务并重试。材料会保留在收件箱。', 409)
             if db.execute("SELECT 1 FROM update_jobs WHERE workspace_key=? AND status IN ('queued','running','candidate_ready','publish_queued','publishing')", (context['workspace_key'],)).fetchone():
-                raise KnowledgeError('update_in_progress', 'Review or finish the current workspace job first', 409)
+                raise KnowledgeError('update_in_progress', '请先完成当前任务；已有候选请审核后发布或拒绝', 409)
             items = []
             if operation == 'update':
                 if retry_id:
                     items = db.execute('SELECT i.* FROM inbox_items i JOIN update_job_items j ON j.item_id=i.id WHERE j.job_id=? ORDER BY i.sequence', (retry_id,)).fetchall()
                 else:
-                    candidates = db.execute('''SELECT i.* FROM inbox_items i
-                        WHERE i.library_id=? AND i.status='pending'
-                        AND NOT EXISTS (SELECT 1 FROM update_job_items j WHERE j.item_id=i.id)
-                        ORDER BY i.sequence''', (library_id,))
+                    candidates = self.pending(db, library_id, include_failed)
                     # Filter current human ownership before filling the batch;
                     # revoked submissions must not starve later authorized keys.
                     items = []
@@ -204,12 +212,14 @@ class Updates:
                             if len(items) >= context['policy']['max_batch_size']:
                                 break
                 if not items:
-                    raise KnowledgeError('no_pending_material', 'No new pending submissions', 409)
+                    raise KnowledgeError('no_pending_material', '没有可处理的待办材料。请确认材料已提交且仍有提交权限；处理中的材料请到更新任务查看。', 409)
                 if any(i['status'] != 'pending' or not self.permitted(db, i) for i in items):
                     raise KnowledgeError('submission_unavailable', 'A submission is claimed or its permission was revoked', 409)
             job_id = uuid.uuid4().hex
             db.execute('''INSERT INTO update_jobs(id,library_id,workspace_key,operation,status,created_at,updated_at,context_json)
                 VALUES (?,?,?,?,'queued',?,?,?)''', (job_id, library_id, context['workspace_key'], operation, now(), now(), encode(context)))
+            if retry_id and bootstrap_job(db, retry_id):
+                db.execute('UPDATE library_bootstrap SET job_id=? WHERE job_id=?', (job_id, retry_id))
             for item in items:
                 db.execute('INSERT INTO update_job_items VALUES (?,?)', (job_id, item['id']))
                 db.execute("UPDATE inbox_items SET status='processing',claim_digest=NULL,lease_until=NULL,attempts=attempts+1,updated_at=? WHERE id=?", (now(), item['id']))
@@ -224,22 +234,37 @@ class Updates:
         return row
 
     @staticmethod
-    def public(row):
+    def public(row, db=None):
         result = {key: row[key] for key in ('id', 'library_id', 'operation', 'status', 'created_at', 'updated_at', 'base_version', 'error_code')}
         result['result'] = json.loads(row['result_json']) if row['result_json'] else None
         result['publish_mode'] = 'manual_review'
+        if db is not None:
+            from .update_lifecycle import bootstrap_job
+            if bootstrap_job(db, row['id']):
+                result['publish_mode'] = 'new_library_initialization'
+        result['error_message'] = {
+            'library_not_initialized': '知识库尚未初始化，请先完成初始化再处理材料。',
+            'bootstrap_workspace_changed': '初始化期间内容已改变，已停止自动发布。请检查内容后手动初始化并审核。',
+            'template_runtime_disabled': '更新进程未启用受信任插件执行，请联系平台管理员。',
+            'model_credential_unavailable': '更新进程缺少模型凭据或凭据未获允许，请检查模型连接。',
+            'template_secrets_unavailable': '插件所需模型凭据未正确映射，请检查更新设置。',
+            'template_process_failed': '插件处理程序执行失败，材料已保留。请检查初始化、模型连接和插件运行记录后重试。',
+            'template_timeout': '插件处理超时，材料已保留，可重试。',
+            'workspace_changed': '生成期间知识库被修改，请重新生成候选。',
+            'worker_interrupted': '更新进程中断，材料已保留，可重试。',
+        }.get(row['error_code'], row['error_code'])
         return result
 
     def get(self, job_id, db=None):
         with self.store.transaction() if db is None else nullcontext(db) as db:
             row = self.require(db, job_id)
-            return self.public(row)
+            return self.public(row, db)
 
     def listing(self, offset=0, limit=50):
         with self.store.transaction() as db:
             rows = db.execute('SELECT * FROM update_jobs ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?', (limit+1, offset)).fetchall()
             heartbeat = db.execute("SELECT value FROM metadata WHERE name='template_worker_heartbeat'").fetchone()
-            return {'jobs': [self.public(r) for r in rows[:limit]], 'next_offset': offset+limit if len(rows)>limit else None,
+            return {'jobs': [self.public(r, db) for r in rows[:limit]], 'next_offset': offset+limit if len(rows)>limit else None,
                     'worker_heartbeat': heartbeat[0] if heartbeat else None}
 
     def act(self, job_id, action, db=None):
@@ -312,7 +337,7 @@ def add_update_routes(app, registry):
 
     @app.post('/admin/api/libraries/{library_id}/update-jobs', status_code=202)
     def enqueue(library_id: str, value: RunRequest):
-        return service.enqueue(library_id, value.operation)
+        return service.enqueue(library_id, value.operation, include_failed=True)
 
     @app.get('/admin/api/update-jobs')
     def listing(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100)):

@@ -94,7 +94,7 @@ export function LibraryInbox({ api, libraryId }: { api: Api; libraryId: string }
     <Table rowKey="id" loading={resource.loading} dataSource={resource.data?.items} pagination={false} columns={[
       { title: '材料', render: (_, r) => <Button type="link" onClick={() => setSelected(r.id)}>{r.title || '未命名材料'}</Button> },
       { title: '类型', render: (_, r) => kinds[r.kind] }, { title: '来源', render: (_, r) => r.submitted_by.type === 'user' ? '人员' : 'Agent' },
-      { title: '状态', render: (_, r) => <Tag>{inboxStates[r.status]}</Tag> }, { title: '提交时间', render: (_, r) => date(r.created_at) },
+      { title: '状态', render: (_, r) => <Tag color={r.status === 'pending' && r.update_job?.status === 'failed' ? 'warning' : undefined}>{r.status === 'pending' && r.update_job?.status === 'failed' ? '失败待重试' : inboxStates[r.status]}</Tag> }, { title: '提交时间', render: (_, r) => date(r.created_at) },
     ]} />
     {(after > 0 || resource.data?.next_after != null) && <Space><Button disabled={!after} onClick={() => setAfter(0)}>首页</Button><Button disabled={resource.data?.next_after == null} onClick={() => setAfter(resource.data!.next_after!)}>下一页</Button></Space>}
     <Modal title="提交增量材料" open={create} footer={null} onCancel={() => setCreate(false)} destroyOnHidden><AsyncForm<{ title: string; kind: string; text: string }> initial={{ kind: 'new_content' }} submitText="提交" submit={async v => {

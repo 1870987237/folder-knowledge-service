@@ -12,7 +12,8 @@ from .resource_access import check_binding_access, plugin_key, require_access, s
 from .storage import now
 from .templates import TemplateBinding
 from .updates import RunRequest, UpdatePolicy, Updates
-from .workspaces import WorkspaceSpec, resolve_workspace
+from .workspaces import WorkspaceSpec, resolve_workspace, workspace_digest
+from .update_lifecycle import initialized
 
 
 class LibraryPluginSettings(StrictModel):
@@ -100,7 +101,16 @@ class LibraryUpdates:
         self.updates.save_policy(lid, policy, db)
         if value.enabled:
             self.updates.context(db, lid)
+            self.start_bootstrap(db, lid)
         self.collaboration.event(db, actor, 'library_plugin_configure', lid)
+
+    def start_bootstrap(self, db, lid):
+        record = db.execute('SELECT * FROM library_bootstrap WHERE library_id=?', (lid,)).fetchone()
+        if record and record['job_id'] is None:
+            context = self.updates.context(db, lid)
+            if record['template_id'] == context['template']['definition']['id']:
+                job = self.updates.enqueue(lid, 'initialize', db=db)
+                db.execute('UPDATE library_bootstrap SET job_id=? WHERE library_id=?', (job['id'], lid))
 
     def create(self, actor, value):
         # One transaction creates ownership, binding and policy; invalid options leave no library.
@@ -120,6 +130,15 @@ class LibraryUpdates:
                         template_version=value.template.plugin_version, config=value.template.config,
                         workspace=WorkspaceSpec(type='local', root_path=root, knowledge_subpath=sub)), db)
                 self.configure(db, actor, result['id'], value.template)
+                if 'initialize' in definition['capabilities']:
+                    binding = self.catalog.binding(result['id'], db)['binding']
+                    lib = db.execute('SELECT * FROM libraries WHERE id=?', (result['id'],)).fetchone()
+                    workspace = resolve_workspace(self.registry, db, lib, WorkspaceSpec(**binding['workspace']) if binding['workspace'] else None)
+                    db.execute('INSERT INTO library_bootstrap VALUES (?,?,?,?,?,NULL)',
+                               (result['id'], definition['id'], workspace['workspace_key'],
+                                workspace_digest(workspace['root'], workspace['spec'].exclude_paths), actor['id']))
+                    if value.template.enabled:
+                        self.start_bootstrap(db, result['id'])
                 return result
         except Exception:
             if result:
@@ -215,22 +234,35 @@ def add_library_update_routes(app, registry):
             rows = db.execute('SELECT * FROM update_jobs WHERE library_id=? ORDER BY created_at DESC,id DESC LIMIT 51 OFFSET ?', (lid, offset)).fetchall()
             heartbeat = db.execute("SELECT value FROM metadata WHERE name='template_worker_heartbeat'").fetchone()
             unavailable, can_run, can_initialize = None, False, False
+            initialization, pending_count, retry_count = 'unavailable', 0, 0
             try:
                 context = service.updates.context(db, lid)
-                active = db.execute("SELECT 1 FROM update_jobs WHERE workspace_key=? AND status IN ('queued','running','candidate_ready','publish_queued','publishing')", (context['workspace_key'],)).fetchone()
-                can_run = not active
-                can_initialize = can_run and 'initialize' in context['template']['definition']['capabilities']
+                active = db.execute("SELECT operation,status FROM update_jobs WHERE workspace_key=? AND status IN ('queued','running','candidate_ready','publish_queued','publishing')", (context['workspace_key'],)).fetchone()
+                ready = initialized(db, context)
+                pending_count = len(service.updates.pending(db, lid, True))
+                retry_count = pending_count - len(service.updates.pending(db, lid))
+                initialization = 'ready' if ready else 'required'
+                can_run = ready and not active and pending_count > 0
+                can_initialize = not ready and not active and 'initialize' in context['template']['definition']['capabilities']
+                if not ready:
+                    initialization = active['status'] if active and active['operation'] == 'initialize' else 'required'
+                    unavailable = ('初始化候选待审核，请查看任务并审核发布。' if initialization == 'candidate_ready' else
+                                   '正在初始化知识库，完成后即可处理材料。' if active else
+                                   '知识库尚未初始化，暂不能处理材料。请初始化；若已有失败任务，可查看原因并重试。')
+                elif active:
+                    unavailable = '当前任务尚未完成，请等待处理或审核候选后再处理下一批材料。'
             except KnowledgeError as exc:
                 unavailable = ('请知识库管理员配置模板并启用更新程序' if exc.code == 'updates_disabled' else exc.message)
-            return {'jobs': [dict(service.updates.public(r), result=None) for r in rows[:50]], 'next_offset': offset + 50 if len(rows) > 50 else None,
+            return {'jobs': [dict(service.updates.public(r, db), result=None) for r in rows[:50]], 'next_offset': offset + 50 if len(rows) > 50 else None,
                     'worker_heartbeat': heartbeat[0] if heartbeat else None, 'can_run': can_run,
-                    'can_initialize': can_initialize, 'unavailable': unavailable}
+                    'can_initialize': can_initialize, 'unavailable': unavailable,
+                    'initialization': initialization, 'pending_count': pending_count, 'retry_count': retry_count}
 
     @app.post('/portal/api/libraries/{lid}/update-jobs', status_code=201)
     def enqueue(lid: str, value: RunRequest, request: Request):
         with service.store.transaction(write=True) as db:
             service.workspace_access(db, request.state.human, lid)
-            job = service.updates.enqueue(lid, value.operation, db=db)
+            job = service.updates.enqueue(lid, value.operation, db=db, include_failed=True)
             service.collaboration.event(db, request.state.human, 'library_update_enqueue', lid + ':' + job['id'])
             return job
 
@@ -245,7 +277,7 @@ def add_library_update_routes(app, registry):
     @app.get('/portal/api/libraries/{lid}/update-jobs/{job_id}')
     def job(lid: str, job_id: str, request: Request):
         with service.store.transaction() as db:
-            return service.updates.public(check_job(db, request.state.human, lid, job_id))
+            return service.updates.public(check_job(db, request.state.human, lid, job_id), db)
 
     @app.get('/portal/api/libraries/{lid}/update-jobs/{job_id}/preview')
     def preview(lid: str, job_id: str, request: Request):

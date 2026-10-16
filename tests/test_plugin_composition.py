@@ -46,7 +46,9 @@ def setup(env, tmp_path, monkeypatch):
         assert r.status_code == 200, r.text
         assert worker.tick()
         assert worker.updates.get(job)['status'] == 'published', worker.updates.get(job)
-    publish(run('initialize'))
+    assert worker.tick()
+    assert worker.tick()
+    assert c.get(base + '/update-jobs', headers=headers(token)).json()['initialization'] == 'ready'
     return locals()
 
 

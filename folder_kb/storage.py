@@ -95,7 +95,7 @@ class SqliteStore:
                 db.execute('INSERT INTO metadata VALUES (?,?)', ('since', now()))
                 self._import_legacy(db)
                 db.execute('PRAGMA user_version=1')
-            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13):
+            elif version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14):
                 raise ValueError('Unsupported management database version')
             if version in (0, 1):
                 from .repositories import REPOSITORY_SCHEMA
@@ -180,6 +180,10 @@ class SqliteStore:
                 db.execute('DROP TABLE workspace_publications')
                 db.execute('ALTER TABLE workspace_publications_new RENAME TO workspace_publications')
                 db.execute('PRAGMA user_version=13')
+            if version < 14:
+                from .update_lifecycle import BOOTSTRAP_SCHEMA
+                db.execute(BOOTSTRAP_SCHEMA)
+                db.execute('PRAGMA user_version=14')
             db.commit()
 
     @contextmanager
