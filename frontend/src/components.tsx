@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, App, Breadcrumb, Button, Empty, Form, Input, Modal, Space, Spin, Table, Tag, Typography } from 'antd';
+import { Alert, App, Breadcrumb, Button, Empty, Form, Input, Modal, Segmented, Space, Spin, Table, Tag, Typography } from 'antd';
 import type { FormInstance } from 'antd';
 import { ArrowUpOutlined, FileTextOutlined, FolderOutlined, ReloadOutlined } from '@ant-design/icons';
 import { errorMessage, query } from './api';
 import { useSession } from './context';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AgentKey, DirectoryPage, Entry, FilePage, Library } from './types';
 
 export const date = (value?: string | number | null) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '—';
@@ -70,21 +72,66 @@ export function FileBrowser({ library }: { library: Library }) {
   const { api } = useSession();
   const [path, setPath] = useState('.'), [directory, setDirectory] = useState<DirectoryPage>();
   const [file, setFile] = useState<FilePage>(), [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [mode, setMode] = useState<'preview' | 'source'>('source'), [content, setContent] = useState('');
   const current = useRef(0);
+  const isMarkdown = /\.md$/i.test(path);
+
+  async function fetchFullContent(target: string, requestId: number): Promise<string> {
+    const lines: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const response = await api.request<FilePage>(`/browse/${library.id}?` + query({ path: target, read: 'true', offset: 0, cursor }));
+      if (requestId !== current.current) return '';
+      for (const l of response.lines) lines.push(l.text + (l.line_complete === false ? '' : '\n'));
+      cursor = response.next_cursor || undefined;
+    } while (cursor);
+    return lines.join('').replace(/\n$/, '');
+  }
+
   async function load(target: string, read = false, offset = 0, cursor?: string) {
     const request = ++current.current; setBusy(true); setError('');
     try {
       const response = await api.request<DirectoryPage | FilePage>(`/browse/${library.id}?` + query({ path: target, read: String(read), offset, cursor }));
       if (request !== current.current) return;
-      setPath(target); if (read) { setFile(response as FilePage); setDirectory(undefined); } else { setDirectory(response as DirectoryPage); setFile(undefined); }
+      if (read) {
+        setFile(response as FilePage); setDirectory(undefined); setPath(target);
+        if (/\.md$/i.test(target)) { setMode('preview'); void fetchFullContent(target, request).then(c => { if (request === current.current) setContent(c); }); }
+        else { setContent(''); }
+      }
+      else { setDirectory(response as DirectoryPage); setFile(undefined); setPath(target); setContent(''); }
     } catch (e) { if (request === current.current) setError(errorMessage(e)); }
     finally { if (request === current.current) setBusy(false); }
   }
   useEffect(() => { void load('.'); return () => { current.current++; }; }, [library.id, library.path]);
   const parts = path === '.' ? [] : path.split('/');
-  return <div><div className="folder-toolbar"><Button icon={<ArrowUpOutlined />} disabled={path === '.' || busy} onClick={() => load(parts.slice(0, -1).join('/') || '.')}>上一级</Button><Typography.Text code>{path}</Typography.Text><Button aria-label="刷新目录" icon={<ReloadOutlined />} onClick={() => load(path, !!file)} /></div><LoadError error={error} retry={() => load(path, !!file)} />
-    <Spin spinning={busy}>{file ? <><pre className="file-preview">{file.lines.map(l => `${l.line}${l.column && l.column > 1 ? ':' + l.column : ''}  ${l.text}${l.line_complete === false ? ' [本行待续]' : ''}`).join('\n')}</pre><Typography.Text type="secondary">文件只读</Typography.Text></> : <Table<Entry> pagination={false} rowKey="path" dataSource={directory?.entries} locale={{ emptyText: <Empty description="目录为空" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }} columns={[{ title: '名称', render: (_, row) => <Button type="link" icon={row.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />} onClick={() => load(row.path, row.type === 'file')}>{row.path.split('/').pop()}</Button> }, { title: '类型', width: 85, render: (_, row) => row.type === 'directory' ? '文件夹' : '文件' }]} />}</Spin>
+  return <div>
+    <div className="folder-toolbar">
+      <Button icon={<ArrowUpOutlined />} disabled={path === '.' || busy} onClick={() => load(parts.slice(0, -1).join('/') || '.')}>上一级</Button>
+      <Typography.Text code>{path}</Typography.Text>
+      {isMarkdown && file && <Segmented size="small" value={mode} options={[{ value: 'preview', label: '预览' }, { value: 'source', label: '源码' }]} onChange={v => setMode(v as 'preview' | 'source')} />}
+      <Button aria-label="刷新目录" icon={<ReloadOutlined />} onClick={() => load(path, !!file)} />
+    </div>
+    <LoadError error={error} retry={() => load(path, !!file)} />
+    <Spin spinning={busy}>
+      {file ? (
+        isMarkdown && mode === 'preview' && content
+          ? <article className="markdown-document"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
+              img: ({ alt }) => <span>[图片：{alt || '附件暂不支持'}]</span>,
+              a: ({ href, children }) => /^https?:\/\//i.test(href || '') ? <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> : <span>{children}</span>,
+            }}>{content}</Markdown></article>
+          : <>
+              <pre className="file-preview">{file.lines.map(l => `${l.line}${l.column && l.column > 1 ? ':' + l.column : ''}  ${l.text}${l.line_complete === false ? ' [本行待续]' : ''}`).join('\n')}</pre>
+              {file.next_cursor && <Button className="block-gap" disabled={busy} onClick={() => load(path, true, 0, file.next_cursor || undefined)}>下一页</Button>}
+              <Typography.Text type="secondary">文件只读</Typography.Text>
+            </>
+      ) : (
+        <Table<Entry> pagination={false} rowKey="path" dataSource={directory?.entries} locale={{ emptyText: <Empty description="目录为空" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }} columns={[
+          { title: '名称', render: (_, row) => <Button type="link" icon={row.type === 'directory' ? <FolderOutlined /> : <FileTextOutlined />} onClick={() => load(row.path, row.type === 'file')}>{row.path.split('/').pop()}</Button> },
+          { title: '类型', width: 85, render: (_, row) => row.type === 'directory' ? '文件夹' : '文件' }
+        ]} />
+      )}
+    </Spin>
     {directory?.partial && <Alert type="warning" title="本次目录列表不完整，请缩小范围后重试。" />}
-    {(file?.next_cursor || directory?.next_offset != null) && <Button className="block-gap" disabled={busy} onClick={() => load(path, !!file, directory?.next_offset || 0, file?.next_cursor || undefined)}>下一页</Button>}
+    {directory?.next_offset != null && <Button className="block-gap" disabled={busy} onClick={() => load(path, false, directory.next_offset || 0)}>下一页</Button>}
   </div>;
 }
